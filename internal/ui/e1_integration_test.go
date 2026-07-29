@@ -57,7 +57,41 @@ func TestSwitchingPresetTakesEffectImmediately(t *testing.T) {
 	}
 
 	// And the key reference must show the new keyboard, not the old one.
-	if help := h.app.helpText(); !strings.Contains(help, "⇧K") {
-		t.Errorf("the key reference still shows the old keyboard:\n%s", help)
+	//
+	// Both platforms are rendered rather than whichever this machine is: the
+	// modifiers become Apple glyphs on macOS and words elsewhere, so a test
+	// that read the label whole would pass here and fail on CI. The letter is
+	// the part that actually distinguishes the two keyboards — VS Code
+	// deletes a line with K, DataGrip with Y.
+	for _, mac := range []bool{true, false} {
+		t.Run(map[bool]string{true: "mac", false: "other"}[mac], func(t *testing.T) {
+			restore := onMac
+			onMac = mac
+			t.Cleanup(func() { onMac = restore })
+
+			var help string
+			h.inspect(func(a *App) bool {
+				help = a.helpText()
+				return true
+			})
+
+			line := helpLine(t, help, "delete the current line")
+			if !strings.Contains(line, "K") {
+				t.Errorf("line-delete is %q, want the VS Code K binding", line)
+			}
+		})
 	}
+}
+
+// helpLine returns the row of the key reference documenting an action.
+func helpLine(t *testing.T, help, description string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(help, "\n") {
+		if strings.Contains(line, description) {
+			return line
+		}
+	}
+	t.Fatalf("no line documents %q:\n%s", description, help)
+	return ""
 }

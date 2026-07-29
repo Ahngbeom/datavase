@@ -139,11 +139,27 @@ func TestKeysReflectsTheConfiguredPreset(t *testing.T) {
 		t.Fatalf("Run(keys) = %d, want 0; stderr = %q", code, h.err)
 	}
 
-	// VS Code deletes a line with ⌘⇧K; DataGrip uses ⌘Y.
-	out := h.out.String()
-	if !strings.Contains(out, "⇧K") {
-		t.Errorf("the VS Code line-delete key is missing:\n%s", out)
+	// VS Code deletes a line with K, DataGrip with Y. The letter is what is
+	// compared rather than the whole label: the modifiers are rendered as
+	// Apple glyphs on macOS and spelled out everywhere else, so asserting on
+	// them would make this test pass or fail by operating system.
+	line := referenceLine(t, h.out.String(), "delete the current line")
+	if !strings.Contains(line, "K") {
+		t.Errorf("line-delete is bound to %q, want the VS Code K binding", line)
 	}
+}
+
+// referenceLine returns the row of `dv keys` output documenting an action.
+func referenceLine(t *testing.T, out, description string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, description) {
+			return line
+		}
+	}
+	t.Fatalf("no line documents %q:\n%s", description, out)
+	return ""
 }
 
 func TestKeysRejectsAnUnknownPreset(t *testing.T) {

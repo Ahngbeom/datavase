@@ -1,0 +1,71 @@
+# Release configuration. Run by .github/workflows/release.yml on a v* tag.
+#
+# Validate a change without publishing anything:
+#
+#	goreleaser check
+#	goreleaser release --snapshot --clean
+version: 2
+
+project_name: datavase
+
+before:
+  hooks:
+    # download rather than tidy: a release must build what was committed, not
+    # quietly rewrite go.mod on the way past.
+    - go mod download
+
+builds:
+  - id: dv
+    main: ./cmd/dv
+    binary: dv
+
+    # The whole point of the tool is one file you can copy onto a box.
+    env:
+      - CGO_ENABLED=0
+
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+    flags:
+      - -trimpath
+    ldflags:
+      # .Tag rather than .Version: it keeps the leading "v", so a released
+      # binary reports the same string as one from `go install ...@v0.1.0`.
+      - -s -w -X github.com/Ahngbeom/datavase/internal/version.injected={{ .Tag }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "dv_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  footer: |
+    ## Install
+
+    ```sh
+    go install github.com/Ahngbeom/datavase/cmd/dv@{{ .Tag }}
+    ```
+
+    Or download the archive for your platform above, and put `dv` on your PATH.
+    Verify it with `dv version`.

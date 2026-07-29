@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast feedback: formatting, vet and the tests that need nothing but Go.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - run: make lint
+      - run: make test
+
+  # The behaviour worth protecting — the guard against a real server, streamed
+  # results, KILL QUERY, catalog reads and the interface itself — only exists
+  # under the integration tag, so CI that skipped this would be checking the
+  # least interesting half.
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: datavase-test
+          MARIADB_DATABASE: datavase_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -uroot -pdatavase-test --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The Makefile's container listens on 13306; the service container here
+      # is mapped to the standard port instead.
+      DATAVASE_TEST_PORT: 3306
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - run: make test-integration
+
+  # Every platform the release builds for, checked on every change rather than
+  # discovered at tag time when it is too late to fix quietly.
+  cross-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o /dev/null ./cmd/dv

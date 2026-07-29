@@ -1,5 +1,7 @@
 # datavase
 
+[![ci](https://github.com/Ahngbeom/datavase/actions/workflows/ci.yml/badge.svg)](https://github.com/Ahngbeom/datavase/actions/workflows/ci.yml)
+
 A terminal MySQL/MariaDB client. Single static binary, no runtime, no IDE.
 
 Built for the workflow where you are already in a terminal and want to run a
@@ -19,7 +21,11 @@ export to CSV or JSON, and the production guard.
 go install github.com/Ahngbeom/datavase/cmd/dv@latest
 ```
 
-Or from a clone:
+Or take a prebuilt binary for macOS, Linux or Windows from
+[Releases](https://github.com/Ahngbeom/datavase/releases) — put `dv` on your
+PATH and check it with `dv version`.
+
+From a clone:
 
 ```sh
 make build      # produces ./dv — CGO-free, single static binary

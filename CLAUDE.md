@@ -29,6 +29,21 @@ go test -tags integration ./internal/ui/ -run TestVimOperators -v
 go test -race -tags integration ./internal/ui/
 ```
 
+Releases are cut by pushing a `v*` tag, which runs goreleaser
+(`.goreleaser.yaml`) via `.github/workflows/release.yml`. Validate a change to
+that config **before** tagging, because a broken one only surfaces at tag time:
+
+```sh
+go run github.com/goreleaser/goreleaser/v2@latest check
+go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean
+```
+
+The version string comes from `internal/version`: goreleaser injects the tag
+via ldflags, and a `go install`ed binary falls back to the module version from
+`debug.ReadBuildInfo`. `cli.HandleVersion` runs in `main` before flag parsing
+and before configuration is read, so `dv version` works on a machine that has
+never been set up.
+
 Integration tests carry `//go:build integration` and are invisible without the
 tag — `go test ./...` compiles but does not run them. They talk to a real
 server on port 13306 (deliberately not 3306, so they can never reach a

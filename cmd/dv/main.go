@@ -25,6 +25,13 @@ func main() {
 }
 
 func run() int {
+	// Before flag parsing and before configuration: "which build is this"
+	// has to be answerable on a machine that has never been set up, and the
+	// flag spellings would otherwise be rejected as undefined.
+	if cli.HandleVersion(os.Stdout, os.Args[1:]) {
+		return 0
+	}
+
 	configPath := flag.String("c", "", "path to config.yaml (default: $XDG_CONFIG_HOME/datavase/config.yaml)")
 	flag.Parse()
 

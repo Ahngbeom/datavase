@@ -15,6 +15,7 @@ import (
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/secret"
+	"github.com/Ahngbeom/datavase/internal/version"
 )
 
 // Exit codes. 2 is reserved for usage mistakes, matching the flag package.
@@ -42,6 +43,25 @@ type App struct {
 	// OpenUI connects and runs the terminal interface. It is a field so the
 	// dispatch logic can be tested without starting a terminal.
 	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error
+}
+
+// HandleVersion answers a request for the version, reporting whether it did.
+//
+// It is a free function rather than a command on App because it has to run
+// before the configuration is read: someone checking which build they have
+// should not first be told to write a config file. That also means the flag
+// spellings never reach flag.Parse, which would reject them as undefined.
+func HandleVersion(w io.Writer, args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+
+	switch args[0] {
+	case "version", "--version", "-v":
+		fmt.Fprintf(w, "dv %s\n", version.String())
+		return true
+	}
+	return false
 }
 
 // Run dispatches args (excluding the program name) and returns an exit code.
@@ -84,6 +104,7 @@ usage:
   dv auth <name>        store a datasource password in the keychain
   dv auth -rm <name>    remove a stored password
   dv check <name>       verify that the datasource is reachable
+  dv version            print the version
   dv keys               show the key map
   dv keys --ghostty     print Ghostty config so ⌘ bindings reach datavase
   dv keys --iterm2      explain the equivalent iTerm2 settings

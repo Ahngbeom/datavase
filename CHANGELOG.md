@@ -9,6 +9,23 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**A value can be copied out of the results.** With the grid focused the copy
+key used to fall through to "nothing selected and nothing running", so lifting
+one value into a ticket or the next query was impossible. `⌘C` now copies the
+selected cell in full — as the server sent it, not the truncated and escaped
+copy the grid draws — and `copy row` in the palette takes the whole row, tab
+separated.
+
+The precedence changed with it, and is now sayable in one sentence: **while a
+statement is running the key cancels; otherwise it copies whatever has focus.**
+It used to depend on which pane you were in, which meant a grid — where a cell
+is always under the cursor — would have taken the key away from cancelling.
+
+**Result columns name their type**, in the row view where there is room for it
+rather than in the grid header where the values have too little width already.
+The buffer has kept the types since the first release and nothing ever read
+them.
+
 **A row can be read down the page.** A grid is the wrong shape for a wide
 table — forty columns share the terminal between them, and each value was cut
 at two hundred characters besides, with no way to see the rest. `⌘I` on a

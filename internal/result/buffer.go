@@ -119,6 +119,22 @@ func (b *Buffer) Cell(row, col int) string {
 	return EscapeTags(Truncate(Format(v), CellLimit))
 }
 
+// ColumnType names the column's database type — BIGINT, VARCHAR — or "" when
+// the driver did not say.
+//
+// A driver is allowed to report nothing, and several statements produce no
+// type information at all, so the caller has to be able to show less rather
+// than showing a blank where a type was promised.
+func (b *Buffer) ColumnType(col int) string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if col < 0 || col >= len(b.types) || b.types[col] == nil {
+		return ""
+	}
+	return b.types[col].DatabaseTypeName()
+}
+
 // Raw returns the unformatted value, which export needs and display does not.
 func (b *Buffer) Raw(row, col int) any {
 	v, _ := b.rawAt(row, col)

@@ -14,12 +14,37 @@ import (
 	"github.com/rivo/tview"
 )
 
+// refusalText is the whole of what a refused statement says, and it is a
+// plain function so a test can read it without a screen.
+//
+// The unlock is offered here rather than as a button. A button next to the
+// refusal is the "run anyway" this dialog exists not to have; making the user
+// leave, open the palette and name the command is the deliberateness that a
+// production write is supposed to cost.
+func refusalText(d guard.Decision, paletteKey string) string {
+	text := fmt.Sprintf("Refused\n\n%s", d.Reason)
+	if d.Unlockable {
+		text += "\n\n" + unlockHint(paletteKey)
+	}
+	return text
+}
+
+// unlockHint names the route past the production write lock.
+//
+// guard deliberately does not compose this: it cannot know which preset is in
+// force or which keys the terminal can deliver, and the reason it used to
+// carry named ":write", a command no preset has ever had.
+func unlockHint(paletteKey string) string {
+	return fmt.Sprintf("Writes can be unlocked for this session: %s, then %q.",
+		paletteKey, cmdEnableWrites)
+}
+
 // refuse tells the user why a statement will not run. There is no override
 // here on purpose: a dialog offering "run anyway" is a dialog people learn
 // to dismiss, which is exactly how the production accident happens.
 func (a *App) refuse(d guard.Decision) {
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("Refused\n\n%s", d.Reason)).
+		SetText(refusalText(d, a.keyLabel(keymap.ActionCommandPalette))).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(int, string) { a.closeDialog() })
 

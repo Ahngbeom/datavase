@@ -21,6 +21,14 @@ type command struct {
 	run     func(a *App)
 }
 
+// The two commands the guard's refusal has to be able to name. They are
+// constants so the message and the palette entry cannot drift apart — a test
+// checks the hint names a command the palette really offers.
+const (
+	cmdEnableWrites  = "write"
+	cmdDisableWrites = "readonly"
+)
+
 // commands are what the palette offers. Keeping them in one list means the
 // palette and any future ":" prompt cannot drift apart.
 var commands = buildCommands()
@@ -28,12 +36,12 @@ var commands = buildCommands()
 func buildCommands() []command {
 	cmds := []command{
 		{
-			name:    "write",
+			name:    cmdEnableWrites,
 			summary: "unlock writes to this production datasource for the session",
 			run:     (*App).enableWrites,
 		},
 		{
-			name:    "readonly",
+			name:    cmdDisableWrites,
 			summary: "lock writes again",
 			run:     (*App).disableWrites,
 		},

@@ -216,11 +216,11 @@ Each datasource carries an `env` label, and it decides what may run.
 | | prod | stage / dev |
 |---|---|---|
 | `SELECT`, `SHOW`, `EXPLAIN` | run | run |
-| `INSERT` / `UPDATE` / `DELETE` | refused | confirm |
-| `UPDATE` / `DELETE` with no top-level `WHERE` | refused, no override | type the phrase |
-| `DROP` / `TRUNCATE` | refused | type the phrase |
-| `CREATE` / `ALTER` | refused | confirm |
-| Anything unrecognised | refused | confirm |
+| `INSERT` / `UPDATE` / `DELETE` | refused until [unlocked](#unlocking-writes-to-production), then confirm | confirm |
+| `UPDATE` / `DELETE` with no top-level `WHERE` | refused, and the unlock does not lift it | type the phrase |
+| `DROP` / `TRUNCATE` | refused, and the unlock does not lift it | type the phrase |
+| `CREATE` / `ALTER` | refused, and the unlock does not lift it | confirm |
+| Anything unrecognised | refused, and the unlock does not lift it | confirm |
 | `SELECT` with no `LIMIT` | `LIMIT` added, and disclosed | same |
 
 Three properties are worth calling out, because they are what make the guard
@@ -237,6 +237,25 @@ more than decoration:
 
 The refusal dialog has no "run anyway" button. A dialog people can dismiss is
 a dialog people learn to dismiss.
+
+### Unlocking writes to production
+
+Writing to production is possible, and it is deliberately not a button on the
+refusal. Leave the dialog, open the command palette and run `write`;
+`readonly` locks it again, and so does closing the session. The status bar
+carries `writes on` for as long as it lasts.
+
+What that unlocks is narrow, and the narrowness is the point:
+
+- it turns a refusal into a **confirmation**, never into a silent run
+- it applies only to an `INSERT`, or an `UPDATE`/`DELETE` that already carries
+  a top-level `WHERE`
+- it does **not** apply to an unbounded `UPDATE`/`DELETE`, to `DROP` or
+  `TRUNCATE`, to `CREATE`/`ALTER`, or to anything the tokenizer could not
+  classify — those are refused with writes on or off
+
+So the escape hatch exists for the statement you meant to write, and not for
+the one that would rewrite a table.
 
 ### What is refused for a different reason
 

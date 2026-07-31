@@ -38,6 +38,9 @@ type status struct {
 	vimMode       string
 	vimPending    string
 	writesEnabled bool
+	// inTransaction says the connection is pinned and the work so far is
+	// undoable, which changes what several other fields mean.
+	inTransaction bool
 
 	phase runPhase
 	rows  int
@@ -218,6 +221,11 @@ func (s status) fields() []field {
 	}
 	if s.writesEnabled {
 		out = add(out, tag(colourNotice, "writes on"), false, 0)
+	}
+	// Never dropped. Whether the work so far can be undone is not a detail
+	// that should vanish because the terminal got narrow.
+	if s.inTransaction {
+		out = add(out, tag(colourNotice, "TX"), false, 0)
 	}
 
 	switch s.phase {

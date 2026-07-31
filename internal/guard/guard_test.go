@@ -37,36 +37,6 @@ func TestReadsAreAllowedEverywhere(t *testing.T) {
 	}
 }
 
-// Each statement runs on its own connection out of the pool, so a
-// transaction cannot span two of them: BEGIN would open one on a connection
-// that is handed straight back, and the ROLLBACK meant to undo the damage
-// would find nothing to undo while reporting success. Refusing is the only
-// honest answer until a transaction holds one connection for its lifetime.
-func TestTransactionControlIsRefusedRatherThanSilentlyDiscarded(t *testing.T) {
-	control := []string{
-		"BEGIN",
-		"START TRANSACTION",
-		"COMMIT",
-		"ROLLBACK",
-		"SAVEPOINT sp1",
-		"RELEASE SAVEPOINT sp1",
-	}
-
-	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
-		for _, sql := range control {
-			t.Run(string(env)+"/"+sql, func(t *testing.T) {
-				got := decide(t, sql, policy(env))
-				if got.Verdict != Deny {
-					t.Errorf("Evaluate(%q) verdict = %v (%s), want Deny", sql, got.Verdict, got.Reason)
-				}
-				if !strings.Contains(got.Reason, "connection") {
-					t.Errorf("reason = %q, want it to explain that the connection is not held", got.Reason)
-				}
-			})
-		}
-	}
-}
-
 // The same trap, one class wider: "SET SESSION sql_mode = ..." is accepted by
 // the server and thrown away with the connection, so the next statement runs
 // under the old mode while the user believes they changed it.
@@ -148,7 +118,6 @@ func TestRefusalsTheUnlockCannotLiftAreNotAdvertisedAsUnlockable(t *testing.T) {
 		"TRUNCATE TABLE users",
 		"ALTER TABLE users DROP COLUMN email",
 		"GRANT ALL ON *.* TO u",
-		"BEGIN",
 		"SET autocommit = 0",
 	} {
 		t.Run(sql, func(t *testing.T) {
@@ -344,5 +313,85 @@ func TestEveryNonAllowDecisionCarriesAReason(t *testing.T) {
 				t.Error("Reason is empty")
 			}
 		})
+	}
+}
+
+// Transaction control is no longer a lie, so it is no longer refused: the
+// connection it opens on is held for the transaction's whole life.
+func TestTransactionControlIsAllowedNowThatItIsHonoured(t *testing.T) {
+	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
+		for _, sql := range []string{"BEGIN", "START TRANSACTION", "COMMIT", "ROLLBACK"} {
+			t.Run(string(env)+"/"+sql, func(t *testing.T) {
+				if got := decide(t, sql, policy(env)); got.Verdict != Allow {
+					t.Errorf("Evaluate(%q) verdict = %v (%s), want Allow", sql, got.Verdict, got.Reason)
+				}
+			})
+		}
+	}
+}
+
+// SET is the one that changed meaning rather than changing verdict. Outside a
+// transaction it still cannot reach the next statement; inside one the
+// connection is held, so it genuinely does.
+func TestSessionStateIsAllowedOnlyInsideATransaction(t *testing.T) {
+	const sql = "SET SESSION sql_mode = 'STRICT_ALL_TABLES'"
+
+	outside := decide(t, sql, policy(config.EnvDev))
+	if outside.Verdict != Deny {
+		t.Errorf("outside a transaction: verdict = %v, want Deny", outside.Verdict)
+	}
+	if !strings.Contains(outside.Reason, "transaction") {
+		t.Errorf("reason = %q, want it to point at the way to make it stick", outside.Reason)
+	}
+
+	p := policy(config.EnvDev)
+	p.InTransaction = true
+	if got := Evaluate(sqlparse.Parse(sql), p); got.Verdict != Allow {
+		t.Errorf("inside a transaction: verdict = %v (%s), want Allow", got.Verdict, got.Reason)
+	}
+}
+
+// LOCK TABLES commits the open transaction in MySQL, so allowing it inside one
+// would silently end the transaction the user believes they are still in.
+func TestLockTablesStaysRefusedEvenInsideATransaction(t *testing.T) {
+	p := policy(config.EnvDev)
+	p.InTransaction = true
+
+	for _, sql := range []string{"LOCK TABLES t WRITE", "UNLOCK TABLES"} {
+		t.Run(sql, func(t *testing.T) {
+			if got := Evaluate(sqlparse.Parse(sql), p); got.Verdict != Deny {
+				t.Errorf("verdict = %v, want Deny", got.Verdict)
+			}
+		})
+	}
+}
+
+// USE still has somewhere better to go, transaction or not.
+func TestUseStillPointsAtTheSchemaPickerInsideATransaction(t *testing.T) {
+	p := policy(config.EnvDev)
+	p.InTransaction = true
+
+	got := Evaluate(sqlparse.Parse("USE app_db"), p)
+	if got.Verdict != Deny {
+		t.Fatalf("verdict = %v, want Deny", got.Verdict)
+	}
+	if !strings.Contains(got.Reason, "schema") {
+		t.Errorf("reason = %q, want the schema picker", got.Reason)
+	}
+}
+
+// MySQL commits the open transaction when it meets DDL. Someone who opened a
+// transaction to make an ALTER undoable has to be told that it will not be,
+// before they run it rather than afterwards.
+func TestDDLInsideATransactionSaysItWillCommitTheTransaction(t *testing.T) {
+	p := policy(config.EnvDev)
+	p.InTransaction = true
+
+	got := Evaluate(sqlparse.Parse("ALTER TABLE users ADD COLUMN x INT"), p)
+	if got.Verdict != Confirm {
+		t.Fatalf("verdict = %v, want Confirm", got.Verdict)
+	}
+	if !strings.Contains(got.Reason, "commit") {
+		t.Errorf("reason = %q, want it to warn that the transaction will be committed", got.Reason)
 	}
 }

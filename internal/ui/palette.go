@@ -46,6 +46,21 @@ func buildCommands() []command {
 			run:     (*App).disableWrites,
 		},
 		{
+			name:    "begin",
+			summary: "open a transaction — work stays undoable until you commit",
+			run:     func(a *App) { a.transactionControl("BEGIN") },
+		},
+		{
+			name:    "commit",
+			summary: "keep the open transaction's work",
+			run:     func(a *App) { a.transactionControl("COMMIT") },
+		},
+		{
+			name:    "rollback",
+			summary: "discard the open transaction's work",
+			run:     func(a *App) { a.transactionControl("ROLLBACK") },
+		},
+		{
 			name:    "export csv",
 			summary: "write the current result to a CSV file",
 			run:     func(a *App) { a.exportResult(formatCSV) },

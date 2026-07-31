@@ -191,20 +191,17 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 	defer close(out)
 	defer s.markFinished()
 
-	conn, err := s.conn.pool.Conn(s.runCtx)
+	// Where the connection comes from is acquire's business alone: a fresh one
+	// from the pool, or the one pinned by an open transaction. Everything
+	// below takes it as an argument and never asks, which is why adding
+	// transactions did not disturb the exec path or the warnings.
+	conn, connID, release, err := s.conn.acquire(s.runCtx)
 	if err != nil {
-		s.done(fmt.Errorf("acquiring a connection: %w", err), false)
+		s.done(err, false)
 		return
 	}
-	defer conn.Close()
+	defer release()
 
-	// The id has to be read on the very connection that will run the
-	// statement, since that is what KILL QUERY targets.
-	var connID uint64
-	if err := conn.QueryRowContext(s.runCtx, "SELECT CONNECTION_ID()").Scan(&connID); err != nil {
-		s.done(fmt.Errorf("reading the connection id: %w", err), false)
-		return
-	}
 	s.connID = connID
 	close(s.idReady)
 

@@ -5,6 +5,34 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+### Added
+
+**Transactions.** `BEGIN` now opens one, and the connection it opens on is
+held for its whole life — which is what makes `COMMIT` and `ROLLBACK` mean
+anything. Before this they were refused, because a transaction opened on a
+pooled connection was abandoned by the next statement.
+
+```sql
+BEGIN;
+UPDATE orders SET status = 'X' WHERE id = 42;
+SELECT * FROM orders WHERE id = 42;
+ROLLBACK;
+```
+
+`commit` and `rollback` are palette commands too, the status bar carries `TX`
+while one is open, and quitting with one open asks before rolling it back.
+
+`SET SESSION …` is accepted inside a transaction, where the held connection
+means it genuinely persists, and still refused outside one — the refusal now
+names the transaction as the way to make it stick rather than being a dead
+end. `LOCK TABLES` stays refused either way, and DDL inside a transaction says
+that MySQL will commit the transaction to run it.
+
+This closes the gap left by v0.2.0's refusals: they stopped the interface
+claiming something untrue, and this makes the thing true.
+
 ## v0.2.0 — 2026-07-31
 
 There is one breaking change; read it before upgrading a production

@@ -95,10 +95,29 @@ func TestCommandPaletteOpens(t *testing.T) {
 	h.do(keymap.ActionCommandPalette)
 
 	got := h.text()
-	for _, want := range []string{"export csv", "history", "quit"} {
+	for _, want := range []string{"export csv", "history"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the palette does not offer %q:\n%s", want, got)
 		}
+	}
+}
+
+// The list is longer than a modest terminal — which is why the filter exists,
+// and why checking that a command near the end is on screen unfiltered tests
+// the length of the list rather than the palette. Filtering is the route a
+// user actually takes to those commands.
+func TestThePaletteFilterReachesACommandBelowTheFold(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.do(keymap.ActionCommandPalette)
+	if strings.Contains(h.text(), "leave datavase") {
+		t.Skip("quit is on screen unfiltered; the filter is not what is under test here")
+	}
+
+	h.typeInto("quit")
+
+	if !strings.Contains(h.text(), "leave datavase") {
+		t.Errorf("filtering for \"quit\" does not reach it:\n%s", h.text())
 	}
 }
 

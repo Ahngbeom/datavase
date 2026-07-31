@@ -343,7 +343,7 @@ func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := batchSummary(tt.total, tt.ran, tt.why)
+			got := batchSummary(tt.total, tt.ran, tt.why, false)
 			for _, want := range tt.wantAll {
 				if !strings.Contains(got, want) {
 					t.Errorf("batchSummary() = %q, want it to contain %q", got, want)
@@ -473,5 +473,20 @@ func TestNoWarningsAddNothingToTheBar(t *testing.T) {
 
 	if got := s.renderWidth(200); strings.Contains(got, "warning") {
 		t.Errorf("status = %q, want no mention of warnings", got)
+	}
+}
+
+// The count exists because a part-way batch could not be taken back. Inside a
+// transaction it still can, and a summary that read the same either way would
+// leave the reader to guess the one thing that decides what to do next.
+func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
+	outside := batchSummary(5, 2, "refused at statement 3", false)
+	inside := batchSummary(5, 2, "refused at statement 3", true)
+
+	if strings.Contains(outside, "rollback") {
+		t.Errorf("outside a transaction: %q offers a rollback that does not exist", outside)
+	}
+	if !strings.Contains(inside, "rollback") {
+		t.Errorf("inside a transaction: %q does not say the work can be undone", inside)
 	}
 }

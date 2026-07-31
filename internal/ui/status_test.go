@@ -5,59 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Ahngbeom/datavase/internal/db"
 )
-
-// A batch that stopped part-way has left the database in a state nothing on
-// screen describes, and there is no transaction to unwind it. The count of
-// what actually ran is the only thing that tells the user where to look, so
-// it is reported whether or not anything went wrong.
-func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
-	tests := []struct {
-		name             string
-		total, ran       int
-		why              string
-		wantAll, wantNot []string
-	}{
-		{
-			name:    "every statement ran",
-			total:   5,
-			ran:     5,
-			wantAll: []string{"5 statements", "5 ran"},
-		},
-		{
-			name:    "refused part-way",
-			total:   5,
-			ran:     2,
-			why:     "refused at statement 3",
-			wantAll: []string{"5 statements", "2 ran", "refused at statement 3"},
-		},
-		{
-			name:    "the first statement was refused",
-			total:   4,
-			ran:     0,
-			why:     "refused at statement 1",
-			wantAll: []string{"0 ran", "refused at statement 1"},
-			// "0 ran" has to be said, not left to be inferred from silence.
-			wantNot: []string{"1 ran"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := batchSummary(tt.total, tt.ran, tt.why)
-			for _, want := range tt.wantAll {
-				if !strings.Contains(got, want) {
-					t.Errorf("batchSummary() = %q, want it to contain %q", got, want)
-				}
-			}
-			for _, unwanted := range tt.wantNot {
-				if strings.Contains(got, unwanted) {
-					t.Errorf("batchSummary() = %q, want it not to contain %q", got, unwanted)
-				}
-			}
-		})
-	}
-}
 
 // baseStatus is an idle bar. Where the session is — the environment, the
 // datasource, the schema — is the top bar's business now; see topbar_test.go.
@@ -286,5 +236,191 @@ func TestStatusShowsAPendingSequence(t *testing.T) {
 func TestStatusWithoutAModalKeyboard(t *testing.T) {
 	if got := baseStatus().render(); strings.Contains(got, "NORMAL") {
 		t.Errorf("render() = %q, want no mode on a non-modal keyboard", got)
+	}
+}
+
+// A batch that stopped part-way has left the database in a state nothing on
+// screen describes, and there is no transaction to unwind it. The count of
+// what actually ran is the only thing that tells the user where to look, so
+// it is reported whether or not anything went wrong.
+func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
+	tests := []struct {
+		name             string
+		total, ran       int
+		why              string
+		wantAll, wantNot []string
+	}{
+		{
+			name:    "every statement ran",
+			total:   5,
+			ran:     5,
+			wantAll: []string{"5 statements", "5 ran"},
+		},
+		{
+			name:    "refused part-way",
+			total:   5,
+			ran:     2,
+			why:     "refused at statement 3",
+			wantAll: []string{"5 statements", "2 ran", "refused at statement 3"},
+		},
+		{
+			name:    "the first statement was refused",
+			total:   4,
+			ran:     0,
+			why:     "refused at statement 1",
+			wantAll: []string{"0 ran", "refused at statement 1"},
+			// "0 ran" has to be said, not left to be inferred from silence.
+			wantNot: []string{"1 ran"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := batchSummary(tt.total, tt.ran, tt.why, false)
+			for _, want := range tt.wantAll {
+				if !strings.Contains(got, want) {
+					t.Errorf("batchSummary() = %q, want it to contain %q", got, want)
+				}
+			}
+			for _, unwanted := range tt.wantNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("batchSummary() = %q, want it not to contain %q", got, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// This is the number that says whether a write went as intended, and it is
+// read in a hurry, so the singular is spelled out rather than left as
+// "1 rows affected".
+func TestAWriteReportsWhatItChangedRatherThanARowCount(t *testing.T) {
+	tests := []struct {
+		name             string
+		written          db.Result
+		wantAll, wantNot []string
+	}{
+		{
+			name:    "one row",
+			written: db.Result{RowsAffected: 1},
+			wantAll: []string{"1 row affected"},
+			wantNot: []string{"1 rows"},
+		},
+		{
+			name:    "many rows",
+			written: db.Result{RowsAffected: 4812},
+			wantAll: []string{"4812 rows affected"},
+		},
+		{
+			// A write that matched rows but changed none reports zero, which
+			// is the server's own answer. Saying "affected" rather than
+			// "matched" is what stops it being read as the other number.
+			name:    "nothing changed",
+			written: db.Result{RowsAffected: 0},
+			wantAll: []string{"0 rows affected"},
+		},
+		{
+			name:    "an insert carries the id it was given",
+			written: db.Result{RowsAffected: 1, LastInsertID: 42},
+			wantAll: []string{"1 row affected", "42"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			written := tt.written
+			s := status{phase: phaseDone, written: &written}
+			got := s.renderWidth(200)
+
+			for _, want := range tt.wantAll {
+				if !strings.Contains(got, want) {
+					t.Errorf("status = %q, want it to contain %q", got, want)
+				}
+			}
+			for _, unwanted := range tt.wantNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("status = %q, want it not to contain %q", got, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// A statement that returned rows has no count to report, and "0 rows
+// affected" under a SELECT would be a number meaning nothing.
+func TestAQueryStillReportsItsRowCount(t *testing.T) {
+	s := status{phase: phaseDone, rows: 7}
+
+	got := s.renderWidth(200)
+	if !strings.Contains(got, "7 rows") {
+		t.Errorf("status = %q, want the row count", got)
+	}
+	if strings.Contains(got, "affected") {
+		t.Errorf("status = %q, want no affected-row count for a query", got)
+	}
+}
+
+// A warning is the only sign that a statement the server called a success did
+// something other than what was asked, so it says what happened rather than
+// only that something did — and it survives a narrow terminal.
+func TestAWarningReachesTheBarWithItsMessage(t *testing.T) {
+	s := status{
+		phase:   phaseDone,
+		written: &db.Result{RowsAffected: 1},
+		warnings: []db.Warning{
+			{Level: "Warning", Code: 1265, Message: "Data truncated for column 's' at row 1"},
+		},
+	}
+
+	got := s.renderWidth(200)
+	if !strings.Contains(got, "1 warning") {
+		t.Errorf("status = %q, want the warning count", got)
+	}
+	if !strings.Contains(got, "Data truncated for column 's' at row 1") {
+		t.Errorf("status = %q, want the server's own message", got)
+	}
+}
+
+// Dropping the warning to make the line fit would lose the only notice that
+// the data is not what was asked for. The elapsed time may go instead.
+func TestANarrowBarKeepsTheWarningAndDropsTheTiming(t *testing.T) {
+	s := status{
+		phase:   phaseDone,
+		rows:    3,
+		elapsed: 1234 * time.Millisecond,
+		warnings: []db.Warning{
+			{Level: "Warning", Code: 1265, Message: "Data truncated"},
+		},
+	}
+
+	got := s.renderWidth(28)
+	if strings.Contains(got, "1.23s") {
+		t.Fatalf("status = %q is not narrow enough to be dropping anything", got)
+	}
+	if !strings.Contains(got, "warning") {
+		t.Errorf("status = %q, want the warning to survive the squeeze", got)
+	}
+}
+
+func TestNoWarningsAddNothingToTheBar(t *testing.T) {
+	s := status{phase: phaseDone, rows: 3}
+
+	if got := s.renderWidth(200); strings.Contains(got, "warning") {
+		t.Errorf("status = %q, want no mention of warnings", got)
+	}
+}
+
+// The count exists because a part-way batch could not be taken back. Inside a
+// transaction it still can, and a summary that read the same either way would
+// leave the reader to guess the one thing that decides what to do next.
+func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
+	outside := batchSummary(5, 2, "refused at statement 3", false)
+	inside := batchSummary(5, 2, "refused at statement 3", true)
+
+	if strings.Contains(outside, "rollback") {
+		t.Errorf("outside a transaction: %q offers a rollback that does not exist", outside)
+	}
+	if !strings.Contains(inside, "rollback") {
+		t.Errorf("inside a transaction: %q does not say the work can be undone", inside)
 	}
 }

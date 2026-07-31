@@ -158,13 +158,20 @@ type batch struct {
 //
 // It always reports how many of the statements actually ran, including when
 // everything succeeded. A batch that stopped in the middle has left the
-// database in a state neither the buffer nor the editor shows, and with no
-// transaction to unwind it the only remedy is knowing exactly where it
-// stopped — so the count is not an error-only detail.
-func batchSummary(total, ran int, why string) string {
+// database in a state neither the buffer nor the editor shows, so the count is
+// not an error-only detail.
+//
+// Inside a transaction that count means something different: the work is still
+// undoable, and the sentence says so. Reporting where a batch stopped without
+// saying whether it can be taken back would leave the reader to guess the one
+// thing they need.
+func batchSummary(total, ran int, why string, inTransaction bool) string {
 	summary := fmt.Sprintf("%s · %d ran", plural(total, "statement"), ran)
 	if why != "" {
 		summary += " · " + why
+	}
+	if inTransaction {
+		summary += " · in transaction, rollback still possible"
 	}
 	return summary
 }
@@ -668,6 +675,20 @@ func (a *App) cycleFocus(delta int) {
 // text typed into datavase has never been anywhere else, and prompting about
 // every session's leftovers is how a prompt stops being read.
 func (a *App) quit() {
+	// Two things can be lost by leaving, and both get asked about, dearest
+	// first. An open transaction is unsaved work of the same kind as an
+	// unsaved buffer and rather more expensive, since quitting rolls it back.
+	if a.conn.InTransaction() {
+		a.confirmDiscardTransaction()
+		return
+	}
+	a.quitWithUnsavedFile()
+}
+
+// quitWithUnsavedFile is the second question quitting has to ask, and where
+// the transaction dialog continues once it has been answered — otherwise
+// agreeing to roll back would take an unsaved file down with it, unasked.
+func (a *App) quitWithUnsavedFile() {
 	if a.fileDirty() {
 		a.confirmDiscard(
 			fmt.Sprintf("%s has unsaved changes.\n\nQuit and lose them?", a.openFile.rel),
@@ -678,6 +699,7 @@ func (a *App) quit() {
 	a.forceQuit()
 }
 
+// forceQuit leaves without asking anything further.
 func (a *App) forceQuit() {
 	if a.running != nil {
 		// Leaving a statement running server-side after the client exits
@@ -708,6 +730,16 @@ func (a *App) execute() {
 // runStatement puts one statement through the guard and then the engine.
 func (a *App) runStatement(stmt sqlparse.Statement) {
 	decision := guard.Evaluate(stmt, a.policy())
+
+	// Transaction control opens or ends the pinned connection rather than
+	// running on one, so it never becomes a Stream. Typing BEGIN works because
+	// that is what a DBA types; there is a palette entry for the same thing,
+	// not instead of it.
+	if decision.Verdict == guard.Allow && opensOrEndsTransaction(stmt) {
+		a.transactionControl(stmt.Verb())
+		return
+	}
+
 	switch decision.Verdict {
 	case guard.Deny:
 		a.refuse(decision)
@@ -811,7 +843,7 @@ func (a *App) finishBatch(why string) {
 		return
 	}
 	a.batch = nil
-	a.notice(batchSummary(len(b.stmts), b.ran, why))
+	a.notice(batchSummary(len(b.stmts), b.ran, why, a.conn.InTransaction()))
 }
 
 // copyOrCancel resolves Ctrl+C, whose meaning depends on what is on screen.
@@ -841,6 +873,7 @@ func (a *App) policy() guard.Policy {
 		Env:           a.conn.DataSource().Env,
 		AutoLimit:     a.cfg.Defaults.AutoLimit,
 		WritesEnabled: a.status.writesEnabled,
+		InTransaction: a.conn.InTransaction(),
 	}
 }
 
@@ -861,6 +894,8 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	a.status.message = ""
 	a.status.limitInjected = decision.InjectLimit
 	a.status.truncated = false
+	a.status.written = nil
+	a.status.warnings = nil
 
 	started := time.Now()
 	stream := a.conn.Query(context.Background(), sql, db.Options{
@@ -869,6 +904,9 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 		// The chosen schema travels with the statement. Without this the
 		// picker would change what the status bar says and nothing else.
 		Schema: a.selectedSchema,
+		// A write is sent for its count rather than for rows, which is the
+		// only moment the server's answer can still be read.
+		Exec: !stmt.Kind().ReturnsRows(),
 	})
 	a.running = stream
 
@@ -899,6 +937,8 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 
 	err := stream.Err()
 	truncated := stream.Truncated() || a.buf.AtCapacity()
+	written, wrote := stream.Result()
+	warnings := stream.Warnings()
 	elapsed := time.Since(started)
 	rows := a.buf.RowCount()
 
@@ -907,6 +947,10 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 		a.status.rows = rows
 		a.status.elapsed = elapsed
 		a.status.truncated = truncated
+		if wrote {
+			a.status.written = &written
+		}
+		a.status.warnings = warnings
 
 		a.record(sqlText, rows, elapsed)
 
@@ -994,4 +1038,68 @@ func (a *App) record(sqlText string, rows int, elapsed time.Duration) {
 		defer cancel()
 		a.history.Add(ctx, entry)
 	}()
+}
+
+// opensOrEndsTransaction picks out the statements that change whether a
+// transaction exists, which the connection handles rather than a Stream.
+//
+// SAVEPOINT and RELEASE SAVEPOINT are not among them: they are ordinary
+// statements that happen to need an open transaction, and they run on the
+// pinned connection like anything else does.
+func opensOrEndsTransaction(stmt sqlparse.Statement) bool {
+	if stmt.Kind() != sqlparse.StmtTransaction {
+		return false
+	}
+	switch stmt.Verb() {
+	case "BEGIN", "START", "COMMIT", "ROLLBACK":
+		return true
+	}
+	return false
+}
+
+// transactionControl opens or ends a transaction, on the connection rather
+// than through a Stream.
+func (a *App) transactionControl(verb string) {
+	if a.running != nil {
+		a.notice("a statement is already running; ^C cancels it")
+		return
+	}
+
+	ctx := context.Background()
+	var err error
+	var said string
+
+	switch verb {
+	case "BEGIN", "START":
+		err, said = a.conn.Begin(ctx), "transaction open — nothing is visible to anyone else until commit"
+	case "COMMIT":
+		err, said = a.conn.Commit(ctx), "committed"
+	case "ROLLBACK":
+		err, said = a.conn.Rollback(ctx), "rolled back"
+	}
+
+	if err != nil {
+		a.notice(err.Error())
+		return
+	}
+	a.status.inTransaction = a.conn.InTransaction()
+	a.notice(said)
+}
+
+// confirmDiscardTransaction asks before quitting with work that has not been
+// committed. Leaving would roll it back, which is the safe reading of a
+// session that ended without saying commit — but not one to do silently.
+func (a *App) confirmDiscardTransaction() {
+	modal := tview.NewModal().
+		SetText("A transaction is open.\n\nQuitting rolls it back.").
+		AddButtons([]string{"Cancel", "Roll back and quit"}).
+		SetDoneFunc(func(_ int, label string) {
+			a.closeDialog()
+			if label == "Roll back and quit" {
+				a.quitWithUnsavedFile()
+			}
+		})
+
+	modal.SetBackgroundColor(tcell.ColorBlack)
+	a.openDialog(modal)
 }

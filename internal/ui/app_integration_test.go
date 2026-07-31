@@ -4,6 +4,8 @@ package ui
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -517,6 +519,24 @@ func TestDecliningAConfirmationStopsTheRestOfTheBatch(t *testing.T) {
 	})
 }
 
+// The guard stops the user and makes them agree to a write. Reporting "0
+// rows" afterwards told them nothing about what they had just agreed to.
+func TestAWriteReportsHowManyRowsItChangedOnTheStatusBar(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	seedRows(t, h, 5)
+	h.typeSQL("UPDATE dv_ui SET n = n + 100 WHERE n <= 2")
+
+	h.do(keymap.ActionRun)
+	confirmWrite(t, h)
+
+	h.waitFor("the bar to say what the write changed", func(a *App) bool {
+		return a.status.written != nil && a.status.written.RowsAffected == 2
+	})
+	if !h.waitForScreen("2 rows affected") {
+		t.Errorf("the count never reached the screen:\n%s", h.text())
+	}
+}
+
 // The guard's decision has to reach the screen, not just the policy engine.
 func TestProductionDeleteIsRefusedOnScreen(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
@@ -925,4 +945,111 @@ func TestSchemaCacheIsPopulatedInTheBackground(t *testing.T) {
 	if len(tables) == 0 {
 		t.Error("the cache holds no tables after the background refresh")
 	}
+}
+
+// seedRows gives the interface tests a table of their own to write to, so a
+// write test cannot disturb the fixture the streaming tests count rows from.
+func seedRows(t *testing.T, h *harness, n int) {
+	t.Helper()
+	ctx := context.Background()
+
+	for _, sql := range []string{
+		"DROP TABLE IF EXISTS dv_ui",
+		"CREATE TABLE dv_ui (n INT PRIMARY KEY)",
+	} {
+		if _, err := h.app.conn.Exec(ctx, sql); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	for i := 1; i <= n; i++ {
+		if _, err := h.app.conn.Exec(ctx, fmt.Sprintf("INSERT INTO dv_ui (n) VALUES (%d)", i)); err != nil {
+			t.Fatalf("seeding dv_ui: %v", err)
+		}
+	}
+	t.Cleanup(func() { h.app.conn.Exec(ctx, "DROP TABLE IF EXISTS dv_ui") })
+}
+
+// confirmWrite answers the guard's confirmation dialog with Run.
+func confirmWrite(t *testing.T, h *harness) {
+	t.Helper()
+	if !h.waitForScreen("Run it?") {
+		t.Fatalf("no confirmation appeared:\n%s", h.text())
+	}
+	h.press(tcell.KeyRight)
+	h.press(tcell.KeyEnter)
+}
+
+// The whole point, driven the way a DBA drives it: type BEGIN, change
+// something, look at it, change your mind. Before this the ROLLBACK reported
+// success and the row stayed.
+func TestATypedRollbackUndoesTheWork(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	seedRows(t, h, 3)
+
+	h.typeSQL("BEGIN")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to open", func(a *App) bool {
+		return a.status.inTransaction
+	})
+	if !h.waitForScreen("TX") {
+		t.Errorf("the status bar does not say a transaction is open:\n%s", h.text())
+	}
+
+	h.typeSQL("DELETE FROM dv_ui WHERE n <= 2")
+	h.do(keymap.ActionRun)
+	confirmWrite(t, h)
+	h.waitFor("the delete to report what it removed", func(a *App) bool {
+		return a.status.written != nil && a.status.written.RowsAffected == 2
+	})
+
+	h.typeSQL("ROLLBACK")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to close", func(a *App) bool {
+		return !a.status.inTransaction
+	})
+
+	if got := rowCount(t, h, "dv_ui"); got != 3 {
+		t.Errorf("dv_ui has %d rows after ROLLBACK, want 3 — the delete was not undone", got)
+	}
+}
+
+// Session state was refused because it could not reach the next statement.
+// Inside a transaction the connection is held, so it can, and refusing would
+// now be the wrong answer.
+func TestSetIsRefusedOutsideATransactionAndAcceptedInside(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
+	h.do(keymap.ActionRun)
+	if !h.waitForScreen("Refused") {
+		t.Fatalf("SET was not refused outside a transaction:\n%s", h.text())
+	}
+	h.press(tcell.KeyEnter)
+
+	h.typeSQL("BEGIN")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to open", func(a *App) bool { return a.status.inTransaction })
+
+	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
+	h.do(keymap.ActionRun)
+	h.waitFor("the SET to run", func(a *App) bool {
+		return a.status.phase == phaseDone && a.status.err == nil
+	})
+
+	h.typeSQL("ROLLBACK")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to close", func(a *App) bool { return !a.status.inTransaction })
+}
+
+func rowCount(t *testing.T, h *harness, table string) int {
+	t.Helper()
+
+	var n int
+	err := h.app.conn.WithControl(context.Background(), func(c *sql.Conn) error {
+		return c.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("counting %s: %v", table, err)
+	}
+	return n
 }

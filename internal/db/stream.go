@@ -61,7 +61,57 @@ type Stream struct {
 	finished  bool
 	err       error
 	truncated bool
+	result    Result
+	hasResult bool
+	warnings  []Warning
 	closeOnce sync.Once
+}
+
+// Result is what a statement that returned no rows did instead.
+//
+// RowsAffected is MySQL's own count, which for an UPDATE is the number of
+// rows *changed* rather than matched: an UPDATE setting a column to the value
+// it already held reports zero, and that is the server's answer rather than a
+// miscount.
+type Result struct {
+	RowsAffected int64
+	LastInsertID int64
+}
+
+// Warning is one row of SHOW WARNINGS.
+//
+// MySQL reports data truncation, implicit conversion and several ALTER side
+// effects only this way, while calling the statement a success — so a column
+// silently cut short on insert is invisible to a client that never asks.
+type Warning struct {
+	Level   string
+	Code    uint16
+	Message string
+}
+
+// Warnings lists what the server said about the statement, once Events has
+// closed.
+//
+// They are read on the connection that ran the statement, before it goes back
+// to the pool. SHOW WARNINGS reports on the last statement executed on that
+// connection, so asking any later — or on any other connection — would answer
+// about something else entirely.
+func (s *Stream) Warnings() []Warning {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.warnings
+}
+
+// Result reports what a write did, and whether there was one to report.
+//
+// Like Err, it is read after Events closes rather than delivered as an event,
+// for the reason given on Event: a terminal event can be dropped when a
+// cancelled stream closes, and the caller would not be able to tell the
+// difference.
+func (s *Stream) Result() (Result, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result, s.hasResult
 }
 
 // Err reports why the stream ended, once Events is closed. It is nil when
@@ -141,20 +191,17 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 	defer close(out)
 	defer s.markFinished()
 
-	conn, err := s.conn.pool.Conn(s.runCtx)
+	// Where the connection comes from is acquire's business alone: a fresh one
+	// from the pool, or the one pinned by an open transaction. Everything
+	// below takes it as an argument and never asks, which is why adding
+	// transactions did not disturb the exec path or the warnings.
+	conn, connID, release, err := s.conn.acquire(s.runCtx)
 	if err != nil {
-		s.done(fmt.Errorf("acquiring a connection: %w", err), false)
+		s.done(err, false)
 		return
 	}
-	defer conn.Close()
+	defer release()
 
-	// The id has to be read on the very connection that will run the
-	// statement, since that is what KILL QUERY targets.
-	var connID uint64
-	if err := conn.QueryRowContext(s.runCtx, "SELECT CONNECTION_ID()").Scan(&connID); err != nil {
-		s.done(fmt.Errorf("reading the connection id: %w", err), false)
-		return
-	}
 	s.connID = connID
 	close(s.idReady)
 
@@ -163,6 +210,18 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 			s.done(fmt.Errorf("switching to schema %q: %w", schema, err), false)
 			return
 		}
+	}
+
+	// A write is sent from here rather than through Conn.Exec, which would be
+	// the shorter route and would quietly cost cancellation: Exec takes a
+	// connection from the pool without reading its id, and KILL QUERY has
+	// nothing to aim at. A runaway UPDATE is the statement a user most needs
+	// to stop, so it keeps the connection this function already holds.
+	if opt.Exec {
+		err := s.exec(conn, query)
+		s.readWarnings(conn, err)
+		s.done(err, false)
+		return
 	}
 
 	rows, err := conn.QueryContext(s.runCtx, query)
@@ -188,7 +247,81 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 	}
 
 	truncated, err := s.pump(out, rows, len(columns), opt)
+
+	// SHOW WARNINGS reports on the last statement run on this connection, and
+	// an open result set is still that statement. Close it first, before the
+	// deferred close would have.
+	rows.Close()
+	s.readWarnings(conn, err)
+
 	s.done(err, truncated)
+}
+
+// readWarnings asks what the server made of the statement, on the connection
+// that ran it and before it goes back to the pool.
+//
+// SHOW WARNINGS answers about the last statement executed on that connection,
+// so asking any later — or on any other connection — would report on
+// something else entirely. This is the one place where it can be asked at all.
+//
+// It costs a round trip on every statement. That is affordable here because
+// every statement is one a human pressed a key for, and the path that does run
+// on a keystroke — completion — reads the local cache and never comes through
+// here. The alternative is not catching a silently truncated value, which is
+// the failure this exists for.
+//
+// A failure to read them is dropped. The statement itself already succeeded,
+// and losing the note must not turn that into an error.
+func (s *Stream) readWarnings(conn *sql.Conn, stmtErr error) {
+	// A failed statement is already explained by its error, and a cancelled
+	// connection has nothing left to answer with.
+	if stmtErr != nil || s.runCtx.Err() != nil {
+		return
+	}
+
+	rows, err := conn.QueryContext(s.runCtx, "SHOW WARNINGS")
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	var found []Warning
+	for rows.Next() {
+		var w Warning
+		if err := rows.Scan(&w.Level, &w.Code, &w.Message); err != nil {
+			return
+		}
+		found = append(found, w)
+	}
+	if rows.Err() != nil || len(found) == 0 {
+		return
+	}
+
+	s.mu.Lock()
+	s.warnings = found
+	s.mu.Unlock()
+}
+
+// exec sends a statement that returns a count instead of rows, on the
+// connection whose id KILL QUERY already knows.
+//
+// Both numbers are advisory — not every statement or driver reports them — so
+// a failure to read one is not a failure of the statement, which has already
+// happened by then.
+func (s *Stream) exec(conn *sql.Conn, query string) error {
+	res, err := conn.ExecContext(s.runCtx, query)
+	if err != nil {
+		return err
+	}
+
+	affected, _ := res.RowsAffected()
+	lastID, _ := res.LastInsertId()
+
+	s.mu.Lock()
+	s.result = Result{RowsAffected: affected, LastInsertID: lastID}
+	s.hasResult = true
+	s.mu.Unlock()
+	return nil
 }
 
 // schemaFor decides which schema this statement runs against, and returns the

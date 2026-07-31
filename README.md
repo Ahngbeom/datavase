@@ -14,19 +14,14 @@ Usable, and specific about its edges.
 
 Built: connect (directly, over TLS, or through an SSH bastion), browse the
 schema, edit and run SQL with schema-aware completion, run a whole file a
-statement at a time, stream large results, cancel a runaway query, search the
-query history, export to CSV or JSON, attach a worktree and open, run and
-save the `.sql` files in it, read SQL out of a GitLab merge request, and the
-production guard.
+statement at a time, wrap work in a transaction and take it back, stream large
+results, cancel a runaway query — including a write — see what a write changed
+and what the server warned about, search the query history, export to CSV or
+JSON, attach a worktree and open, run and save the `.sql` files in it, read SQL
+out of a GitLab merge request, and the production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **No transactions.** Each statement runs on its own connection out of a
-  pool, so `BEGIN` cannot reach the statement after it. Rather than let a
-  `ROLLBACK` report success having undone nothing, transaction control and
-  session statements are [refused with that explanation](#what-is-refused-for-a-different-reason).
-- **A write does not say how many rows it changed.** The count on the status
-  bar describes a result set, and a write has none.
 - **The result grid is plain.** No vertical view for a wide row, no way to
   open a truncated value in full, no sorting.
 
@@ -41,6 +36,9 @@ go install github.com/Ahngbeom/datavase/cmd/dv@latest
 Or take a prebuilt binary for macOS, Linux or Windows from
 [Releases](https://github.com/Ahngbeom/datavase/releases) — put `dv` on your
 PATH and check it with `dv version`.
+
+Upgrading an existing setup: [CHANGELOG.md](CHANGELOG.md) says what changed
+and whether anything needs doing to your configuration first.
 
 From a clone:
 
@@ -303,21 +301,90 @@ What that unlocks is narrow, and the narrowness is the point:
 So the escape hatch exists for the statement you meant to write, and not for
 the one that would rewrite a table.
 
+### Transactions
+
+Type `BEGIN`. The connection it opens on is then held for the transaction's
+whole life, so everything after it runs there — which is what makes `COMMIT`
+and `ROLLBACK` mean anything. `commit` and `rollback` are in the palette as
+well, and the status bar carries `TX` while one is open.
+
+```sql
+BEGIN;
+UPDATE orders SET status = 'X' WHERE id = 42;
+SELECT * FROM orders WHERE id = 42;   -- read it back
+ROLLBACK;                              -- or COMMIT
+```
+
+Quitting with a transaction open asks first, and rolls back if you say so.
+Leaving one behind would hold locks on the server with nobody watching.
+
+Two things it will not pretend:
+
+- **`ALTER` and friends commit the transaction.** That is MySQL, not a choice
+  made here: DDL causes an implicit commit. The confirmation says so before
+  the statement runs, rather than leaving you to discover it from a `ROLLBACK`
+  that did nothing.
+- **`LOCK TABLES` is refused inside one,** for the same reason — it would
+  commit the transaction you believe you are still in.
+
 ### What is refused for a different reason
 
-`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET` and `LOCK TABLES` are
-refused in **every** environment, dev included. This is not about danger.
+`SET` outside a transaction, and `USE` anywhere.
 
-Statements run on a connection borrowed from a pool and handed back when they
-finish, so none of that state reaches the next statement: `BEGIN` would open a
-transaction nothing could commit, `SET SESSION sql_mode = …` would be accepted
-and thrown away, and `ROLLBACK` would report success having undone nothing.
-Every one of them would look like it worked. Refusing them and saying why is
-the only honest answer until a transaction can hold one connection for its
-whole life.
+Statements ordinarily run on a connection borrowed from a pool and handed back
+when they finish, so `SET SESSION sql_mode = …` would be accepted and thrown
+away with the connection while looking like it worked. Open a transaction and
+it sticks, because then the connection is held — so the refusal names that
+rather than being a dead end.
 
-`USE` is refused too, and points at the schema picker instead — that choice
-does travel with every statement, which is exactly what `USE` was reached for.
+`USE` is refused even in a transaction, and points at the schema picker
+instead: that choice travels with every statement, which is exactly what `USE`
+was reached for.
+
+### What a write reports
+
+A statement that changes rows has no result set, so the bar says what it did
+instead of how many rows came back:
+
+```
+1 row affected  ·  4ms
+4812 rows affected  ·  1.2s
+```
+
+An `INSERT` that was given an id carries it too. The number is MySQL's own,
+which counts rows **changed** rather than matched — an `UPDATE` setting a
+column to the value it already held reports zero, and that is the server's
+answer rather than a miscount. The word is "affected" so it cannot be read as
+the other one.
+
+Writes are still cancellable. They are sent on the same connection whose id
+`KILL QUERY` was given, not through the pool, so `^C` stops a runaway `UPDATE`
+exactly as it stops a runaway `SELECT`.
+
+### What the server complained about
+
+MySQL reports data truncation, implicit conversion and several `ALTER` side
+effects as warnings while calling the statement a **success**. A value quietly
+cut down to fit its column is among the things a client most needs to catch,
+and it is invisible to one that never asks.
+
+So every statement is asked, and what comes back sits on the bar next to the
+count:
+
+```
+1 row affected  ·  4ms  ·  1 warning: Data truncated for column 's' at row 1
+```
+
+The message is carried in full rather than replaced by a number. A count says
+something happened without saying what, and the server's own sentence is
+already the whole of what you need in order to go and look. The warning is
+never dropped to make the line fit — the elapsed time goes first.
+
+This costs one round trip per statement, because `SHOW WARNINGS` answers about
+the last statement run on that connection and there is no other moment to ask.
+That is affordable here: every statement is one you pressed a key for, and the
+path that really does run on a keystroke — completion — reads the local cache
+and never goes near the server.
 
 ### Running more than one statement
 

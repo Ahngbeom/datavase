@@ -102,20 +102,22 @@ func TestCommandPaletteOpens(t *testing.T) {
 	}
 }
 
-// There are more commands than a modest terminal has rows, which is what the
-// filter is for. A command past the fold has to be reachable by typing, or the
-// palette stops being the route to everything it is supposed to be.
-func TestTheFilterReachesACommandPastTheFold(t *testing.T) {
+// The list is longer than a modest terminal — which is why the filter exists,
+// and why checking that a command near the end is on screen unfiltered tests
+// the length of the list rather than the palette. Filtering is the route a
+// user actually takes to those commands.
+func TestThePaletteFilterReachesACommandBelowTheFold(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
 	h.do(keymap.ActionCommandPalette)
 	if strings.Contains(h.text(), "leave datavase") {
-		t.Skip("the terminal is tall enough to show every command; nothing to prove")
+		t.Skip("quit is on screen unfiltered; the filter is not what is under test here")
 	}
 
 	h.typeInto("quit")
-	if !h.waitForScreen("leave datavase") {
-		t.Errorf("filtering did not reach the last command:\n%s", h.text())
+
+	if !strings.Contains(h.text(), "leave datavase") {
+		t.Errorf("filtering for \"quit\" does not reach it:\n%s", h.text())
 	}
 }
 

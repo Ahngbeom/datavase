@@ -45,6 +45,9 @@ From a clone:
 make build      # produces ./dv — CGO-free, single static binary
 ```
 
+Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
+no companion tools. It is one binary.
+
 ## Configure
 
 `~/.config/datavase/config.yaml` (or `$XDG_CONFIG_HOME/datavase/config.yaml`):
@@ -128,16 +131,20 @@ your hands reach for.
 | Reload the schema tree | `⌘R` | `Ctrl+R` |
 | Choose the schema | `⌘⇧N` | `Ctrl+Shift+N` |
 | Complete the word at the cursor | `^Space` | `Ctrl+Space` |
-| Search the query history | `⌘F` | `Ctrl+F` |
+| Find in the editor or the results | `⌘F` | `Ctrl+F` |
+| Next / previous match | `⌘G` `⌘⇧G` | `Ctrl+G` `Ctrl+Shift+G` |
+| Search the query history | `⌘⇧F` or `F9` | `Ctrl+Shift+F` or `F9` |
 | Jump to a table | `⌘N` | `Ctrl+N` |
-| Command palette | `⌘⇧A` | `Ctrl+Shift+A` |
+| Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table's definition | `⌘I` | `Ctrl+Shift+I` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
 
-`F5` runs, `F4` shows a definition, `F6` switches tab, `F7` chooses the schema
-and `F10` quits everywhere, as fallbacks. Two combinations are impossible
+`F5` runs, `F2` saves, `F4` shows a definition, `F6` switches tab, `F7` chooses
+the schema, `F8` opens a file, `F9` searches the history and `F10` quits
+everywhere, as fallbacks. Two
+combinations are impossible
 rather than merely awkward: `⌘⇥` is the macOS application switcher, and
 `Ctrl+I` is byte 0x09 — the same as `⇥`.
 
@@ -150,6 +157,36 @@ line while `⌥←` and `Ctrl+←` move by word.
 
 A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
 `_` and `id`, which is how a generic text editor would split it.
+
+### When something else has taken the key
+
+A terminal that keeps `⌘` for its own menus, a window manager with its own
+shortcuts, a multiplexer whose prefix is `Ctrl+B` — any of them takes the key
+before datavase sees it, and there is nothing datavase can do about that from
+the inside.
+
+So nothing is only reachable by a chord. **`F3` opens the command palette, and
+every command is in there by name** — including `schema tree`, `go to table`,
+`comment`, `duplicate line` and the rest. A test refuses to let an action exist
+that has neither a plain key nor a palette entry.
+
+Two things are outside that promise, deliberately:
+
+- **Copy, cut and paste.** Whatever took those keys is doing the same job with
+  them, and routing a paste through a palette is worse than not having one.
+- **Undo and redo.** They belong to the text widget rather than to datavase's
+  key map, so there is nothing here to offer.
+
+And on the **vim** preset — the default — editing needs no modifiers in the
+first place: `dd`, `yy`, `p`, `gg` are all unclaimable.
+
+You can also just move the key. Listed bindings replace an action's defaults:
+
+```yaml
+keymap:
+  actions:
+    toggle-sidebar: ["f12"]
+```
 
 ### Making your terminal deliver them
 
@@ -241,9 +278,9 @@ a dialog people learn to dismiss.
 ### Unlocking writes to production
 
 Writing to production is possible, and it is deliberately not a button on the
-refusal. Leave the dialog, open the command palette and run `write`;
-`readonly` locks it again, and so does closing the session. The status bar
-carries `writes on` for as long as it lasts.
+refusal. Leave the dialog, open the command palette (`⌘⇧A`, `F3`) and run
+`write`; `readonly` locks it again, and so does closing the session. The
+status bar carries `writes on` for as long as it lasts.
 
 What that unlocks is narrow, and the narrowness is the point:
 
@@ -435,7 +472,44 @@ you have not connected to before:
 ssh-keyscan -H bastion.example.com >> ~/.ssh/known_hosts
 ```
 
+## The screen
+
+```
+█ PROD  prod-app@app_db  ·  feature/add-index                       F1 keys
+█──────────────────────────────────────────────────────────────────────────
+█▌ 002_add_index.sql *
+█ ALTER TABLE users
+█   ADD INDEX idx_email (email);
+█──────────────────────────────────────────────────────────────────────────
+█  ▸results ddl
+█ id      email
+█ 1       ada@example.com
+█──────────────────────────────────────────────────────────────────────────
+█ 1 row  ·  6ms
+```
+
+**The column down the left is the environment.** Red for production, amber for
+stage, and a dark slate for dev, which is where you are most of the time. It is
+a column and not a badge because a badge is a field, and a field is something a
+narrow terminal can drop — this cannot be squeezed out, and it is the only
+colour in datavase that ignores your terminal theme.
+
+**The top line is where you are; the bottom line is what just happened.** The
+environment, the datasource, the schema an unqualified statement will reach and
+stay put up top. Row counts, timings, warnings and messages
+go below.
+
+Regions are separated by a single rule rather than boxed. Each names itself
+once, on its own header line, and the one holding the keyboard is marked `▌`.
+The editor's header carries the open file and a `*` while it differs from disk;
+it does not say "editor", because the caret already does.
+
 ## The schema pane
+
+**It starts hidden.** `⌘B` (`Ctrl+B`) brings it. Finding a table by name is
+`⌘N`, a schema is `⌘⇧N` and a file is `⌘⇧O` — all of them searchable lists that
+answer faster than scrolling a tree does, so the tree is there for browsing
+rather than in the way of everything else.
 
 The tree root is the **server**, and its children are that server's schemas —
 all at the same level. The root carries the host so it cannot be mistaken for
@@ -450,9 +524,9 @@ The pane has two tabs:
   estimates. It reads from the local cache, so it fills instantly and filters
   as you type.
 
-The result pane has two tabs as well: **results** and **DDL**. `⌘I` on a
+The result pane has two tabs as well: **results** and **ddl**. `⌘I` on a
 selected table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches
-to the DDL tab; `⌘C` there copies the whole definition. Running a query
+to the ddl tab; `⌘C` there copies the whole definition. Running a query
 switches back to results.
 
 The lookup is deliberate rather than automatic — `SHOW CREATE` is a server
@@ -492,6 +566,35 @@ rather than only the text before it.
 has more tables than a tree is pleasant to browse. It writes a starter query
 into the editor rather than running it — the guard and you still decide when
 anything executes.
+
+## Finding text
+
+`/` searches whatever has focus — the SQL in the editor, or the values in the
+results. `?` searches backwards, and `n` and `N` step through the matches. The
+prompt sits on the bottom row rather than over the screen, so you can see what
+is being searched while you type it, and the match moves as the pattern grows.
+`Esc` puts the cursor back where it started.
+
+On a non-modal keyboard the same thing is `⌘F`, with `⌘G` and `⌘⇧G` for the
+next and previous match. In the results `/` works whichever keyboard you are
+on, because a grid has nothing for an unmodified letter to collide with.
+
+Matching is literal, not a regular expression, and **smart about case**: a
+lower-case pattern matches anything, while one capital in it means you meant
+that capital. So `/id` finds every `id` and `/ID` finds only the column
+actually spelled that way.
+
+Two things worth knowing:
+
+- **Searching the results reads the data, not what is on screen.** The grid
+  truncates long values and doubles their brackets for the markup parser;
+  searching that copy would mean a `[` in your data could never be found, and
+  neither could anything past the two-hundredth character.
+- **Only the current match is highlighted.** The text widget has no way to
+  colour arbitrary ranges, so there is no equivalent of vim's `hlsearch`.
+
+While rows are still arriving, "no match" means "not in the rows so far", and
+says so.
 
 ## History and export
 

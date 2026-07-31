@@ -5,8 +5,15 @@
 // half-typed sequences mean what — testable without a screen.
 //
 // The scope is deliberately the practical subset: normal, insert and visual
-// modes with the common motions, operators and edits. Counts (3dd), search
-// (/), marks, named registers and dot-repeat are out.
+// modes with the common motions, operators and edits. Counts (3dd), marks,
+// named registers and dot-repeat are out.
+//
+// Search is here only as far as the key that starts it. The pattern is typed
+// into the interface, which owns both the field it goes in and the text it is
+// looked for in; carrying it through Feed would put every keystroke of a
+// search term past the arrow-key and operator handling below, where it would
+// be read as a motion. That also means "d/foo" is not supported — searching
+// moves the cursor, it does not give an operator something to reach.
 package vim
 
 // Kind is what a command does.
@@ -29,6 +36,12 @@ const (
 	KindVisual
 	// KindEscape returns to normal mode, collapsing any selection.
 	KindEscape
+	// KindSearch asks for a pattern; Backward says which way from the cursor.
+	KindSearch
+	// KindSearchNext repeats the last search the way it was going, and
+	// KindSearchPrev repeats it the other way.
+	KindSearchNext
+	KindSearchPrev
 )
 
 // Motion is where a command reaches.
@@ -77,6 +90,8 @@ type Command struct {
 	// Selection means the operator applies to the visual selection already on
 	// screen rather than to a motion from the cursor.
 	Selection bool
+	// Backward reverses a search: "?" rather than "/".
+	Backward bool
 }
 
 // Outcome says what the state machine did with a key.

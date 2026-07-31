@@ -225,11 +225,35 @@ func baseMap() *Map {
 		Binding{Key: tcell.KeyRune, Rune: ' ', Mods: tcell.ModCtrl},
 	)
 
-	// Reserved for later milestones.
+	// ⌘F means the same thing here as in every other editor: find in the text
+	// in front of you. The query history, which used to answer to this key, is
+	// a different question and now has its own.
 	m.bind(ActionFind, ctrlAndCmdRune('f', 0)...)
-	m.bind(ActionCommandPalette, ctrlAndCmdRune('a', tcell.ModShift)...)
+	// F9 alongside the chord because a shifted Ctrl letter needs the extended
+	// keyboard protocol to be reported at all, and it is the last free function
+	// key that is not already spoken for.
+	m.bind(ActionSearchHistory,
+		append(ctrlAndCmdRune('f', tcell.ModShift),
+			Binding{Key: tcell.KeyF9})...)
+	// ⌘G is what "again" is called on this platform. The modal editor has n
+	// and N, which need no modifier at all; these are for the keyboards where
+	// an unmodified letter is text.
+	m.bind(ActionFindNext, ctrlAndCmdRune('g', 0)...)
+	m.bind(ActionFindPrev, ctrlAndCmdRune('g', tcell.ModShift)...)
+	// F3 alongside the chord, and not merely as a courtesy. The palette is how
+	// every command without a key of its own is reached, so it is the one
+	// binding that must survive a host application claiming ⌘⇧A — and
+	// Ctrl+Shift+A is no safety net, since a shifted Ctrl letter needs the
+	// extended keyboard protocol to be reported at all.
+	m.bind(ActionCommandPalette,
+		append(ctrlAndCmdRune('a', tcell.ModShift),
+			Binding{Key: tcell.KeyF3})...)
 	m.bind(ActionGoToTable, ctrlAndCmdRune('n', 0)...)
 
+	// The worktree's files. ⌘⇧O is DataGrip's "go to file"; ⌘⇧N, which the
+	// Windows keyboard uses for it, is already the schema picker here.
+	// F2 carries saving for terminals that still treat Ctrl+S as XOFF and
+	// freeze rather than deliver it. Cancelling is ⌘F2, so plain F2 is free.
 	// Tab switching and inspection.
 	//
 	// ⌘⇥ is not available: macOS reserves it for the application switcher at

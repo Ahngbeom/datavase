@@ -53,6 +53,9 @@ const (
 
 	ActionComplete
 	ActionFind
+	ActionFindNext
+	ActionFindPrev
+	ActionSearchHistory
 	ActionCommandPalette
 	ActionGoToTable
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
@@ -95,6 +98,9 @@ var actionNames = map[Action]string{
 	ActionUseSchema:         "use-schema",
 	ActionComplete:          "complete",
 	ActionFind:              "find",
+	ActionFindNext:          "find-next",
+	ActionFindPrev:          "find-previous",
+	ActionSearchHistory:     "search-history",
 	ActionCommandPalette:    "command-palette",
 	ActionGoToTable:         "go-to-table",
 	ActionCycleTab:          "cycle-tab",
@@ -132,7 +138,10 @@ var descriptions = map[Action]string{
 	ActionRefreshSchema:     "reload the schema tree",
 	ActionUseSchema:         "choose the schema unqualified names resolve against",
 	ActionComplete:          "complete the word at the cursor",
-	ActionFind:              "find in the editor",
+	ActionFind:              "find in the editor or results",
+	ActionFindNext:          "go to the next match",
+	ActionFindPrev:          "go to the previous match",
+	ActionSearchHistory:     "search the query history",
 	ActionCommandPalette:    "open the command palette",
 	ActionGoToTable:         "jump to a table",
 	ActionCycleTab:          "switch tab in the focused pane",
@@ -157,7 +166,8 @@ var order = []Action{
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
-	ActionFind, ActionCommandPalette, ActionGoToTable, ActionInspect,
+	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
+	ActionCommandPalette, ActionGoToTable, ActionInspect,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema,
 	ActionHelp, ActionQuit,

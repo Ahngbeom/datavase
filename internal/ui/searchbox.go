@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"sort"
+
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -20,6 +22,38 @@ func message(text, detail string) searchItem {
 	return searchItem{primary: text, secondary: detail}
 }
 
+// ranked pairs a row with what decides where it sorts.
+//
+// Ordering is not presentation here: Enter takes the first row, so a worse
+// match sorting above a better one runs the wrong command.
+type ranked struct {
+	item searchItem
+	// tier separates kinds of match that no score should be able to cross —
+	// a name match always beats a summary match, however well the summary
+	// scored.
+	tier  int
+	score int
+}
+
+// sortRanked orders the rows and drops the scores.
+//
+// The sort is stable so that an empty term, which scores everything the same,
+// leaves the caller's own order alone.
+func sortRanked(rows []ranked) []searchItem {
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].tier != rows[j].tier {
+			return rows[i].tier > rows[j].tier
+		}
+		return rows[i].score > rows[j].score
+	})
+
+	items := make([]searchItem, len(rows))
+	for i, r := range rows {
+		items[i] = r.item
+	}
+	return items
+}
+
 // newSearchBox builds the "type to filter, arrow down to choose" pairing used
 // by the history and go-to-table dialogs.
 //
@@ -34,6 +68,19 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 
 	reload := func(term string) {
 		items = search(term)
+
+		// A list where nothing has a second line must not reserve one: every
+		// row would cost two, halving how many choices fit on screen. That is
+		// what pushed the last command of the palette off the bottom.
+		secondLine := false
+		for _, it := range items {
+			if it.secondary != "" {
+				secondLine = true
+				break
+			}
+		}
+		list.ShowSecondaryText(secondLine)
+
 		list.Clear()
 		for _, it := range items {
 			item := it
@@ -50,7 +97,7 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 
 	input.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
-		case tcell.KeyDown, tcell.KeyTab:
+		case tcell.KeyTab, tcell.KeyDown:
 			if list.GetItemCount() > 0 {
 				a.app.SetFocus(list)
 			}

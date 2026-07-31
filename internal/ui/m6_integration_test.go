@@ -24,7 +24,7 @@ func TestRunningAStatementIsRecorded(t *testing.T) {
 	h.typeSQL("SELECT 4242 AS marker")
 
 	h.do(keymap.ActionRun)
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Fatalf("the statement never finished:\n%s", h.text())
 	}
 
@@ -56,7 +56,7 @@ func TestHistorySearchOpensAndFilters(t *testing.T) {
 		}
 	}
 
-	h.do(keymap.ActionFind)
+	h.do(keymap.ActionSearchHistory)
 
 	got := h.text()
 	if !strings.Contains(got, "alpha") || !strings.Contains(got, "beta") {
@@ -80,7 +80,7 @@ func TestChoosingAHistoryEntryFillsTheEditor(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	h.do(keymap.ActionFind)
+	h.do(keymap.ActionSearchHistory)
 	h.press(tcell.KeyDown)  // move focus into the list
 	h.press(tcell.KeyEnter) // accept
 
@@ -162,7 +162,7 @@ func TestExportWritesACSVFile(t *testing.T) {
 	h.do(keymap.ActionRun)
 	// Wait on the status bar, not on a value: "alice" is also sitting in the
 	// editor, so matching it would not mean the result had arrived.
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Fatalf("the statement never finished:\n%s", h.text())
 	}
 

@@ -132,6 +132,17 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 		return s.applyMotion(m)
 	}
 
+	// Search reaches the interface from normal mode, from visual mode and from
+	// the middle of a half-typed operator alike. It goes before the operator
+	// block below, which would otherwise abandon the sequence and swallow this
+	// key along with it, leaving "/" looking like a key that stopped working.
+	// The operator is dropped, because searching moves the cursor rather than
+	// giving an operator something to reach.
+	if cmd, ok := searchCommand(r); ok {
+		s.clearPending()
+		return cmd, OutcomeExecute
+	}
+
 	// An operator is waiting: only its own letter, meaning "this whole line",
 	// can still complete it.
 	if s.op != KindNone {
@@ -150,6 +161,22 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 		return s.feedVisual(r)
 	}
 	return s.feedNormal(r)
+}
+
+// searchCommand maps the keys that start or repeat a search.
+func searchCommand(r rune) (Command, bool) {
+	switch r {
+	case '/':
+		return Command{Kind: KindSearch}, true
+	case '?':
+		return Command{Kind: KindSearch, Backward: true}, true
+	case 'n':
+		return Command{Kind: KindSearchNext}, true
+	case 'N':
+		return Command{Kind: KindSearchPrev}, true
+	default:
+		return Command{}, false
+	}
 }
 
 // feedNormal handles the keys that are not motions and not operator

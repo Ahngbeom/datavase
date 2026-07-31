@@ -49,7 +49,7 @@ func (a *App) refuse(d guard.Decision) {
 		SetDoneFunc(func(int, string) { a.closeDialog() })
 
 	modal.SetBackgroundColor(tcell.ColorBlack)
-	modal.SetTextColor(colourError)
+	modal.SetTextColor(colourDanger)
 	a.openDialog(modal)
 }
 
@@ -171,8 +171,10 @@ var helpGroups = []struct {
 	{
 		title: "Finding things",
 		actions: []keymap.Action{
-			keymap.ActionFind, keymap.ActionGoToTable, keymap.ActionInspect,
-			keymap.ActionCommandPalette,
+			keymap.ActionFind, keymap.ActionFindNext, keymap.ActionFindPrev,
+			keymap.ActionSearchHistory,
+			keymap.ActionGoToTable,
+			keymap.ActionInspect, keymap.ActionCommandPalette,
 		},
 	},
 	{
@@ -213,6 +215,7 @@ func (a *App) helpText() string {
 		}
 	}
 
+	b.WriteString(commandHelpText(a.keyLabel(keymap.ActionCommandPalette)))
 	b.WriteString(a.vimHelp())
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
@@ -225,6 +228,27 @@ func (a *App) helpText() string {
 	}
 
 	b.WriteString("\n[gray]Press Escape to close.[-]")
+	return b.String()
+}
+
+// commandHelpText lists the command palette's entries.
+//
+// These carry no key of their own, so without this the only way to find one is
+// to already know it exists — which is how attaching a worktree, the entry
+// point to a whole feature, became undiscoverable while the keys that need it
+// were listed above.
+//
+// It is generated from the same list the palette offers, so the two cannot
+// drift apart, and it takes the palette's key label rather than the App so the
+// section can be rendered in a test without a terminal.
+func commandHelpText(paletteKey string) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "\n[yellow]Commands — %s, then type[-]\n", result.EscapeTags(paletteKey))
+	for _, c := range paletteCommands() {
+		fmt.Fprintf(&b, "  %s  %s\n",
+			keymap.PadLabel(result.EscapeTags(c.name), helpKeyColumn), result.EscapeTags(c.summary))
+	}
 	return b.String()
 }
 

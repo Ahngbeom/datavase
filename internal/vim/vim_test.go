@@ -412,3 +412,83 @@ func TestReferenceOnlyListsKeysThatWork(t *testing.T) {
 		}
 	}
 }
+
+// Search opens a prompt rather than collecting the pattern here.
+//
+// The pattern belongs to the interface, which owns the field it is typed into
+// and the text it is looked for in. Collecting it in this state machine would
+// put every key of it through Feed, where an arrow key resolves as a motion
+// and consumes a waiting operator — deleting a character in the middle of
+// typing a search term.
+func TestSearchKeysAskTheInterfaceForAPattern(t *testing.T) {
+	tests := []struct {
+		keys string
+		want Command
+	}{
+		{"/", Command{Kind: KindSearch}},
+		{"?", Command{Kind: KindSearch, Backward: true}},
+		{"n", Command{Kind: KindSearchNext}},
+		{"N", Command{Kind: KindSearchPrev}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.keys, func(t *testing.T) {
+			cmd, out := feed(t, New(), tc.keys)
+			if out != OutcomeExecute {
+				t.Fatalf("outcome = %v, want %v", out, OutcomeExecute)
+			}
+			if cmd != tc.want {
+				t.Errorf("command = %+v, want %+v", cmd, tc.want)
+			}
+		})
+	}
+}
+
+// Searching from a selection extends it, so the mode has to survive the key.
+func TestSearchDoesNotLeaveVisualMode(t *testing.T) {
+	s := New()
+	feed(t, s, "v")
+
+	cmd, out := feed(t, s, "/")
+	if out != OutcomeExecute || cmd.Kind != KindSearch {
+		t.Fatalf("got %+v/%v, want a search command", cmd, out)
+	}
+	if got := s.Mode(); got != ModeVisual {
+		t.Errorf("Mode() = %v after searching, want %v", got, ModeVisual)
+	}
+}
+
+// "d/" is not supported, but the key must still do something: an operator that
+// swallows the next key and leaves no trace is the state this package's
+// pending display exists to prevent.
+func TestSearchAfterAnOperatorDropsTheOperatorRatherThanTheKey(t *testing.T) {
+	s := New()
+	feed(t, s, "d")
+
+	cmd, out := feed(t, s, "/")
+	if out != OutcomeExecute || cmd.Kind != KindSearch {
+		t.Fatalf("got %+v/%v, want the search to open anyway", cmd, out)
+	}
+	if got := s.Pending(); got != "" {
+		t.Errorf("Pending() = %q, want the abandoned operator to be gone", got)
+	}
+
+	// And the dropped operator must not reach the next motion.
+	cmd, _ = feed(t, s, "w")
+	if cmd.Kind != KindMove {
+		t.Errorf("the next motion became %v; the operator outlived the search", cmd.Kind)
+	}
+}
+
+// Insert mode types these characters. A search key that fired while writing a
+// comment would be unusable.
+func TestSearchKeysAreOrdinaryTextInInsertMode(t *testing.T) {
+	s := New()
+	feed(t, s, "i")
+
+	for _, key := range []string{"/", "?", "n", "N"} {
+		if _, out := feed(t, s, key); out != OutcomePass {
+			t.Errorf("%q in insert mode gave %v, want %v", key, out, OutcomePass)
+		}
+	}
+}

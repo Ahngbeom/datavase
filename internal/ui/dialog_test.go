@@ -31,6 +31,22 @@ func TestEveryActionAppearsOnTheHelpScreen(t *testing.T) {
 	}
 }
 
+// A palette command carries no key of its own, so the key reference is the
+// only place it can be discovered. One left off is one that only its author
+// knows exists — which is what happened to attaching a worktree.
+func TestEveryPaletteCommandAppearsOnTheHelpScreen(t *testing.T) {
+	help := commandHelpText("⌘⇧A")
+
+	for _, c := range paletteCommands() {
+		if !strings.Contains(help, c.name) {
+			t.Errorf("the palette offers %q but the help screen does not list it", c.name)
+		}
+		if !strings.Contains(help, c.summary) {
+			t.Errorf("%q is listed without its summary", c.name)
+		}
+	}
+}
+
 // The refusal a locked production write produces is the one message a user
 // reads at the moment they are stopped, so the way out it names has to exist.
 // It once read "unlock with :write" — a command no preset ever had.
@@ -47,7 +63,7 @@ func TestTheUnlockHintNamesACommandThePaletteActuallyOffers(t *testing.T) {
 	}
 
 	var named bool
-	for _, c := range commands {
+	for _, c := range paletteCommands() {
 		if c.name == quoted[1] {
 			named = true
 		}
@@ -71,5 +87,34 @@ func TestOnlyAnUnlockableRefusalCarriesTheHint(t *testing.T) {
 	}
 	if strings.Contains(refusalText(final, "⌘⇧A"), "⌘⇧A") {
 		t.Error("a refusal the unlock cannot lift offers a way past it anyway")
+	}
+}
+
+// The section is useless without the key that opens the palette: a list of
+// commands with no way in is a list of things you cannot do.
+func TestTheCommandSectionNamesTheKeyThatOpensThePalette(t *testing.T) {
+	if !strings.Contains(commandHelpText("⌘⇧A"), "⌘⇧A") {
+		t.Errorf("the command section does not name the palette key:\n%s", commandHelpText("⌘⇧A"))
+	}
+}
+
+// A command with no summary renders as a blank line on the help screen, and
+// two commands with one name cannot be told apart in the palette.
+func TestEveryPaletteCommandHasADistinctNameAndASummary(t *testing.T) {
+	cmds := paletteCommands()
+	seen := make(map[string]bool, len(cmds))
+
+	for _, c := range cmds {
+		if strings.TrimSpace(c.name) == "" {
+			t.Error("a palette command has no name")
+			continue
+		}
+		if strings.TrimSpace(c.summary) == "" {
+			t.Errorf("palette command %q has no summary", c.name)
+		}
+		if seen[c.name] {
+			t.Errorf("two palette commands are both called %q", c.name)
+		}
+		seen[c.name] = true
 	}
 }

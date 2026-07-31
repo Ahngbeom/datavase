@@ -18,12 +18,17 @@ import (
 // many Tab presses that happens to take.
 func (h *harness) focusSchemaPane() {
 	h.t.Helper()
+
+	// A pane that is not on screen cannot hold focus, and the schema pane
+	// starts hidden.
+	h.showSidebar()
 	h.app.app.QueueUpdateDraw(func() { h.app.app.SetFocus(h.app.schemaPrimitive()) })
 	h.settle()
 }
 
 func TestSchemaPaneHasTabs(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
 
 	got := h.text()
 	for _, want := range []string{tabTree, tabTables} {
@@ -168,7 +173,7 @@ func TestRunningAQueryReturnsToTheResultsTab(t *testing.T) {
 	h.typeSQL("SELECT 1 AS n")
 	h.do(keymap.ActionRun)
 
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Fatalf("the statement never finished:\n%s", h.text())
 	}
 	if got := h.currentTabs(); got.result != tabResults {

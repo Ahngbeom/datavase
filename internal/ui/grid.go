@@ -46,7 +46,7 @@ func (c *gridContent) GetCell(row, column int) *tview.TableCell {
 
 func headerCell(name string) *tview.TableCell {
 	return tview.NewTableCell(result.EscapeTags(name)).
-		SetTextColor(colourHeader).
+		SetTextColor(colourAccent).
 		SetAttributes(tcell.AttrBold).
 		SetSelectable(false).
 		SetExpansion(1)
@@ -58,7 +58,7 @@ func dataCell(text string) *tview.TableCell {
 	// NULL is dimmed so it reads as an absence rather than as the literal
 	// four-letter string a column might actually contain.
 	if text == result.NullText {
-		cell.SetTextColor(colourNull)
+		cell.SetTextColor(colourMuted)
 	}
 	return cell
 }

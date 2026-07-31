@@ -100,7 +100,7 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 	}{
 		{name: "help", action: keymap.ActionHelp},
 		{name: "command palette", action: keymap.ActionCommandPalette},
-		{name: "history", action: keymap.ActionFind},
+		{name: "history", action: keymap.ActionSearchHistory},
 		{name: "go to table", action: keymap.ActionGoToTable},
 		{
 			name:   "completion",

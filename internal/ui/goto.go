@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
@@ -78,13 +77,4 @@ func (a *App) openTable(schema, table string) {
 }
 
 // runKeyLabel names the run key as this terminal can deliver it.
-func (a *App) runKeyLabel() string {
-	bindings := a.keys.DisplayBindings(keymap.ActionRun)
-	if len(bindings) == 0 {
-		return "the run key"
-	}
-	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
-		return bindings[len(bindings)-1].Label(onMac)
-	}
-	return bindings[0].Label(onMac)
-}
+func (a *App) runKeyLabel() string { return a.keyLabel(keymap.ActionRun) }

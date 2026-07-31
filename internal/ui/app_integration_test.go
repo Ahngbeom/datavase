@@ -324,6 +324,21 @@ func (h *harness) selectAllText() {
 	h.settle()
 }
 
+// showSidebar brings the schema pane on screen.
+//
+// It starts hidden — the finders answer "where is that table" better than a
+// permanent tree does — so a test about the tree has to ask for it, the same
+// way a user would.
+func (h *harness) showSidebar() {
+	h.t.Helper()
+
+	if h.inspect(func(a *App) bool { return a.sidebarVisible }) {
+		return
+	}
+	h.do(keymap.ActionToggleSidebar)
+	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
+}
+
 // text is everything currently drawn, with trailing spaces collapsed so
 // assertions can look for phrases rather than exact layout.
 func (h *harness) text() string {
@@ -359,14 +374,66 @@ func TestInterfaceShowsTheEnvironmentAndDataSource(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
 
 	got := h.text()
-	if !strings.Contains(got, "prod") {
+	// The environment is set as a filled chip, in capitals, so that it cannot
+	// be mistaken for the red of an error message.
+	if !strings.Contains(strings.ToLower(got), "prod") {
 		t.Errorf("screen does not show the environment:\n%s", got)
 	}
 	if !strings.Contains(got, "integration") {
 		t.Errorf("screen does not show the datasource name:\n%s", got)
 	}
-	if !strings.Contains(got, "schema") || !strings.Contains(got, "editor") || !strings.Contains(got, "results") {
-		t.Errorf("screen is missing one of the three panes:\n%s", got)
+	// The schema an unqualified statement reaches is on the top line beside
+	// the environment; nothing else on screen says which it is.
+	if !strings.Contains(got, "@"+testmysql.DefaultDatabase) {
+		t.Errorf("screen does not show the current schema:\n%s", got)
+	}
+	// The result region names itself. The editor deliberately does not: its
+	// header carries which file is open, and the caret says the rest.
+	if !strings.Contains(got, "results") {
+		t.Errorf("screen does not show the result region:\n%s", got)
+	}
+}
+
+// The route that survives a host application taking ⌘B.
+//
+// This is the whole point of the palette carrying every command and of its own
+// plain key: nothing here presses a chord, and the schema tree still appears.
+func TestTheSchemaTreeIsReachableWithoutItsChord(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	// F3, not ⌘⇧A: the escape hatch has to open with a key nothing upstream
+	// is in a position to claim.
+	h.press(tcell.KeyF3)
+	h.waitFor("the palette", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pagePalette
+	})
+
+	h.typeInto("schema tree")
+	h.press(tcell.KeyEnter)
+
+	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
+	if !h.waitForScreen(tabTables) {
+		t.Errorf("the schema pane did not appear:\n%s", h.text())
+	}
+}
+
+// The schema tree is one key away rather than a third of the screen, because
+// this application already answers "where is that table" with a finder.
+func TestTheSchemaPaneStartsHiddenAndComesBackOnRequest(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	if h.inspect(func(a *App) bool { return a.sidebarVisible }) {
+		t.Fatal("the schema pane is on screen before anyone asked for it")
+	}
+	// The opening line is the only place its existence is announced.
+	if !strings.Contains(h.text(), "schema tree") {
+		t.Errorf("nothing says the schema tree exists:\n%s", h.text())
+	}
+
+	h.showSidebar()
+	if !h.waitForScreen("tree") {
+		t.Errorf("the schema pane did not come back:\n%s", h.text())
 	}
 }
 
@@ -382,13 +449,13 @@ func TestRunningASelectFillsTheGrid(t *testing.T) {
 	if !h.waitForScreen("hello") {
 		t.Errorf("the row value never appeared:\n%s", h.text())
 	}
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Errorf("the status bar never reported the row count:\n%s", h.text())
 	}
 }
 
-// Run-everything is the path a file of statements takes, so it has to run
-// all of them.
+// A file of migrations is the reason the worktree exists, and a migration
+// file is almost never one statement. Run-everything has to run all of them.
 func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	h.typeSQL("SELECT 1; SELECT 2; SELECT 3")
@@ -715,17 +782,22 @@ func TestEditingActionsAreASingleUndoStep(t *testing.T) {
 }
 
 // The sidebar toggle also has to move focus off a pane that disappeared.
+// The pane starts hidden, so the first press brings it and the second takes it
+// away. The screen has to agree with the state both times — the pane names
+// itself in its tab strip now, having no border title to do it.
 func TestSidebarToggle(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
 	h.do(keymap.ActionToggleSidebar)
-	if strings.Contains(h.text(), " schema ") {
-		t.Errorf("the schema pane is still visible after toggling it off:\n%s", h.text())
+	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
+	if !strings.Contains(h.text(), tabTables) {
+		t.Errorf("the schema pane is not on screen after toggling it on:\n%s", h.text())
 	}
 
 	h.do(keymap.ActionToggleSidebar)
-	if !strings.Contains(h.text(), " schema ") {
-		t.Errorf("the schema pane did not come back:\n%s", h.text())
+	h.waitFor("the schema pane to go", func(a *App) bool { return !a.sidebarVisible })
+	if strings.Contains(h.text(), tabTables) {
+		t.Errorf("the schema pane is still visible after toggling it off:\n%s", h.text())
 	}
 }
 

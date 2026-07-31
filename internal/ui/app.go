@@ -36,6 +36,7 @@ type App struct {
 	tree      *tview.TreeView
 	editor    *tview.TextArea
 	grid      *tview.Table
+	topBar    *topBar
 	statusBar *statusBar
 
 	// vim is the modal input state. It exists whatever the preset is, so
@@ -57,8 +58,14 @@ type App struct {
 	keys *keymap.Map
 
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
-	// around when it is toggled.
+	// around when it is toggled. sidebarRule is the hairline beside it.
+	//
+	// It starts false. This application already chose overlay finders as its
+	// way around — a table, a schema and a file each have a key that opens a
+	// searchable list — and a permanent tree on top of them is a third of the
+	// screen spent saying what those already answer. It is one key away.
 	sidebarVisible bool
+	sidebarRule    *rule
 	body           *tview.Flex
 	rightPane      tview.Primitive
 
@@ -75,9 +82,11 @@ type App struct {
 	selectionAnchor int
 	selectionCaret  int
 
-	// schemaTabs and resultTabs are the two tabbed panes.
-	schemaTabs *tabbed
-	resultTabs *tabbed
+	// The three regions of the body. Each owns a one-line header; none draws
+	// a box.
+	editorRegion *tabbed
+	schemaTabs   *tabbed
+	resultTabs   *tabbed
 
 	// The tables tab, and the schema it lists. selectedSchema follows the
 	// tree; empty means the datasource's configured default.
@@ -97,6 +106,10 @@ type App struct {
 	completion *complete.Engine
 	cache      *catalog.Cache
 	history    *history.Store
+
+	// search is the last pattern looked for and where, so that n and N have
+	// something to repeat once the prompt has closed.
+	search searchState
 
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
@@ -135,7 +148,7 @@ type batch struct {
 // saying whether it can be taken back would leave the reader to guess the one
 // thing they need.
 func batchSummary(total, ran int, why string, inTransaction bool) string {
-	summary := fmt.Sprintf("%d statements · %d ran", total, ran)
+	summary := fmt.Sprintf("%s · %d ran", plural(total, "statement"), ran)
 	if why != "" {
 		summary += " · " + why
 	}
@@ -174,13 +187,7 @@ func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
 		history:         deps.History,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
-		sidebarVisible:  true,
 		selectionAnchor: noAnchor,
-		status: status{
-			dsName: ds.Name,
-			env:    ds.Env,
-			schema: ds.Database,
-		},
 	}
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
@@ -213,7 +220,10 @@ func (a *App) captureScreen() {
 // nothing happen is the worst way to learn it; the status bar is already
 // there and costs nothing to read.
 func (a *App) openingMessage(serverVersion string) string {
-	msg := fmt.Sprintf("server %s · %s for keys", serverVersion, a.helpKeyLabel())
+	// The schema tree is not on screen, so this is where anyone learns it
+	// exists at all.
+	msg := fmt.Sprintf("server %s · %s for keys · %s for the schema tree",
+		serverVersion, a.helpKeyLabel(), a.keyLabel(keymap.ActionToggleSidebar))
 
 	// A modal editor that nobody was told about is one where the first
 	// keystroke does nothing, which reads as a broken application rather
@@ -227,18 +237,26 @@ func (a *App) openingMessage(serverVersion string) string {
 	return msg
 }
 
+// helpKeyLabel names the key that opens the key reference. It is looked up
+// rather than hardcoded because a rebound help key that the status bar still
+// advertises as F1 is worse than no hint at all.
+func (a *App) helpKeyLabel() string {
+	bindings := a.keys.DisplayBindings(keymap.ActionHelp)
+	if len(bindings) == 0 {
+		return "F1"
+	}
+	return bindings[0].Label(onMac)
+}
+
 // keyLabel names an action's key as this terminal can actually deliver it.
 //
 // On a terminal without the extended keyboard protocol the primary binding is
-// one the user cannot press, so the plain function key at the end of the list
-// is named instead — advice nobody can follow is worse than none.
-//
-// It returns "" for an unbound action, leaving each caller to say what belongs
-// there in its place.
+// one the user cannot press, so the function-key fallback is named instead —
+// advice nobody can follow is worse than none.
 func (a *App) keyLabel(action keymap.Action) string {
 	bindings := a.keys.DisplayBindings(action)
 	if len(bindings) == 0 {
-		return ""
+		return action.String()
 	}
 	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
 		return bindings[len(bindings)-1].Label(onMac)
@@ -246,25 +264,21 @@ func (a *App) keyLabel(action keymap.Action) string {
 	return bindings[0].Label(onMac)
 }
 
-// helpKeyLabel names the key that opens the key reference. It is looked up
-// rather than hardcoded because a rebound help key that the status bar still
-// advertises as F1 is worse than no hint at all.
-func (a *App) helpKeyLabel() string {
-	if label := a.keyLabel(keymap.ActionHelp); label != "" {
-		return label
-	}
-	return "F1"
-}
-
 // editorPlaceholder names the run key, preferring one this terminal can
 // actually deliver so the hint is not advice the user cannot follow.
 func (a *App) editorPlaceholder() string {
-	label := a.keyLabel(keymap.ActionRun)
-	if label == "" {
+	bindings := a.keys.DisplayBindings(keymap.ActionRun)
+	if len(bindings) == 0 {
 		return "SELECT …"
 	}
 
-	hint := "SELECT … then " + label + " to run"
+	binding := bindings[0]
+	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
+		// Fall back to the last binding, which is the plain function key
+		// that works everywhere.
+		binding = bindings[len(bindings)-1]
+	}
+	hint := "SELECT … then " + binding.Label(onMac) + " to run"
 	if a.keys.Modal() {
 		// The empty buffer is exactly where a modal editor is most confusing:
 		// typing does nothing until insert mode is entered.
@@ -291,9 +305,12 @@ func (a *App) Stop() { a.app.Stop() }
 func (a *App) buildWidgets() {
 	ds := a.conn.DataSource()
 
+	// The root is the tree's one heading. It no longer carries the
+	// environment's colour: the spine does that now, and saying it twice is
+	// what made the palette run out of meanings.
 	a.tree = tview.NewTreeView().
 		SetRoot(tview.NewTreeNode(rootLabel(ds, sidebarWidth-4)).
-			SetColor(envColour(ds.Env)))
+			SetColor(colourAccent))
 	// Explicit tree lines: indentation alone reads as a weak hierarchy, and
 	// a weak hierarchy is what made schemas look nested under the server.
 	a.tree.SetGraphics(true)
@@ -302,25 +319,53 @@ func (a *App) buildWidgets() {
 	a.editor = tview.NewTextArea().
 		SetPlaceholder(a.editorPlaceholder()).
 		SetWrap(false)
-	a.editor.SetBorder(true).SetTitle(" editor ")
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.grid = tview.NewTable().
 		SetContent(newGridContent(a.buf)).
 		SetFixed(1, 0).
 		SetSelectable(true, true)
+	a.grid.SetInputCapture(a.gridKey)
 
-	// Both panes are tabbed, and share one component so they cannot drift
-	// apart in behaviour.
-	a.schemaTabs = newTabbed(" schema ")
+	// Every region shares one component so they cannot drift apart in
+	// behaviour, including the editor — which has no tabs, only a header
+	// saying which file it holds.
+	a.editorRegion = newTabbed()
+	a.editorRegion.only(a.editor)
+
+	a.schemaTabs = newTabbed()
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
 
-	a.resultTabs = newTabbed(" results ")
+	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 
+	a.topBar = newTopBar(a.currentTopBar)
 	a.statusBar = newStatusBar(a.currentStatus)
+}
+
+// resultDetail says what the empty results tab would otherwise not say.
+//
+// With no box around it, an empty region is simply blank — which reads as a
+// gap in the layout rather than as a pane waiting for a statement.
+func (a *App) resultDetail() string {
+	if a.resultTabs.current() == tabResults && a.buf.ColumnCount() == 0 {
+		return "run a statement to see rows here"
+	}
+	return ""
+}
+
+// currentTopBar is where the session is, read at draw time so the schema and
+// the branch cannot lag behind the thing that changed them.
+func (a *App) currentTopBar() topBarState {
+	ds := a.conn.DataSource()
+	return topBarState{
+		env:     ds.Env,
+		dsName:  ds.Name,
+		schema:  a.currentSchema(),
+		helpKey: a.helpKeyLabel(),
+	}
 }
 
 // sidebarWidth is the schema pane's fixed width. Fixed rather than
@@ -329,15 +374,29 @@ const sidebarWidth = 34
 
 func (a *App) buildLayout() {
 	a.rightPane = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.editor, 0, 2, true).
+		AddItem(a.editorRegion, 0, 2, true).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.resultTabs, 0, 3, false)
+
+	// Held rather than built per toggle, so showing the sidebar does not leave
+	// a discarded primitive behind on every press.
+	a.sidebarRule = newRule(true)
 
 	a.body = tview.NewFlex()
 	a.layoutBody()
 
-	root := tview.NewFlex().SetDirection(tview.FlexRow).
+	// The top line says where the session is, the bottom what just happened.
+	inner := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.topBar, 1, 0, false).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.body, 0, 1, true).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.statusBar, 1, 0, false)
+
+	// The environment runs down the outside of everything.
+	root := tview.NewFlex().
+		AddItem(newSpine(a.conn.DataSource().Env), 1, 0, false).
+		AddItem(inner, 0, 1, true)
 
 	a.pages = tview.NewPages().AddPage(pageMain, root, true, true)
 }
@@ -348,17 +407,18 @@ func (a *App) layoutBody() {
 	a.body.Clear()
 	if a.sidebarVisible {
 		a.body.AddItem(a.schemaTabs, sidebarWidth, 0, false)
+		a.body.AddItem(a.sidebarRule, 1, 0, false)
 	}
 	a.body.AddItem(a.rightPane, 0, 1, true)
 }
 
-// setSchema points completion, the tables tab and the status bar at a schema.
+// setSchema points completion and the tables tab at a schema.
 //
-// One place to change it, so the three can never disagree about which schema
-// an unqualified query will reach.
+// One place to change it, so the two can never disagree about which schema an
+// unqualified query will reach. The top bar is not told: it reads
+// currentSchema() when it draws, so it cannot be left behind.
 func (a *App) setSchema(schema string) {
 	a.selectedSchema = schema
-	a.status.schema = schema
 
 	if a.completion != nil {
 		a.completion.SetSchema(schema)
@@ -403,7 +463,9 @@ const (
 	tabTree    = "tree"
 	tabTables  = "tables"
 	tabResults = "results"
-	tabDDL     = "DDL"
+	// Lower case like the others. A single shouted name in a strip of quiet
+	// ones reads as an error rather than as an acronym.
+	tabDDL = "ddl"
 )
 
 const (
@@ -415,6 +477,9 @@ const (
 	pageHistory   = "history"
 	pageGoTo      = "goto"
 	pageUseSchema = "useschema"
+	pageFiles     = "files"
+	pageAttach    = "attach"
+	pageSearch    = "search"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than
@@ -503,6 +568,12 @@ func (a *App) dispatch(action keymap.Action) bool {
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
+		a.showTextSearch(false)
+	case keymap.ActionFindNext:
+		a.searchAgain(false)
+	case keymap.ActionFindPrev:
+		a.searchAgain(true)
+	case keymap.ActionSearchHistory:
 		a.showHistory()
 	case keymap.ActionGoToTable:
 		a.showGoToTable()
@@ -538,10 +609,15 @@ func (a *App) cycleFocus(delta int) {
 	a.app.SetFocus(order[0])
 }
 
+// quit leaves, asking first when the buffer holds unsaved file changes.
+//
+// The confirmation only appears for an edited file, not for a scratch buffer:
+// text typed into datavase has never been anywhere else, and prompting about
+// every session's leftovers is how a prompt stops being read.
 func (a *App) quit() {
-	// An open transaction is unsaved work of the same kind as an unsaved
-	// buffer, and rather more expensive: quitting rolls it back, and the user
-	// has to say so.
+	// Two things can be lost by leaving, and both get asked about, dearest
+	// first. An open transaction is unsaved work of the same kind as an
+	// unsaved buffer and rather more expensive, since quitting rolls it back.
 	if a.conn.InTransaction() {
 		a.confirmDiscardTransaction()
 		return
@@ -600,8 +676,8 @@ func (a *App) runStatement(stmt sqlparse.Statement) {
 	}
 }
 
-// executeAll runs every statement in the editor, stopping at the first
-// refusal so a rejected statement cannot be skipped over silently.
+// executeAll runs every statement in the editor, in order, stopping at the
+// first refusal so a rejected statement cannot be skipped over silently.
 func (a *App) executeAll() {
 	if a.running != nil {
 		a.notice("a statement is already running; ^C cancels it")
@@ -865,17 +941,6 @@ func (a *App) currentStatus() status {
 		s.vimPending = a.vim.Pending()
 	}
 	return s
-}
-
-func envColour(env config.Env) tcell.Color {
-	switch env {
-	case config.EnvProd:
-		return colourEnvProd
-	case config.EnvStage:
-		return colourEnvStage
-	default:
-		return colourEnvDev
-	}
 }
 
 // record adds a finished statement to the query history.

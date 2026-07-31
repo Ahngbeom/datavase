@@ -101,7 +101,13 @@ func applyVSCode(m *Map) {
 	// modified arrow under Option.
 	rebind(ActionDuplicateLine, altAndCtrl(tcell.KeyDown, tcell.ModShift)...)
 
-	rebind(ActionCommandPalette, ctrlAndCmdRune('p', tcell.ModShift)...)
+	// F3 is carried over deliberately. rebind clears an action's bindings
+	// before setting the new ones, and dropping it here would leave this one
+	// preset with a palette that a host application claiming ⌘⇧P can lock —
+	// and the palette is how every keyless command is reached.
+	rebind(ActionCommandPalette,
+		append(ctrlAndCmdRune('p', tcell.ModShift),
+			Binding{Key: tcell.KeyF3})...)
 	rebind(ActionGoToTable, ctrlAndCmdRune('p', 0)...)
 }
 

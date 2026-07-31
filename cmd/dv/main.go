@@ -70,7 +70,7 @@ func run() int {
 // openUI connects and hands control to the terminal interface. The context
 // bounds the connection attempt only; the interface itself runs until the
 // user quits.
-func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
+func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config, opt cli.UIOptions) error {
 	// Key bindings are resolved before connecting: a typo in the keymap
 	// should fail immediately, not after a password prompt and a handshake.
 	keys, err := keymap.FromConfig(cfg.Keymap.Preset, cfg.Keymap.Actions)
@@ -105,7 +105,11 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	}
 	defer sess.Close()
 
-	return ui.New(sess.Conn, cfg, ui.Deps{Keys: keys, Cache: cache, History: hist}).Run()
+	return ui.New(sess.Conn, cfg, ui.Deps{
+		Keys:    keys,
+		Cache:   cache,
+		History: hist,
+	}).Run()
 }
 
 // probe verifies reachability, raising the tunnel first when one is needed,

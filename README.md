@@ -12,10 +12,11 @@ to damage a production database by accident.
 
 Usable, and specific about its edges.
 
-Built: connect (directly or through an SSH bastion), browse the schema, edit
-and run SQL with schema-aware completion, stream large results, cancel a
-runaway query, search the query history, export to CSV or JSON, and the
-production guard.
+Built: connect (directly, over TLS, or through an SSH bastion), browse the
+schema, edit and run SQL with schema-aware completion, run a whole file a
+statement at a time, stream large results, cancel a runaway query — including
+a write — see what a write changed and what the server warned about, search
+the query history, export to CSV or JSON, and the production guard.
 
 Not built, and worth knowing before you lean on it:
 

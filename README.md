@@ -22,8 +22,8 @@ production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **The result grid is plain.** No vertical view for a wide row, no way to
-  open a truncated value in full, no sorting.
+- **The result grid is plain.** No sorting, and no way to copy a value out of
+  it.
 
 Those are tracked in the issues, roughly in that order.
 
@@ -141,7 +141,7 @@ your hands reach for.
 | Open a file from the worktree | `⌘⇧O` | `Ctrl+Shift+O` |
 | Save the open file | `⌘S` | `Ctrl+S` |
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
-| Show the selected table's definition | `⌘I` | `Ctrl+Shift+I` |
+| Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
@@ -528,6 +528,28 @@ The pane has two tabs:
 - **tables** — a flat, filterable list of the current schema's tables with row
   estimates. It reads from the local cache, so it fills instantly and filters
   as you type.
+
+### Reading one row
+
+A grid is the wrong shape for a wide table: forty columns share the terminal
+between them, and each value is cut at two hundred characters besides. `⌘I`
+(`Ctrl+Shift+I`, or `F4`) on a result row turns it on its side — one column
+per line, names lined up, every value in full.
+
+```
+ row 3 of 1000
+ id       42
+ email    ada@example.com
+ payload  {"a":1,"b":[2,3], … the whole of it …}
+```
+
+`j` and `k` step to the next row without leaving, because comparing two rows
+is most of what the view is opened for. `Esc` or `q` closes it.
+
+It is the same key that shows a table's definition in the schema pane.
+**`inspect` means "show me this in full"**, and which thing depends on where
+the caret is — the same way `⌘C` copies or cancels, and `/` searches whichever
+pane has focus.
 
 The result pane has two tabs as well: **results** and **ddl**. `⌘I` on a
 selected table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches

@@ -149,6 +149,12 @@ func paletteCommands() []command {
 			run:     (*App).showHistory,
 		},
 		{
+			name:    "inspect",
+			summary: "show the selected table or result row in full",
+			covers:  keymap.ActionInspect,
+			run:     (*App).inspect,
+		},
+		{
 			name:    "go to table",
 			summary: "find a table anywhere on the server by name",
 			covers:  keymap.ActionGoToTable,

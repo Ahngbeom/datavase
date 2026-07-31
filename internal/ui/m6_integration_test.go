@@ -262,3 +262,48 @@ func historyEntry(datasource, sql string) history.Entry {
 		At:         time.Now(),
 	}
 }
+
+// The grid cuts a value at CellLimit and there was no way to see the rest.
+// This is the whole point of the row view, driven through the real interface.
+func TestInspectingARowShowsTheValueTheGridCutShort(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	long := strings.Repeat("abcdefghij", 30)
+	h.typeSQL("SELECT '" + long + "' AS bio")
+	h.do(keymap.ActionRun)
+	h.waitFor("the row to arrive", func(a *App) bool { return a.buf.RowCount() == 1 })
+
+	h.focusGrid()
+	h.do(keymap.ActionInspect)
+
+	if !h.waitForScreen("bio") {
+		t.Fatalf("the row view did not open:\n%s", h.text())
+	}
+	// The grid shows 200 runes of it; the view has to show more.
+	if !h.waitForScreen(long[250:280]) {
+		t.Errorf("the row view stops where the grid did:\n%s", h.text())
+	}
+}
+
+// Inspect means "show me this in full", and which thing depends on where the
+// caret is — a second key for the same intent somewhere else is one nobody
+// remembers.
+func TestInspectStillShowsATableDefinitionFromTheSchemaPane(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
+
+	h.do(keymap.ActionInspect)
+
+	// Whatever it did, it must not have been the row view: the caret is in
+	// the schema pane, and "inspect" there has always meant the definition.
+	h.settle()
+	if h.inspect(func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageConfirm
+	}) {
+		t.Errorf("inspect opened the row view from the schema pane:\n%s", h.text())
+	}
+	if strings.Contains(h.text(), "no row selected") {
+		t.Errorf("inspect took the results branch from the schema pane:\n%s", h.text())
+	}
+}

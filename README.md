@@ -295,6 +295,31 @@ Writes are still cancellable. They are sent on the same connection whose id
 `KILL QUERY` was given, not through the pool, so `^C` stops a runaway `UPDATE`
 exactly as it stops a runaway `SELECT`.
 
+### What the server complained about
+
+MySQL reports data truncation, implicit conversion and several `ALTER` side
+effects as warnings while calling the statement a **success**. A value quietly
+cut down to fit its column is among the things a client most needs to catch,
+and it is invisible to one that never asks.
+
+So every statement is asked, and what comes back sits on the bar next to the
+count:
+
+```
+1 row affected  ·  4ms  ·  1 warning: Data truncated for column 's' at row 1
+```
+
+The message is carried in full rather than replaced by a number. A count says
+something happened without saying what, and the server's own sentence is
+already the whole of what you need in order to go and look. The warning is
+never dropped to make the line fit — the elapsed time goes first.
+
+This costs one round trip per statement, because `SHOW WARNINGS` answers about
+the last statement run on that connection and there is no other moment to ask.
+That is affordable here: every statement is one you pressed a key for, and the
+path that really does run on a keystroke — completion — reads the local cache
+and never goes near the server.
+
 ### Running more than one statement
 
 `⌘⇧↩` runs the whole buffer, one statement at a time, in order. Each goes

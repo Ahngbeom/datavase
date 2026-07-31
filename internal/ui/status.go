@@ -44,7 +44,10 @@ type status struct {
 	// written is the outcome of a statement that changed rows rather than
 	// returning them, and nil for one that returned a result set. A write has
 	// no rows to count, so reporting "0 rows" for it said nothing at all.
-	written       *db.Result
+	written *db.Result
+	// warnings are what the server said about a statement it nonetheless
+	// called a success — a truncated value, an implicit conversion.
+	warnings      []db.Warning
 	elapsed       time.Duration
 	err           error
 	limitInjected int
@@ -235,6 +238,11 @@ func (s status) fields() []field {
 		if s.truncated {
 			out = add(out, tag(colourNotice, "truncated"), false, 0)
 		}
+		// Never dropped: a warning is the only sign that a statement the
+		// server called a success did something other than what was asked.
+		if len(s.warnings) > 0 {
+			out = add(out, tag(colourNotice, warningSummary(s.warnings)), false, 0)
+		}
 
 	case phaseFailed:
 		if s.err != nil {
@@ -360,4 +368,20 @@ func writeSummary(r db.Result) string {
 		summary += fmt.Sprintf(" · id %d", r.LastInsertID)
 	}
 	return summary
+}
+
+// warningSummary is how the server's own complaint reaches the bar.
+//
+// The first message is carried in full rather than replaced by a count. A
+// count tells the user something happened without telling them what, and
+// "Data truncated for column 's' at row 1" is the whole of what they need to
+// know to go and look.
+func warningSummary(warnings []db.Warning) string {
+	noun := "warnings"
+	if len(warnings) == 1 {
+		noun = "warning"
+	}
+
+	return fmt.Sprintf("%d %s: %s",
+		len(warnings), noun, result.EscapeTags(oneLine(warnings[0].Message)))
 }

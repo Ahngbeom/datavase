@@ -426,3 +426,52 @@ func TestAQueryStillReportsItsRowCount(t *testing.T) {
 		t.Errorf("status = %q, want no affected-row count for a query", got)
 	}
 }
+
+// A warning is the only sign that a statement the server called a success did
+// something other than what was asked, so it says what happened rather than
+// only that something did — and it survives a narrow terminal.
+func TestAWarningReachesTheBarWithItsMessage(t *testing.T) {
+	s := status{
+		phase:   phaseDone,
+		written: &db.Result{RowsAffected: 1},
+		warnings: []db.Warning{
+			{Level: "Warning", Code: 1265, Message: "Data truncated for column 's' at row 1"},
+		},
+	}
+
+	got := s.renderWidth(200)
+	if !strings.Contains(got, "1 warning") {
+		t.Errorf("status = %q, want the warning count", got)
+	}
+	if !strings.Contains(got, "Data truncated for column 's' at row 1") {
+		t.Errorf("status = %q, want the server's own message", got)
+	}
+}
+
+// Dropping the warning to make the line fit would lose the only notice that
+// the data is not what was asked for. The elapsed time may go instead.
+func TestANarrowBarKeepsTheWarningAndDropsTheTiming(t *testing.T) {
+	s := status{
+		dsName:  "prod-app",
+		schema:  "app_db",
+		phase:   phaseDone,
+		rows:    3,
+		elapsed: 1234 * time.Millisecond,
+		warnings: []db.Warning{
+			{Level: "Warning", Code: 1265, Message: "Data truncated"},
+		},
+	}
+
+	got := s.renderWidth(46)
+	if !strings.Contains(got, "warning") {
+		t.Errorf("status = %q, want the warning to survive the squeeze", got)
+	}
+}
+
+func TestNoWarningsAddNothingToTheBar(t *testing.T) {
+	s := status{phase: phaseDone, rows: 3}
+
+	if got := s.renderWidth(200); strings.Contains(got, "warning") {
+		t.Errorf("status = %q, want no mention of warnings", got)
+	}
+}

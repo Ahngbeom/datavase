@@ -578,3 +578,45 @@ func mustExec(t *testing.T, conn *Conn, sql string) {
 		t.Fatalf("%s: %v", sql, err)
 	}
 }
+
+// MySQL reports a truncated value as a warning and calls the statement a
+// success. A column silently cut short on insert is among the failure modes a
+// DBA most wants a client to catch, and it is invisible without this.
+func TestAWriteReportsTheWarningsTheServerRaised(t *testing.T) {
+	conn := openTestConn(t)
+	mustExec(t, conn, "DROP TABLE IF EXISTS dv_warn")
+	mustExec(t, conn, "CREATE TABLE dv_warn (s VARCHAR(4))")
+	mustExec(t, conn, "SET SESSION sql_mode = ''")
+	t.Cleanup(func() { mustExec(t, conn, "DROP TABLE IF EXISTS dv_warn") })
+
+	stream := conn.Query(context.Background(),
+		"INSERT INTO dv_warn (s) VALUES ('far too long')", Options{Exec: true})
+	defer stream.Close()
+
+	if got := drain(t, stream); got.err != nil {
+		t.Fatalf("stream error = %v, want nil", got.err)
+	}
+
+	warnings := stream.Warnings()
+	if len(warnings) == 0 {
+		t.Fatal("Warnings() is empty; the value was cut short and nothing said so")
+	}
+	if warnings[0].Message == "" {
+		t.Error("the warning carries no message, so there is nothing to show")
+	}
+}
+
+// A statement the server was happy with must not pay for an answer nobody
+// needs, and must not invent one.
+func TestAStatementWithNothingWrongReportsNoWarnings(t *testing.T) {
+	conn := openTestConn(t)
+	seedSequence(t, conn)
+
+	stream := conn.Query(context.Background(), "SELECT n FROM dv_seq LIMIT 1", Options{})
+	defer stream.Close()
+	drain(t, stream)
+
+	if got := stream.Warnings(); len(got) != 0 {
+		t.Errorf("Warnings() = %v, want none", got)
+	}
+}

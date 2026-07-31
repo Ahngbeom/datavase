@@ -715,6 +715,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	a.status.limitInjected = decision.InjectLimit
 	a.status.truncated = false
 	a.status.written = nil
+	a.status.warnings = nil
 
 	started := time.Now()
 	stream := a.conn.Query(context.Background(), sql, db.Options{
@@ -757,6 +758,7 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 	err := stream.Err()
 	truncated := stream.Truncated() || a.buf.AtCapacity()
 	written, wrote := stream.Result()
+	warnings := stream.Warnings()
 	elapsed := time.Since(started)
 	rows := a.buf.RowCount()
 
@@ -768,6 +770,7 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 		if wrote {
 			a.status.written = &written
 		}
+		a.status.warnings = warnings
 
 		a.record(sqlText, rows, elapsed)
 

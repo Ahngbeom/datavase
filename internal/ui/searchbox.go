@@ -12,6 +12,11 @@ import (
 type searchItem struct {
 	primary   string
 	secondary string
+	// complete is what Tab puts back in the field, for a row that can be
+	// refined further rather than only chosen. Directory rows set it, which is
+	// what lets a path be built one segment at a time instead of typed out in
+	// full. An empty complete leaves Tab doing what it has always done.
+	complete string
 	// accept runs when the row is chosen. A nil accept makes the row a
 	// message rather than a choice.
 	accept func()
@@ -52,6 +57,16 @@ func sortRanked(rows []ranked) []searchItem {
 		items[i] = r.item
 	}
 	return items
+}
+
+// truncatedNotice admits that a listing stopped early.
+//
+// A list that was cut looks exactly like a short one, and the difference
+// matters when the thing being looked for is what got cut. Shared so that
+// every dialog with a limit says so — the directory list used to cut silently
+// at forty.
+func truncatedNotice(detail string) searchItem {
+	return message("…the listing was cut short", detail)
 }
 
 // newSearchBox builds the "type to filter, arrow down to choose" pairing used
@@ -95,9 +110,29 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 
 	input.SetChangedFunc(reload)
 
+	// complete puts a row's refinement back in the field. It reports whether
+	// there was one, so the caller can fall back to whatever the key did
+	// before.
+	complete := func(index int) bool {
+		if index < 0 || index >= len(items) || items[index].complete == "" {
+			return false
+		}
+		input.SetText(items[index].complete)
+		a.app.SetFocus(input)
+		return true
+	}
+
 	input.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		switch ev.Key() {
-		case tcell.KeyTab, tcell.KeyDown:
+		case tcell.KeyTab:
+			// Nothing is highlighted while the field has focus, so Tab takes
+			// the first row — the same one Enter would.
+			if complete(0) {
+				return nil
+			}
+			fallthrough
+
+		case tcell.KeyDown:
 			if list.GetItemCount() > 0 {
 				a.app.SetFocus(list)
 			}
@@ -123,6 +158,12 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 		case tcell.KeyEscape:
 			a.closeSearchBox(page)
 			return nil
+		case tcell.KeyTab:
+			// Completing from the list hands typing back, because the point of
+			// completing a path is to carry on typing the rest of it.
+			if complete(list.GetCurrentItem()) {
+				return nil
+			}
 		case tcell.KeyUp:
 			// Stepping above the first entry returns to typing rather than
 			// wrapping to the bottom, which is disorienting in a search.

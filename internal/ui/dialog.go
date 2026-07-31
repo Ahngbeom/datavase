@@ -166,6 +166,7 @@ var helpGroups = []struct {
 			keymap.ActionSelectAll, keymap.ActionToggleComment,
 			keymap.ActionDuplicateLine, keymap.ActionDeleteLine,
 			keymap.ActionDeleteWordLeft, keymap.ActionDeleteToLineStart,
+			keymap.ActionSaveFile,
 		},
 	},
 	{
@@ -173,7 +174,7 @@ var helpGroups = []struct {
 		actions: []keymap.Action{
 			keymap.ActionFind, keymap.ActionFindNext, keymap.ActionFindPrev,
 			keymap.ActionSearchHistory,
-			keymap.ActionGoToTable,
+			keymap.ActionGoToTable, keymap.ActionFindFile,
 			keymap.ActionInspect, keymap.ActionCommandPalette,
 		},
 	},

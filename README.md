@@ -17,7 +17,8 @@ schema, edit and run SQL with schema-aware completion, run a whole file a
 statement at a time, wrap work in a transaction and take it back, stream large
 results, cancel a runaway query — including a write — see what a write changed
 and what the server warned about, search the query history, export to CSV or
-JSON, and the production guard.
+JSON, attach a worktree and open, run and save the `.sql` files in it, and the
+production guard.
 
 Not built, and worth knowing before you lean on it:
 
@@ -94,6 +95,8 @@ dv                    # opens the only configured datasource
 dv open prod-app      # opens a named one
 dv ls                 # list datasources and whether a password is stored
 dv check prod-app     # verify reachability, then exit
+
+dv open local --dir ~/work/migrations   # with a worktree of SQL attached
 ```
 
 ### Keys
@@ -135,6 +138,8 @@ your hands reach for.
 | Next / previous match | `⌘G` `⌘⇧G` | `Ctrl+G` `Ctrl+Shift+G` |
 | Search the query history | `⌘⇧F` or `F9` | `Ctrl+Shift+F` or `F9` |
 | Jump to a table | `⌘N` | `Ctrl+N` |
+| Open a file from the worktree | `⌘⇧O` | `Ctrl+Shift+O` |
+| Save the open file | `⌘S` | `Ctrl+S` |
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table's definition | `⌘I` | `Ctrl+Shift+I` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
@@ -496,7 +501,7 @@ colour in datavase that ignores your terminal theme.
 
 **The top line is where you are; the bottom line is what just happened.** The
 environment, the datasource, the schema an unqualified statement will reach and
-stay put up top. Row counts, timings, warnings and messages
+the attached branch stay put up top. Row counts, timings, warnings and messages
 go below.
 
 Regions are separated by a single rule rather than boxed. Each names itself
@@ -595,6 +600,66 @@ Two things worth knowing:
 
 While rows are still arriving, "no match" means "not in the rows so far", and
 says so.
+
+## The worktree
+
+Most SQL worth keeping already lives in a directory — a branch's migrations, a
+folder of verification queries. Point datavase at one and you can open those
+files, run them and save them back, without leaving for an editor.
+
+```sh
+dv open local --dir ~/work/migrations
+```
+
+Or from the command palette (`⌘⇧A`) mid-session: `attach directory`. Pressing
+`⌘⇧O` with nothing attached opens the same prompt, so the feature is one key
+away whether or not you have found the palette. One directory is attached at a
+time, and `detach directory` forgets it.
+
+The prompt opens on the directories you have attached before, and each row says
+whether it is a git repository or a plain folder. **`⇥` completes the
+highlighted path back into the field**, so a deep path is walked into a segment
+at a time rather than typed out in full. Typing a segment beginning with `.`
+brings the hidden directories into view.
+
+`F1` lists the palette's commands as well as the keys — nothing is reachable
+only by knowing it exists.
+
+`⌘⇧O` (`Ctrl+Shift+O`, or `F8`) lists the `.sql` files, filtered as you type:
+
+```
+ files · feature/add-index * 
+ file: 002
+ M migrations/002_add_index.sql    modified
+ ? migrations/scratch/probe.sql    untracked
+```
+
+The listing comes from git rather than from a directory walk, so a file
+`.gitignore` excludes — a dump directory, a build artefact — is never offered.
+The marker says what git makes of each file: `M` changed, `A` new to this
+branch, `?` never added. The title carries the branch, and a `*` when the tree
+has uncommitted changes.
+
+**git is optional.** Attach a plain directory, or run on a machine with no git,
+and you still get the file list; only the branch and the markers go missing.
+
+Choosing a file loads it into the editor, and `⌘S` (`Ctrl+S`, or `F2`) writes
+it back. The status bar carries the branch and the file, with a `*` while the
+buffer differs from what is on disk.
+
+Four things it will not do quietly:
+
+- **Overwrite someone else's edit.** If the file changed on disk since it was
+  opened — a rebase, an editor in the next window — saving asks first.
+- **Leave a half-written file.** The save goes through a temporary file and a
+  rename, so an interrupted one leaves the previous version intact.
+- **Lose an unsaved buffer.** Opening another file or quitting asks first.
+- **Open something it cannot show.** A file over 4 MiB is refused rather than
+  handed to a text widget that would stop drawing.
+
+The guard is unchanged by any of this. A `DELETE` loaded from a file is the
+same statement it would be if you had typed it, and meets production the same
+way.
 
 ## History and export
 

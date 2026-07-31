@@ -23,8 +23,6 @@ func TestReadsAreAllowedEverywhere(t *testing.T) {
 		"SHOW TABLES",
 		"DESCRIBE users",
 		"EXPLAIN SELECT 1",
-		"USE app_db",
-		"SET autocommit = 1",
 	}
 
 	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
@@ -36,6 +34,73 @@ func TestReadsAreAllowedEverywhere(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Each statement runs on its own connection out of the pool, so a
+// transaction cannot span two of them: BEGIN would open one on a connection
+// that is handed straight back, and the ROLLBACK meant to undo the damage
+// would find nothing to undo while reporting success. Refusing is the only
+// honest answer until a transaction holds one connection for its lifetime.
+func TestTransactionControlIsRefusedRatherThanSilentlyDiscarded(t *testing.T) {
+	control := []string{
+		"BEGIN",
+		"START TRANSACTION",
+		"COMMIT",
+		"ROLLBACK",
+		"SAVEPOINT sp1",
+		"RELEASE SAVEPOINT sp1",
+	}
+
+	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
+		for _, sql := range control {
+			t.Run(string(env)+"/"+sql, func(t *testing.T) {
+				got := decide(t, sql, policy(env))
+				if got.Verdict != Deny {
+					t.Errorf("Evaluate(%q) verdict = %v (%s), want Deny", sql, got.Verdict, got.Reason)
+				}
+				if !strings.Contains(got.Reason, "connection") {
+					t.Errorf("reason = %q, want it to explain that the connection is not held", got.Reason)
+				}
+			})
+		}
+	}
+}
+
+// The same trap, one class wider: "SET SESSION sql_mode = ..." is accepted by
+// the server and thrown away with the connection, so the next statement runs
+// under the old mode while the user believes they changed it.
+func TestSessionStateIsRefusedRatherThanSilentlyDiscarded(t *testing.T) {
+	session := []string{
+		"SET autocommit = 0",
+		"SET SESSION sql_mode = 'STRICT_ALL_TABLES'",
+		"SET @x = 1",
+		"LOCK TABLES t WRITE",
+		"UNLOCK TABLES",
+	}
+
+	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
+		for _, sql := range session {
+			t.Run(string(env)+"/"+sql, func(t *testing.T) {
+				if got := decide(t, sql, policy(env)); got.Verdict != Deny {
+					t.Errorf("Evaluate(%q) verdict = %v (%s), want Deny", sql, got.Verdict, got.Reason)
+				}
+			})
+		}
+	}
+}
+
+// USE is refused for the same reason, but it is the one session statement
+// with somewhere else to go, so its refusal has to say so rather than leaving
+// the user to guess that the schema picker exists.
+func TestUseIsRefusedAndPointsAtTheSchemaPicker(t *testing.T) {
+	got := decide(t, "USE app_db", policy(config.EnvDev))
+
+	if got.Verdict != Deny {
+		t.Fatalf("verdict = %v (%s), want Deny", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "schema") {
+		t.Errorf("reason = %q, want it to send the user to the schema picker", got.Reason)
 	}
 }
 
@@ -63,6 +128,22 @@ func TestProductionWritesAreDeniedUntilWritesAreEnabled(t *testing.T) {
 			unlocked := Evaluate(sqlparse.Parse(sql), p)
 			if unlocked.Verdict != Confirm {
 				t.Errorf("with writes enabled: verdict = %v, want Confirm", unlocked.Verdict)
+			}
+		})
+	}
+}
+
+// The session opt-in is for writes, and these are not writes: enabling it
+// must not turn a refusal about an unheld connection into a runnable
+// statement.
+func TestEnablingWritesDoesNotMakeTransactionControlRunnable(t *testing.T) {
+	p := policy(config.EnvDev)
+	p.WritesEnabled = true
+
+	for _, sql := range []string{"BEGIN", "COMMIT", "ROLLBACK", "SET autocommit = 0"} {
+		t.Run(sql, func(t *testing.T) {
+			if got := Evaluate(sqlparse.Parse(sql), p); got.Verdict != Deny {
+				t.Errorf("verdict = %v, want Deny", got.Verdict)
 			}
 		})
 	}

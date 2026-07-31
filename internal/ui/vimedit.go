@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"strings"
+	"unicode/utf8"
+
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/gdamore/tcell/v2"
 )
@@ -34,7 +37,7 @@ func (a *App) vimKey(ev *tcell.EventKey) *tcell.EventKey {
 func (a *App) runVimCommand(cmd vim.Command) *tcell.EventKey {
 	switch cmd.Kind {
 	case vim.KindMove:
-		a.moveCursor(vimMotion(cmd.Motion), a.vimSelecting())
+		a.moveCursor(vimMove(cmd), a.vimSelecting())
 
 	case vim.KindVisual:
 		a.startVisual()
@@ -76,6 +79,78 @@ func (a *App) vimSelecting() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// vimMove resolves a command's motion and applies its count.
+//
+// Repeating the one-step function is how a count works for every motion here,
+// including the ones where repeating changes nothing — "3$" is the end of the
+// line, the same as "$", which is what vim does too.
+func vimMove(cmd vim.Command) func(text string, offset int) int {
+	step := vimMotion(cmd.Motion)
+	if target := cmd.Target; target != 0 {
+		step = findMotion(cmd.Motion, target)
+	}
+
+	count := cmd.Count
+	if count <= 1 {
+		return step
+	}
+	return func(text string, offset int) int {
+		for i := 0; i < count; i++ {
+			next := step(text, offset)
+			// A motion that has stopped moving has run out of text, and
+			// repeating it further would just spin.
+			if next == offset {
+				break
+			}
+			offset = next
+		}
+		return offset
+	}
+}
+
+// inclusiveMotion reports whether an operator's range takes in the character
+// the motion landed on.
+func inclusiveMotion(m vim.Motion) bool {
+	return m == vim.MotionFindForward || m == vim.MotionTillForward
+}
+
+// findMotion moves to the next or previous occurrence of a character on the
+// current line.
+//
+// It stays on the line on purpose: that is what f and t do in vim, and a
+// column list is exactly the case they are reached for. Not finding the
+// character leaves the caret alone rather than guessing.
+func findMotion(m vim.Motion, target rune) func(text string, offset int) int {
+	return func(text string, offset int) int {
+		start, end := lineStartAt(text, offset), lineEndAt(text, offset)
+
+		switch m {
+		case vim.MotionFindForward, vim.MotionTillForward:
+			at := strings.Index(text[min(offset+1, end):end], string(target))
+			if at < 0 {
+				return offset
+			}
+			at += min(offset+1, end)
+			if m == vim.MotionTillForward {
+				return at - 1
+			}
+			return at
+
+		case vim.MotionFindBackward, vim.MotionTillBackward:
+			at := strings.LastIndex(text[start:offset], string(target))
+			if at < 0 {
+				return offset
+			}
+			at += start
+			if m == vim.MotionTillBackward {
+				return at + 1
+			}
+			return at
+		}
+		return offset
 	}
 }
 
@@ -227,15 +302,36 @@ func (a *App) vimTarget(cmd vim.Command, text string) (start, end int, linewise 
 			_, from, to = a.editor.GetSelection()
 		}
 	case cmd.Motion != vim.MotionNone:
-		to = vimMotion(cmd.Motion)(text, caret)
+		to = vimMove(cmd)(text, caret)
 	}
 	if from > to {
 		from, to = to, from
 	}
 
+	// f and t are inclusive when an operator is using them: "df," takes the
+	// comma with it, which is the difference between deleting a column from a
+	// list and leaving its separator behind. Backward finds stay exclusive,
+	// as vim's do — the swap above already puts the caret at the far end.
+	if inclusiveMotion(cmd.Motion) && to < len(text) {
+		_, size := utf8.DecodeRuneInString(text[to:])
+		to += size
+	}
+
 	// Expanding to whole lines last means one rule serves all three ways a
 	// linewise range arises: "dd", "V" and a line-spanning motion like "dG".
+	// A count on a linewise operator means more lines — "3dd" is three of
+	// them — and there is no motion to repeat, so the span is walked down
+	// before it is expanded.
 	if cmd.Linewise {
+		if cmd.Motion == vim.MotionNone {
+			for i := 1; i < cmd.Count; i++ {
+				next := lineDown(text, to)
+				if next == to {
+					break
+				}
+				to = next
+			}
+		}
 		from, to = lineSpan(text, from, to)
 	}
 	return from, to, cmd.Linewise

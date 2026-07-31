@@ -61,6 +61,13 @@ const (
 	MotionLineEnd
 	MotionFileStart
 	MotionFileEnd
+	// The find motions carry the character they were given in Command.Target.
+	// MotionTill stops one short of it, which is what makes "ct," change up to
+	// a comma and leave the comma in place.
+	MotionFindForward
+	MotionFindBackward
+	MotionTillForward
+	MotionTillBackward
 )
 
 // Place is where an insertion or a put happens.
@@ -92,6 +99,11 @@ type Command struct {
 	Selection bool
 	// Backward reverses a search: "?" rather than "/".
 	Backward bool
+	// Count is how many times the motion applies, and is never zero — an
+	// untyped count is one, so the caller can multiply without checking.
+	Count int
+	// Target is the character a find motion was given.
+	Target rune
 }
 
 // Outcome says what the state machine did with a key.

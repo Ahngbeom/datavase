@@ -43,6 +43,10 @@ func Reference() []Group {
 				{"k", "up"},
 				{"l", "right"},
 				{"w", "to the next word"},
+				{"f{char}", "to the next occurrence of a character"},
+				{"t{char}", "to just before it"},
+				{"F{char}", "back to a character"},
+				{"T{char}", "back to just after it"},
 				{"b", "to the previous word"},
 				{"e", "to the end of the word"},
 				{"0", "to the start of the line"},
@@ -54,6 +58,7 @@ func Reference() []Group {
 				{"?", "search backwards"},
 				{"n", "to the next match"},
 				{"N", "to the previous match"},
+				{"3j", "any motion repeats: a count goes in front"},
 			},
 		},
 		{

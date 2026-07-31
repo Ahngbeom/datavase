@@ -288,3 +288,63 @@ func TestNonModalPresetStillTypes(t *testing.T) {
 	h.typeInto("jk")
 	h.wantEditor("jk")
 }
+
+// "f," across a column list is the motion this editor is used for most, and
+// it did nothing at all before.
+func TestFindMovesToTheCharacterOnTheLine(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT a, b, c FROM t", 0)
+
+	h.typeInto("f,")
+
+	h.waitFor("the caret to reach the first comma", func(a *App) bool {
+		return a.caretOffset(a.editor.GetText()) == 8
+	})
+}
+
+// t stops one short, which is what makes "ct," change up to a comma and leave
+// the comma where it is.
+func TestTillStopsOneShortOfTheCharacter(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT a, b, c FROM t", 0)
+
+	h.typeInto("t,")
+
+	h.waitFor("the caret to stop before the comma", func(a *App) bool {
+		return a.caretOffset(a.editor.GetText()) == 7
+	})
+}
+
+// A count in front of a motion, which is the first thing a vim user's hands
+// reach for.
+func TestACountRepeatsAMotionInTheEditor(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("one\ntwo\nthree\nfour\n", 0)
+
+	h.typeInto("3j")
+
+	// The fourth line begins at offset 14 of "one\ntwo\nthree\nfour\n".
+	h.waitFor("the caret to land on the fourth line", func(a *App) bool {
+		return a.caretOffset(a.editor.GetText()) >= 14
+	})
+}
+
+// "3dd" is three lines, not three presses of dd.
+func TestACountOnALinewiseDeleteTakesThatManyLines(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("one\ntwo\nthree\nfour\n", 0)
+
+	h.typeInto("3dd")
+
+	h.wantEditor("four\n")
+}
+
+// The operator keeps its motion when a find is what completes it.
+func TestAnOperatorTakesAFindMotionInTheEditor(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT a, b FROM t", 7)
+
+	h.typeInto("df,")
+
+	h.wantEditor("SELECT  b FROM t")
+}

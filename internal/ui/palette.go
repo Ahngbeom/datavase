@@ -167,28 +167,6 @@ func paletteCommands() []command {
 			run:     (*App).showCompletion,
 		},
 		{
-			name:    "attach directory",
-			summary: "point this session at a worktree of SQL files",
-			run:     (*App).showAttachDirectory,
-		},
-		{
-			name:    "detach directory",
-			summary: "forget the attached worktree",
-			run:     (*App).detach,
-		},
-		{
-			name:    "open file",
-			summary: "open a SQL file from the attached worktree",
-			covers:  keymap.ActionFindFile,
-			run:     (*App).showFindFile,
-		},
-		{
-			name:    "save file",
-			summary: "write the editor back to the file it came from",
-			covers:  keymap.ActionSaveFile,
-			run:     (*App).saveFile,
-		},
-		{
 			name:    "use schema",
 			summary: "choose the schema unqualified names resolve against",
 			covers:  keymap.ActionUseSchema,

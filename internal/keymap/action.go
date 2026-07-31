@@ -58,10 +58,6 @@ const (
 	ActionSearchHistory
 	ActionCommandPalette
 	ActionGoToTable
-	// ActionFindFile opens the attached worktree's SQL files.
-	ActionFindFile
-	// ActionSaveFile writes the editor back to the file it was loaded from.
-	ActionSaveFile
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
 	// ActionInspect shows the definition of the selected table.
@@ -107,8 +103,6 @@ var actionNames = map[Action]string{
 	ActionSearchHistory:     "search-history",
 	ActionCommandPalette:    "command-palette",
 	ActionGoToTable:         "go-to-table",
-	ActionFindFile:          "find-file",
-	ActionSaveFile:          "save-file",
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionHelp:              "help",
@@ -150,8 +144,6 @@ var descriptions = map[Action]string{
 	ActionSearchHistory:     "search the query history",
 	ActionCommandPalette:    "open the command palette",
 	ActionGoToTable:         "jump to a table",
-	ActionFindFile:          "open a SQL file from the attached worktree",
-	ActionSaveFile:          "save the open file",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected table's definition",
 	ActionHelp:              "show this help",
@@ -174,9 +166,8 @@ var order = []Action{
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
-	ActionSaveFile,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
-	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
+	ActionCommandPalette, ActionGoToTable, ActionInspect,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema,
 	ActionHelp, ActionQuit,

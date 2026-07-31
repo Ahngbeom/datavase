@@ -5,10 +5,10 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.2.0 — 2026-07-31
 
-Intended as **v0.2.0**. There is one breaking change; read it before upgrading
-a production datasource.
+There is one breaking change; read it before upgrading a production
+datasource.
 
 ### Breaking
 
@@ -60,6 +60,38 @@ every statement.
 If a script relied on `SET SESSION …` appearing to work, it never did.
 
 ### Added
+
+**A write says what it changed.** The row count came from the result buffer,
+which a write never fills, so every `INSERT`/`UPDATE`/`DELETE` reported
+`0 rows` whatever it did. The guard would stop you, explain the statement and
+make you agree to it, and then not say what happened.
+
+```
+1 row affected  ·  4ms
+4812 rows affected  ·  1.2s
+```
+
+The number is MySQL's own, counting rows **changed** rather than matched — an
+`UPDATE` setting a column to the value it already held reports zero. An
+`INSERT` given an id carries it too.
+
+Writes stay cancellable. The obvious way to get the count was to send them
+through the connection pool, which would have quietly cost server-side
+cancellation, since `KILL QUERY` needs the id of the connection actually
+running the statement. They are sent on that connection instead, so `^C` stops
+a runaway `UPDATE` exactly as it stops a runaway `SELECT`.
+
+**The server's warnings are read.** MySQL reports data truncation, implicit
+conversion and several `ALTER` side effects only as warnings, and calls the
+statement a success. Nothing asked before, so a value quietly cut down to fit
+its column looked exactly like one that fitted.
+
+```
+1 row affected  ·  4ms  ·  1 warning: Data truncated for column 's' at row 1
+```
+
+The server's own sentence is carried rather than a count, and it is never
+dropped to make the status line fit — the elapsed time goes first.
 
 **`Run everything` works.** `⌘⇧↩` (`Ctrl+Shift+↩`, `⇧F5`) was bound in every
 preset, listed in the README and described by `dv keys`, and reported "not

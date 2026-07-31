@@ -71,9 +71,11 @@ func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
 		AddButtons([]string{"Cancel", "Run"}).
 		SetDoneFunc(func(_ int, label string) {
 			a.closeDialog()
-			if label == "Run" {
-				a.start(stmt, d)
+			if label != "Run" {
+				a.abandonBatch()
+				return
 			}
+			a.start(stmt, d)
 		})
 
 	modal.SetBackgroundColor(tcell.ColorBlack)
@@ -87,7 +89,10 @@ func (a *App) confirmByTyping(stmt sqlparse.Statement, d guard.Decision) {
 	form.AddTextView("", fmt.Sprintf("%s\n\n%s", d.Reason, preview(stmt.SQL)), 60, 6, true, false).
 		AddInputField(fmt.Sprintf("Type %s to proceed", d.TypeToConfirm), "", 24,
 			nil, func(text string) { typed = text }).
-		AddButton("Cancel", func() { a.closeDialog() }).
+		AddButton("Cancel", func() {
+			a.closeDialog()
+			a.abandonBatch()
+		}).
 		AddButton("Run", func() {
 			// Comparison is case-insensitive: the point is deliberate
 			// effort, not exact keystrokes.

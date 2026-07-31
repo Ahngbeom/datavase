@@ -273,6 +273,21 @@ whole life.
 `USE` is refused too, and points at the schema picker instead — that choice
 does travel with every statement, which is exactly what `USE` was reached for.
 
+### Running more than one statement
+
+`⌘⇧↩` runs the whole buffer, one statement at a time, in order. Each goes
+through the guard on its own: a confirmation stops the queue until it is
+answered, and a refusal — or a declined confirmation, or a failure, or `^C` —
+stops the rest.
+
+The status bar then says how many of them ran: `5 statements · 2 ran ·
+refused at statement 3`. That count is reported even when everything
+succeeded, because a batch that stopped part-way has left the database in a
+state nothing on screen describes, and there is no transaction to unwind it.
+
+Statements after the one that stopped are not attempted. They were written to
+follow it.
+
 ## Cancellation
 
 `Ctrl-C` sends `KILL QUERY` over a second connection held open for exactly

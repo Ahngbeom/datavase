@@ -101,6 +101,41 @@ type App struct {
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
+
+	// batch is a "run everything" in flight, nil otherwise. Like running, it
+	// is touched only from the UI goroutine: each statement resumes the batch
+	// from the same callback that reports the last one finished.
+	batch *batch
+}
+
+// batch is the state of a Run-everything.
+//
+// It is a queue rather than a loop because every step can stop to ask
+// something: the guard may refuse, or want a phrase typed, and both answers
+// arrive from a dialog long after the statement that raised them returned.
+type batch struct {
+	stmts []sqlparse.Statement
+	// next is the index of the statement to consider next, so it doubles as
+	// the human number of the statement being considered once incremented.
+	next int
+	// ran counts the statements that reached the server and finished without
+	// an error.
+	ran int
+}
+
+// batchSummary is what the status bar says when a Run-everything ends.
+//
+// It always reports how many of the statements actually ran, including when
+// everything succeeded. A batch that stopped in the middle has left the
+// database in a state neither the buffer nor the editor shows, and with no
+// transaction to unwind it the only remedy is knowing exactly where it
+// stopped — so the count is not an error-only detail.
+func batchSummary(total, ran int, why string) string {
+	summary := fmt.Sprintf("%d statements · %d ran", total, ran)
+	if why != "" {
+		summary += " · " + why
+	}
+	return summary
 }
 
 // Deps are the optional collaborators an interface can be given.
@@ -539,20 +574,97 @@ func (a *App) runStatement(stmt sqlparse.Statement) {
 // executeAll runs every statement in the editor, stopping at the first
 // refusal so a rejected statement cannot be skipped over silently.
 func (a *App) executeAll() {
-	stmts := sqlparse.Split(a.editor.GetText())
-	if len(stmts) == 0 {
-		a.notice("nothing to run")
+	if a.running != nil {
+		a.notice("a statement is already running; ^C cancels it")
 		return
 	}
-	if len(stmts) == 1 {
+
+	stmts := sqlparse.Split(a.editor.GetText())
+	switch len(stmts) {
+	case 0:
+		a.notice("nothing to run")
+		return
+	case 1:
+		// One statement is not a batch. Going through the queue would only
+		// add a summary line saying "1 statement · 1 ran" to something the
+		// row count already describes.
 		a.runStatement(stmts[0])
 		return
 	}
 
-	// Running a batch means confirming each guarded statement in turn, which
-	// needs a queue the dialogs can walk. Until that exists, be explicit
-	// rather than running only part of the buffer.
-	a.notice(fmt.Sprintf("running all %d statements is not built yet — place the cursor on one and run it", len(stmts)))
+	a.batch = &batch{stmts: stmts}
+	a.advanceBatch()
+}
+
+// advanceBatch puts the next statement of a Run-everything through the guard.
+//
+// Each verdict either continues the queue or ends it. Nothing is skipped: a
+// refusal in the middle stops the rest, because the statements after it were
+// written to follow the one that did not run.
+func (a *App) advanceBatch() {
+	b := a.batch
+	if b == nil {
+		return
+	}
+	if b.next >= len(b.stmts) {
+		a.finishBatch("")
+		return
+	}
+
+	stmt := b.stmts[b.next]
+	b.next++
+
+	decision := guard.Evaluate(stmt, a.policy())
+	switch decision.Verdict {
+	case guard.Deny:
+		a.finishBatch(fmt.Sprintf("refused at statement %d", b.next))
+		a.refuse(decision)
+	case guard.Confirm:
+		a.confirm(stmt, decision)
+	default:
+		a.start(stmt, decision)
+	}
+}
+
+// resumeBatch continues the queue after a statement has finished, or ends it
+// if that statement did not.
+//
+// A failure stops the rest. The statements in a file are written to run in
+// order, so continuing past a broken one applies the later half of a change
+// to a database that never received the first.
+func (a *App) resumeBatch(err error) {
+	b := a.batch
+	if b == nil {
+		return
+	}
+
+	switch {
+	case err == nil:
+		b.ran++
+		a.advanceBatch()
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), db.IsInterrupted(err):
+		a.finishBatch(fmt.Sprintf("cancelled at statement %d", b.next))
+	default:
+		a.finishBatch(fmt.Sprintf("failed at statement %d", b.next))
+	}
+}
+
+// abandonBatch ends the queue because the user declined a confirmation.
+func (a *App) abandonBatch() {
+	if a.batch == nil {
+		return
+	}
+	a.finishBatch(fmt.Sprintf("cancelled at statement %d", a.batch.next))
+}
+
+// finishBatch ends a Run-everything and reports how far it got.
+func (a *App) finishBatch(why string) {
+	b := a.batch
+	if b == nil {
+		return
+	}
+	a.batch = nil
+	a.notice(batchSummary(len(b.stmts), b.ran, why))
 }
 
 // copyOrCancel resolves Ctrl+C, whose meaning depends on what is on screen.
@@ -669,6 +781,11 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 			a.status.phase = phaseFailed
 			a.status.err = err
 		}
+
+		// The queue is resumed from here rather than from start(), because
+		// this is the first moment the next statement may be sent: MySQL will
+		// not accept one until this result set has been read to the end.
+		a.resumeBatch(err)
 	})
 	stream.Close()
 }

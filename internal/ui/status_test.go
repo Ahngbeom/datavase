@@ -304,3 +304,55 @@ func TestStatusWithoutAModalKeyboard(t *testing.T) {
 		t.Errorf("render() = %q, want no mode on a non-modal keyboard", got)
 	}
 }
+
+// A batch that stopped part-way has left the database in a state nothing on
+// screen describes, and there is no transaction to unwind it. The count of
+// what actually ran is the only thing that tells the user where to look, so
+// it is reported whether or not anything went wrong.
+func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
+	tests := []struct {
+		name             string
+		total, ran       int
+		why              string
+		wantAll, wantNot []string
+	}{
+		{
+			name:    "every statement ran",
+			total:   5,
+			ran:     5,
+			wantAll: []string{"5 statements", "5 ran"},
+		},
+		{
+			name:    "refused part-way",
+			total:   5,
+			ran:     2,
+			why:     "refused at statement 3",
+			wantAll: []string{"5 statements", "2 ran", "refused at statement 3"},
+		},
+		{
+			name:    "the first statement was refused",
+			total:   4,
+			ran:     0,
+			why:     "refused at statement 1",
+			wantAll: []string{"0 ran", "refused at statement 1"},
+			// "0 ran" has to be said, not left to be inferred from silence.
+			wantNot: []string{"1 ran"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := batchSummary(tt.total, tt.ran, tt.why)
+			for _, want := range tt.wantAll {
+				if !strings.Contains(got, want) {
+					t.Errorf("batchSummary() = %q, want it to contain %q", got, want)
+				}
+			}
+			for _, unwanted := range tt.wantNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("batchSummary() = %q, want it not to contain %q", got, unwanted)
+				}
+			}
+		})
+	}
+}

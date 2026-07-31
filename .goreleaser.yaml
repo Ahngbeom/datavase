@@ -60,6 +60,19 @@ changelog:
       - "^chore:"
 
 release:
+  # A pointer rather than the notes themselves. goreleaser can load a header
+  # from a per-tag file, but a tag whose file was forgotten fails the release
+  # at the one moment it cannot be retried cheaply — and this config is only
+  # exercised at tag time. A static link pinned to the tag cannot go missing.
+  # Only {{ .Tag }} is interpolated, which the footer below already relies on.
+  # The repository path is spelled out for the same reason it is in the
+  # `go install` line: one fewer template field that could turn out not to
+  # exist, in a file nothing exercises until a tag is pushed.
+  header: |
+    **[CHANGELOG](https://github.com/Ahngbeom/datavase/blob/{{ .Tag }}/CHANGELOG.md)**
+    — the edited account of this release, and anything that needs doing before
+    you upgrade. The commit list below is generated.
+
   footer: |
     ## Install
 

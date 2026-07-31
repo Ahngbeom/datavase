@@ -4,6 +4,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -442,6 +443,24 @@ func TestDecliningAConfirmationStopsTheRestOfTheBatch(t *testing.T) {
 	})
 }
 
+// The guard stops the user and makes them agree to a write. Reporting "0
+// rows" afterwards told them nothing about what they had just agreed to.
+func TestAWriteReportsHowManyRowsItChangedOnTheStatusBar(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	seedRows(t, h, 5)
+	h.typeSQL("UPDATE dv_ui SET n = n + 100 WHERE n <= 2")
+
+	h.do(keymap.ActionRun)
+	confirmWrite(t, h)
+
+	h.waitFor("the bar to say what the write changed", func(a *App) bool {
+		return a.status.written != nil && a.status.written.RowsAffected == 2
+	})
+	if !h.waitForScreen("2 rows affected") {
+		t.Errorf("the count never reached the screen:\n%s", h.text())
+	}
+}
+
 // The guard's decision has to reach the screen, not just the policy engine.
 func TestProductionDeleteIsRefusedOnScreen(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
@@ -845,4 +864,36 @@ func TestSchemaCacheIsPopulatedInTheBackground(t *testing.T) {
 	if len(tables) == 0 {
 		t.Error("the cache holds no tables after the background refresh")
 	}
+}
+
+// seedRows gives the interface tests a table of their own to write to, so a
+// write test cannot disturb the fixture the streaming tests count rows from.
+func seedRows(t *testing.T, h *harness, n int) {
+	t.Helper()
+	ctx := context.Background()
+
+	for _, sql := range []string{
+		"DROP TABLE IF EXISTS dv_ui",
+		"CREATE TABLE dv_ui (n INT PRIMARY KEY)",
+	} {
+		if _, err := h.app.conn.Exec(ctx, sql); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	for i := 1; i <= n; i++ {
+		if _, err := h.app.conn.Exec(ctx, fmt.Sprintf("INSERT INTO dv_ui (n) VALUES (%d)", i)); err != nil {
+			t.Fatalf("seeding dv_ui: %v", err)
+		}
+	}
+	t.Cleanup(func() { h.app.conn.Exec(ctx, "DROP TABLE IF EXISTS dv_ui") })
+}
+
+// confirmWrite answers the guard's confirmation dialog with Run.
+func confirmWrite(t *testing.T, h *harness) {
+	t.Helper()
+	if !h.waitForScreen("Run it?") {
+		t.Fatalf("no confirmation appeared:\n%s", h.text())
+	}
+	h.press(tcell.KeyRight)
+	h.press(tcell.KeyEnter)
 }

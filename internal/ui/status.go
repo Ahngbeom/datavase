@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
@@ -38,8 +39,12 @@ type status struct {
 	vimPending    string
 	writesEnabled bool
 
-	phase         runPhase
-	rows          int
+	phase runPhase
+	rows  int
+	// written is the outcome of a statement that changed rows rather than
+	// returning them, and nil for one that returned a result set. A write has
+	// no rows to count, so reporting "0 rows" for it said nothing at all.
+	written       *db.Result
 	elapsed       time.Duration
 	err           error
 	limitInjected int
@@ -217,7 +222,11 @@ func (s status) fields() []field {
 		out = add(out, tag(colourNotice, "running… ^C cancels"), false, 0)
 
 	case phaseDone:
-		out = add(out, fmt.Sprintf("%d rows", s.rows), true, 25)
+		if s.written != nil {
+			out = add(out, writeSummary(*s.written), true, 25)
+		} else {
+			out = add(out, fmt.Sprintf("%d rows", s.rows), true, 25)
+		}
 		out = add(out, formatElapsed(s.elapsed), true, 30)
 		if s.limitInjected > 0 {
 			// A quietly added LIMIT makes a partial result look complete.
@@ -326,4 +335,29 @@ func (b *statusBar) Draw(screen tcell.Screen) {
 
 	b.SetText(b.current().renderWidth(width))
 	b.TextView.Draw(screen)
+}
+
+// writeSummary is what a statement that changed rows reports instead of a
+// row count.
+//
+// The singular is spelled out because this is the number that says whether a
+// write went as intended: "1 row affected" and "4812 rows affected" are the
+// difference between a routine edit and an incident, and it is read in a
+// hurry.
+//
+// MySQL counts rows *changed* rather than matched, so an UPDATE setting a
+// column to the value it already held reports zero. That is the server's own
+// answer, and the wording says "affected" rather than "matched" so it cannot
+// be read as the other one.
+func writeSummary(r db.Result) string {
+	noun := "rows affected"
+	if r.RowsAffected == 1 {
+		noun = "row affected"
+	}
+
+	summary := fmt.Sprintf("%d %s", r.RowsAffected, noun)
+	if r.LastInsertID > 0 {
+		summary += fmt.Sprintf(" · id %d", r.LastInsertID)
+	}
+	return summary
 }

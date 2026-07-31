@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/db"
 )
 
 func baseStatus() status {
@@ -354,5 +355,74 @@ func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// This is the number that says whether a write went as intended, and it is
+// read in a hurry, so the singular is spelled out rather than left as
+// "1 rows affected".
+func TestAWriteReportsWhatItChangedRatherThanARowCount(t *testing.T) {
+	tests := []struct {
+		name             string
+		written          db.Result
+		wantAll, wantNot []string
+	}{
+		{
+			name:    "one row",
+			written: db.Result{RowsAffected: 1},
+			wantAll: []string{"1 row affected"},
+			wantNot: []string{"1 rows"},
+		},
+		{
+			name:    "many rows",
+			written: db.Result{RowsAffected: 4812},
+			wantAll: []string{"4812 rows affected"},
+		},
+		{
+			// A write that matched rows but changed none reports zero, which
+			// is the server's own answer. Saying "affected" rather than
+			// "matched" is what stops it being read as the other number.
+			name:    "nothing changed",
+			written: db.Result{RowsAffected: 0},
+			wantAll: []string{"0 rows affected"},
+		},
+		{
+			name:    "an insert carries the id it was given",
+			written: db.Result{RowsAffected: 1, LastInsertID: 42},
+			wantAll: []string{"1 row affected", "42"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			written := tt.written
+			s := status{phase: phaseDone, written: &written}
+			got := s.renderWidth(200)
+
+			for _, want := range tt.wantAll {
+				if !strings.Contains(got, want) {
+					t.Errorf("status = %q, want it to contain %q", got, want)
+				}
+			}
+			for _, unwanted := range tt.wantNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("status = %q, want it not to contain %q", got, unwanted)
+				}
+			}
+		})
+	}
+}
+
+// A statement that returned rows has no count to report, and "0 rows
+// affected" under a SELECT would be a number meaning nothing.
+func TestAQueryStillReportsItsRowCount(t *testing.T) {
+	s := status{phase: phaseDone, rows: 7}
+
+	got := s.renderWidth(200)
+	if !strings.Contains(got, "7 rows") {
+		t.Errorf("status = %q, want the row count", got)
+	}
+	if strings.Contains(got, "affected") {
+		t.Errorf("status = %q, want no affected-row count for a query", got)
 	}
 }

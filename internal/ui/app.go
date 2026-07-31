@@ -714,6 +714,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	a.status.message = ""
 	a.status.limitInjected = decision.InjectLimit
 	a.status.truncated = false
+	a.status.written = nil
 
 	started := time.Now()
 	stream := a.conn.Query(context.Background(), sql, db.Options{
@@ -722,6 +723,9 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 		// The chosen schema travels with the statement. Without this the
 		// picker would change what the status bar says and nothing else.
 		Schema: a.selectedSchema,
+		// A write is sent for its count rather than for rows, which is the
+		// only moment the server's answer can still be read.
+		Exec: !stmt.Kind().ReturnsRows(),
 	})
 	a.running = stream
 
@@ -752,6 +756,7 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 
 	err := stream.Err()
 	truncated := stream.Truncated() || a.buf.AtCapacity()
+	written, wrote := stream.Result()
 	elapsed := time.Since(started)
 	rows := a.buf.RowCount()
 
@@ -760,6 +765,9 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 		a.status.rows = rows
 		a.status.elapsed = elapsed
 		a.status.truncated = truncated
+		if wrote {
+			a.status.written = &written
+		}
 
 		a.record(sqlText, rows, elapsed)
 

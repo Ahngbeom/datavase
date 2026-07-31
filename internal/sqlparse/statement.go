@@ -59,6 +59,26 @@ func (k StmtKind) String() string {
 	}
 }
 
+// ReturnsRows reports whether a statement of this kind answers with a result
+// set rather than with a count of what it changed.
+//
+// The decision has to be made before the statement is sent: a write sent as a
+// query yields a result set with no columns, and the count the server reported
+// is gone by the time anyone could ask for it.
+//
+// Anything not definitely a write is treated as returning rows. Sending a
+// query as a query costs nothing when it turns out to have no rows, whereas
+// sending something like CALL as a write discards the rows it did produce —
+// so the uncertain case goes the way that cannot lose anything.
+func (k StmtKind) ReturnsRows() bool {
+	switch k {
+	case StmtInsert, StmtUpdate, StmtDelete, StmtTruncate, StmtDrop, StmtDDL:
+		return false
+	default:
+		return true
+	}
+}
+
 // Statement is one SQL statement with its tokens and its span in the source
 // buffer. The span lets the editor highlight exactly what will run.
 type Statement struct {

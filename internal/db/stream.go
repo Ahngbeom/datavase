@@ -61,7 +61,32 @@ type Stream struct {
 	finished  bool
 	err       error
 	truncated bool
+	result    Result
+	hasResult bool
 	closeOnce sync.Once
+}
+
+// Result is what a statement that returned no rows did instead.
+//
+// RowsAffected is MySQL's own count, which for an UPDATE is the number of
+// rows *changed* rather than matched: an UPDATE setting a column to the value
+// it already held reports zero, and that is the server's answer rather than a
+// miscount.
+type Result struct {
+	RowsAffected int64
+	LastInsertID int64
+}
+
+// Result reports what a write did, and whether there was one to report.
+//
+// Like Err, it is read after Events closes rather than delivered as an event,
+// for the reason given on Event: a terminal event can be dropped when a
+// cancelled stream closes, and the caller would not be able to tell the
+// difference.
+func (s *Stream) Result() (Result, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result, s.hasResult
 }
 
 // Err reports why the stream ended, once Events is closed. It is nil when
@@ -165,6 +190,16 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 		}
 	}
 
+	// A write is sent from here rather than through Conn.Exec, which would be
+	// the shorter route and would quietly cost cancellation: Exec takes a
+	// connection from the pool without reading its id, and KILL QUERY has
+	// nothing to aim at. A runaway UPDATE is the statement a user most needs
+	// to stop, so it keeps the connection this function already holds.
+	if opt.Exec {
+		s.done(s.exec(conn, query), false)
+		return
+	}
+
 	rows, err := conn.QueryContext(s.runCtx, query)
 	if err != nil {
 		s.done(err, false)
@@ -189,6 +224,28 @@ func (s *Stream) run(out chan<- Event, query string, opt Options) {
 
 	truncated, err := s.pump(out, rows, len(columns), opt)
 	s.done(err, truncated)
+}
+
+// exec sends a statement that returns a count instead of rows, on the
+// connection whose id KILL QUERY already knows.
+//
+// Both numbers are advisory — not every statement or driver reports them — so
+// a failure to read one is not a failure of the statement, which has already
+// happened by then.
+func (s *Stream) exec(conn *sql.Conn, query string) error {
+	res, err := conn.ExecContext(s.runCtx, query)
+	if err != nil {
+		return err
+	}
+
+	affected, _ := res.RowsAffected()
+	lastID, _ := res.LastInsertId()
+
+	s.mu.Lock()
+	s.result = Result{RowsAffected: affected, LastInsertID: lastID}
+	s.hasResult = true
+	s.mu.Unlock()
+	return nil
 }
 
 // schemaFor decides which schema this statement runs against, and returns the

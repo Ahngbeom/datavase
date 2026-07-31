@@ -17,8 +17,8 @@ schema, edit and run SQL with schema-aware completion, run a whole file a
 statement at a time, wrap work in a transaction and take it back, stream large
 results, cancel a runaway query — including a write — see what a write changed
 and what the server warned about, search the query history, export to CSV or
-JSON, attach a worktree and open, run and save the `.sql` files in it, read SQL
-out of a GitLab merge request, and the production guard.
+JSON, attach a worktree and open, run and save the `.sql` files in it, and the
+production guard.
 
 Not built, and worth knowing before you lean on it:
 
@@ -46,10 +46,8 @@ From a clone:
 make build      # produces ./dv — CGO-free, single static binary
 ```
 
-Nothing else is needed to run a query. One optional feature has an outside
-dependency: [reading SQL out of GitLab](#gitlab) borrows its credential from
-[glab](https://gitlab.com/gitlab-org/cli), so that half of the tool is absent
-until glab is installed. Everything else is in the one binary.
+Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
+no companion tools. It is one binary.
 
 ## Configure
 
@@ -662,59 +660,6 @@ Four things it will not do quietly:
 The guard is unchanged by any of this. A `DELETE` loaded from a file is the
 same statement it would be if you had typed it, and meets production the same
 way.
-
-## GitLab
-
-The migration you want to look at is often the one nobody has merged yet.
-datavase can read the `.sql` files out of an open merge request, or out of a
-snippet, without checking the branch out.
-
-**Set-up is one command, and you have probably already run it:**
-
-```sh
-glab auth login --hostname gitlab.example.com
-```
-
-datavase stores no GitLab token of its own. It borrows the one
-[glab](https://gitlab.com/gitlab-org/cli) already holds — anyone reaching a
-self-managed instance has it logged in, often through SSO with a credential
-that rotates on its own, and a second personal access token would be a second
-thing to create, rotate and revoke for nothing. Nothing is read until you first
-open the dialog.
-
-Then `open from gitlab` in the palette. It lists the open merge requests and
-the snippets; choosing one offers its `.sql` files, and choosing a file loads
-it into the editor.
-
-**With a checkout attached there is nothing to configure.** The instance and
-the project both come from its `origin`. Configuration is for narrowing that
-down, or for a session with nothing attached:
-
-```yaml
-gitlab:
-  host: gitlab.example.com   # optional; restricts the feature to this instance
-  project: group/project     # optional; for a session with nothing attached
-```
-
-Naming a host means an `origin` on any other one is not this instance's
-project, and datavase says so rather than asking GitLab about a repository it
-has never heard of.
-
-What comes back is **read-only**. There is no branch here to commit to, and a
-database client that could push would be a worse git than git; `⌘S` refuses and
-says so rather than looking for a worktree that would not help. Files are read
-at the merge request's head commit, so a branch pushed to while the list is
-open cannot hand back a file from a different change.
-
-Nothing here happens at startup, and no failure reaches the session: the
-credential is looked up and the request made when you open the dialog, and
-anything that goes wrong is a line on the status bar. A missing glab and a
-missing login get different sentences, because they have different fixes.
-
-One caveat for an instance behind an internal certificate authority: datavase
-makes the HTTPS request itself, so it trusts what the operating system trusts.
-An instance whose certificate does not chain to a system root is not reachable
-yet.
 
 ## History and export
 

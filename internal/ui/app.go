@@ -124,11 +124,6 @@ type App struct {
 	// something to repeat once the prompt has closed.
 	search searchState
 
-	// openGitLab builds a reader on demand; gitlabHost is the configured
-	// instance, empty when an attached checkout is to decide.
-	openGitLab func(ctx context.Context, host string) (GitLabSource, error)
-	gitlabHost string
-
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
@@ -191,15 +186,6 @@ type Deps struct {
 	// Recent is the list of directories attached before. Nil costs the
 	// shortcut and nothing else.
 	Recent *recent.List
-	// GitLab opens a reader for an instance. It is called the first time the
-	// GitLab command is used, never at startup: borrowing the credential from
-	// glab costs half a second of keyring access, and a session that never
-	// touches GitLab should not pay it.
-	GitLab func(ctx context.Context, host string) (GitLabSource, error)
-	// GitLabHost is the configured instance, empty when none is named. Empty
-	// means an attached checkout's origin decides, so a checkout is all the
-	// configuration there is.
-	GitLabHost string
 }
 
 // New builds the interface for an open connection.
@@ -220,8 +206,6 @@ func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
 		history:         deps.History,
 		wt:              deps.Worktree,
 		recentDirs:      deps.Recent,
-		openGitLab:      deps.GitLab,
-		gitlabHost:      deps.GitLabHost,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
 		selectionAnchor: noAnchor,
@@ -533,9 +517,6 @@ const (
 	pageFiles     = "files"
 	pageAttach    = "attach"
 	pageSearch    = "search"
-
-	pageGitLab      = "gitlab"
-	pageGitLabFiles = "gitlabfiles"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than

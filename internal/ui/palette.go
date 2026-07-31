@@ -172,11 +172,6 @@ func paletteCommands() []command {
 			run:     (*App).showAttachDirectory,
 		},
 		{
-			name:    "open from gitlab",
-			summary: "read SQL out of an open merge request or a snippet",
-			run:     (*App).showGitLab,
-		},
-		{
 			name:    "detach directory",
 			summary: "forget the attached worktree",
 			run:     (*App).detach,

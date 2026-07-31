@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -102,24 +101,6 @@ type Defaults struct {
 	BufferMax  int `yaml:"buffer_max"`
 }
 
-// GitLab points the session at an instance whose merge requests and snippets
-// can be read for SQL.
-//
-// Every field is optional, and a session with a checkout attached needs none
-// of them: the instance and the project both come from that checkout's origin.
-//
-// No token here, and none anywhere else in datavase. The credential is
-// borrowed from glab, which anyone reaching a self-managed instance already
-// has logged in — a second personal access token would be a second thing to
-// rotate for nothing.
-type GitLab struct {
-	// Host is the instance, without a scheme. Empty lets an attached
-	// checkout's origin decide; naming one narrows the feature to it.
-	Host string `yaml:"host"`
-	// Project is "group/project", for a session with nothing attached.
-	Project string `yaml:"project"`
-}
-
 // Config is the root of the configuration file.
 type Config struct {
 	DataSources []DataSource `yaml:"datasources"`
@@ -128,20 +109,6 @@ type Config struct {
 	// Keymap chooses the keyboard preset and overrides individual bindings.
 	// See the Keymap type for the accepted forms.
 	Keymap Keymap `yaml:"keymap"`
-
-	// GitLab is optional. Absent, the feature simply is not there.
-	GitLab GitLab `yaml:"gitlab"`
-}
-
-// DefaultGitLabHost is the instance assumed when none is configured.
-const DefaultGitLabHost = "gitlab.com"
-
-// Resolved returns the host with the default filled in.
-func (g GitLab) Resolved() string {
-	if strings.TrimSpace(g.Host) == "" {
-		return DefaultGitLabHost
-	}
-	return strings.TrimSpace(g.Host)
 }
 
 // Default values applied when the corresponding key is absent.

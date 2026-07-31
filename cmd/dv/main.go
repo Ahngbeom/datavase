@@ -12,8 +12,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
-	"github.com/Ahngbeom/datavase/internal/gitlab"
-	"github.com/Ahngbeom/datavase/internal/glab"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/recent"
@@ -111,18 +109,6 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		}
 	}
 
-	// GitLab borrows its credential from glab rather than keeping one of its
-	// own. Nothing runs here: the lookup reads the OS keyring and costs half a
-	// second, so it happens the first time the GitLab command is used.
-	glCLI := glab.New()
-	openGitLab := func(ctx context.Context, host string) (ui.GitLabSource, error) {
-		token, err := glCLI.Token(ctx, host)
-		if err != nil {
-			return nil, err
-		}
-		return gitlab.New("https://"+host, token), nil
-	}
-
 	// The worktree is optional in the same way: a path that no longer exists —
 	// a branch cleaned up since the command was last run — should cost the
 	// file list, not the session the user is trying to start.
@@ -143,13 +129,11 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	defer sess.Close()
 
 	return ui.New(sess.Conn, cfg, ui.Deps{
-		Keys:       keys,
-		Cache:      cache,
-		History:    hist,
-		Worktree:   wt,
-		Recent:     recents,
-		GitLab:     openGitLab,
-		GitLabHost: cfg.GitLab.Host,
+		Keys:     keys,
+		Cache:    cache,
+		History:  hist,
+		Worktree: wt,
+		Recent:   recents,
 	}).Run()
 }
 

@@ -64,7 +64,8 @@ const (
 	ActionSaveFile
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
-	// ActionInspect shows the definition of the selected table.
+	// ActionInspect shows whatever is selected in full: a table's definition,
+	// or a result row read down the page instead of across it.
 	ActionInspect
 
 	// Application.
@@ -153,7 +154,7 @@ var descriptions = map[Action]string{
 	ActionFindFile:          "open a SQL file from the attached worktree",
 	ActionSaveFile:          "save the open file",
 	ActionCycleTab:          "switch tab in the focused pane",
-	ActionInspect:           "show the selected table's definition",
+	ActionInspect:           "show the selected table or result row in full",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }

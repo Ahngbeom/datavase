@@ -9,6 +9,15 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**A row can be read down the page.** A grid is the wrong shape for a wide
+table — forty columns share the terminal between them, and each value was cut
+at two hundred characters besides, with no way to see the rest. `⌘I` on a
+result row now turns it on its side: one column per line, names lined up,
+values in full, `j`/`k` to step between rows.
+
+It is the key that already showed a table's definition. `inspect` means "show
+me this in full" and resolves by what has focus, like `⌘C` and `/` already do.
+
 **Transactions.** `BEGIN` now opens one, and the connection it opens on is
 held for its whole life — which is what makes `COMMIT` and `ROLLBACK` mean
 anything. Before this they were refused, because a transaction opened on a

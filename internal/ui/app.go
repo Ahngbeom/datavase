@@ -601,7 +601,7 @@ func (a *App) dispatch(action keymap.Action) bool {
 	case keymap.ActionCycleTab:
 		a.cycleTab()
 	case keymap.ActionInspect:
-		a.inspectTable()
+		a.inspect()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
@@ -1083,4 +1083,18 @@ func (a *App) confirmDiscardTransaction() {
 
 	modal.SetBackgroundColor(tcell.ColorBlack)
 	a.openDialog(modal)
+}
+
+// inspect shows whatever has focus in full: a table's definition from the
+// schema pane, a row from the results.
+//
+// One word for one intent, resolved by where the caret is — the same shape as
+// copy-or-cancel and as "/", which searches whichever pane is focused. A
+// second key for "the same thing but over there" is a key nobody remembers.
+func (a *App) inspect() {
+	if a.app.GetFocus() == a.grid {
+		a.showRow()
+		return
+	}
+	a.inspectTable()
 }

@@ -314,3 +314,36 @@ func TestSplitHandlesLargeInputWithoutQuadraticBlowup(t *testing.T) {
 		t.Fatalf("len(Split()) = %d, want 20000", got)
 	}
 }
+
+// The routing decision is made before the statement is sent, so getting it
+// wrong is unrecoverable in both directions: a write sent as a query loses its
+// count, and a statement that did have rows sent as a write loses them.
+func TestOnlyDefiniteWritesAreSentForACount(t *testing.T) {
+	tests := []struct {
+		sql  string
+		want bool
+	}{
+		{"SELECT 1", true},
+		{"SHOW TABLES", true},
+		{"EXPLAIN SELECT 1", true},
+		{"INSERT INTO t VALUES (1)", false},
+		{"UPDATE t SET x = 1 WHERE id = 1", false},
+		{"DELETE FROM t WHERE id = 1", false},
+		{"TRUNCATE TABLE t", false},
+		{"DROP TABLE t", false},
+		{"CREATE TABLE t (id INT)", false},
+		{"ALTER TABLE t ADD COLUMN x INT", false},
+		// Unrecognised. CALL can return rows, and losing them would be worse
+		// than the empty result set a count-less query costs.
+		{"CALL do_something()", true},
+		{"GRANT ALL ON *.* TO u", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.sql, func(t *testing.T) {
+			if got := Parse(tt.sql).Kind().ReturnsRows(); got != tt.want {
+				t.Errorf("Parse(%q).Kind().ReturnsRows() = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}

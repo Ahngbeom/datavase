@@ -120,6 +120,15 @@ type Options struct {
 	// Schema is the one an unqualified name resolves against. Empty means the
 	// schema the connection was opened with.
 	Schema string
+
+	// Exec sends the statement as one that returns a count rather than rows,
+	// which is the only way the server's affected-row count can be read.
+	//
+	// It is the caller's decision because only the caller has the parsed
+	// statement; asking the driver afterwards is not possible, since a write
+	// sent as a query simply yields a result set with no columns and the
+	// count is gone.
+	Exec bool
 }
 
 func (o Options) chunkSize() int {

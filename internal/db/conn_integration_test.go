@@ -484,3 +484,97 @@ func connectionIsRunning(conn *Conn, connID uint64) (bool, error) {
 	}
 	return n > 0, nil
 }
+
+// The guard stops the user, explains what a write will do and makes them
+// agree to it. Then it has to say what it actually did: "1 row" and "4,812
+// rows" are the difference between a routine edit and an incident.
+func TestExecReportsHowManyRowsAStatementChanged(t *testing.T) {
+	conn := openTestConn(t)
+	seedSequence(t, conn)
+
+	stream := conn.Query(context.Background(), "UPDATE dv_seq SET n = n + 1000 WHERE n <= 3", Options{Exec: true})
+	defer stream.Close()
+
+	got := drain(t, stream)
+	if got.err != nil {
+		t.Fatalf("stream error = %v, want nil", got.err)
+	}
+
+	res, ok := stream.Result()
+	if !ok {
+		t.Fatal("Result() reported nothing; the caller has no way to say what the write did")
+	}
+	if res.RowsAffected != 3 {
+		t.Errorf("RowsAffected = %d, want 3", res.RowsAffected)
+	}
+}
+
+func TestExecReportsTheIdOfAnInsertedRow(t *testing.T) {
+	conn := openTestConn(t)
+	mustExec(t, conn, "DROP TABLE IF EXISTS dv_ids")
+	mustExec(t, conn, "CREATE TABLE dv_ids (id INT AUTO_INCREMENT PRIMARY KEY, n INT)")
+	t.Cleanup(func() { mustExec(t, conn, "DROP TABLE IF EXISTS dv_ids") })
+
+	stream := conn.Query(context.Background(), "INSERT INTO dv_ids (n) VALUES (7)", Options{Exec: true})
+	defer stream.Close()
+
+	if got := drain(t, stream); got.err != nil {
+		t.Fatalf("stream error = %v, want nil", got.err)
+	}
+
+	res, _ := stream.Result()
+	if res.LastInsertID == 0 {
+		t.Error("LastInsertID = 0, want the id the server assigned")
+	}
+}
+
+// A statement that streams rows has no count to report, and saying "0 rows
+// affected" under a SELECT would be a number that means nothing.
+func TestAQueryReportsNoAffectedRowCount(t *testing.T) {
+	conn := openTestConn(t)
+	seedSequence(t, conn)
+
+	stream := conn.Query(context.Background(), "SELECT n FROM dv_seq", Options{})
+	defer stream.Close()
+	drain(t, stream)
+
+	if _, ok := stream.Result(); ok {
+		t.Error("Result() reported a count for a statement that returned rows")
+	}
+}
+
+// This is the regression that matters. Sending writes through the pool would
+// be the obvious way to get a row count, and it would silently cost server-
+// side cancellation: KILL QUERY needs the id of the connection actually
+// running the statement, and a pooled Exec never reads one. A runaway UPDATE
+// is precisely the statement a user most needs to stop.
+func TestAWriteIsStillKilledOnTheServerWhenCancelled(t *testing.T) {
+	conn := openTestConn(t)
+	seedSequence(t, conn)
+
+	stream := conn.Query(context.Background(),
+		"UPDATE dv_seq SET n = n + SLEEP(30) WHERE n = 1", Options{Exec: true})
+	defer stream.Close()
+
+	connID := waitForConnectionID(t, stream)
+	if !waitForServerQuery(t, conn, connID, true) {
+		t.Fatal("the write never appeared in the process list")
+	}
+
+	if err := stream.Cancel(); err != nil {
+		t.Fatalf("Cancel() error = %v, want nil", err)
+	}
+
+	if !waitForServerQuery(t, conn, connID, false) {
+		t.Error("the write is still running on the server after Cancel()")
+	}
+}
+
+// mustExec runs a fixture statement through the control path, where a failure
+// is a broken test rather than a result worth reporting.
+func mustExec(t *testing.T, conn *Conn, sql string) {
+	t.Helper()
+	if _, err := conn.Exec(context.Background(), sql); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+}

@@ -23,8 +23,6 @@ Not built, and worth knowing before you lean on it:
   pool, so `BEGIN` cannot reach the statement after it. Rather than let a
   `ROLLBACK` report success having undone nothing, transaction control and
   session statements are [refused with that explanation](#what-is-refused-for-a-different-reason).
-- **A write does not say how many rows it changed.** The count on the status
-  bar describes a result set, and a write has none.
 - **The result grid is plain.** No vertical view for a wide row, no way to
   open a truncated value in full, no sorting.
 
@@ -272,6 +270,26 @@ whole life.
 
 `USE` is refused too, and points at the schema picker instead — that choice
 does travel with every statement, which is exactly what `USE` was reached for.
+
+### What a write reports
+
+A statement that changes rows has no result set, so the bar says what it did
+instead of how many rows came back:
+
+```
+1 row affected  ·  4ms
+4812 rows affected  ·  1.2s
+```
+
+An `INSERT` that was given an id carries it too. The number is MySQL's own,
+which counts rows **changed** rather than matched — an `UPDATE` setting a
+column to the value it already held reports zero, and that is the server's
+answer rather than a miscount. The word is "affected" so it cannot be read as
+the other one.
+
+Writes are still cancellable. They are sent on the same connection whose id
+`KILL QUERY` was given, not through the pool, so `^C` stops a runaway `UPDATE`
+exactly as it stops a runaway `SELECT`.
 
 ### Running more than one statement
 

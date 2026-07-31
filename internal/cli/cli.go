@@ -51,6 +51,9 @@ type App struct {
 // It is a struct rather than more parameters so that the next such choice does
 // not change the signature every caller and every test has to spell out.
 type UIOptions struct {
+	// WorkDir is the directory of SQL work to attach, from --dir. Empty means
+	// the session starts unattached.
+	WorkDir string
 }
 
 // HandleVersion answers a request for the version, reporting whether it did.
@@ -145,6 +148,7 @@ const CheckTimeout = 15 * time.Second
 func (a *App) openCmd(args []string) int {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(a.Err)
+	dir := fs.String("dir", "", "directory of SQL work to attach")
 
 	var name string
 	rest := args
@@ -157,13 +161,13 @@ func (a *App) openCmd(args []string) int {
 			break
 		}
 		if name != "" {
-			fmt.Fprint(a.Err, "usage: dv open [<datasource>]\n")
+			fmt.Fprint(a.Err, "usage: dv open [--dir <path>] [<datasource>]\n")
 			return exitUsage
 		}
 		name, rest = rest[0], rest[1:]
 	}
 
-	return a.open(name, UIOptions{})
+	return a.open(name, UIOptions{WorkDir: *dir})
 }
 
 // open connects and hands control to the TUI.

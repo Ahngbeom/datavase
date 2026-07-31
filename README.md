@@ -48,6 +48,7 @@ datasources:
     env: prod
     host: db.internal        # as named from the bastion
     user: readonly
+    tls: verify-identity     # optional; see below for what prod defaults to
     tunnel:
       host: bastion.example.com
       port: 22
@@ -233,6 +234,51 @@ disappears from `information_schema.PROCESSLIST`.
 That second connection is also why the schema tree stays usable while a large
 result is still streaming: MySQL will not accept another statement on a
 connection until the current result set has been read to the end.
+
+## TLS
+
+```yaml
+datasources:
+  - name: prod-app
+    env: prod
+    tls: verify-identity
+    tls_ca: /etc/ssl/rds-combined-ca-bundle.pem   # optional; a private CA
+```
+
+| `tls:` | what the server has to prove |
+|---|---|
+| `disabled` | nothing; everything crosses the wire in clear text |
+| `preferred` | encrypted when the server offers it, plain when it does not |
+| `required` | encrypted or the connection fails — but who answered is unchecked |
+| `verify-ca` | the certificate chains to a trusted authority |
+| `verify-identity` | and the name on it matches the host dialled |
+
+The names are MySQL's own `ssl-mode`, so what is configured here can be
+checked against what the server was started with.
+
+**The default follows `env`:** `required` for a `prod` datasource,
+`preferred` everywhere else. Production is where a credential in clear text
+costs the most, and it is also where the managed databases that refuse plain
+connections outright live — AWS RDS and Aurora, Azure Database for MySQL,
+Cloud SQL — so `required` is usually the working setting as well as the safer
+one. Elsewhere the cost of being wrong is a laptop that cannot connect, which
+is why those get `preferred`.
+
+A production database that genuinely cannot speak TLS stays reachable with
+`tls: disabled`. Saying so in the file is the point: it is visible, and it is
+a decision rather than a default.
+
+`tls_ca` replaces the system trust store rather than adding to it — an
+instance behind a private authority should not also be satisfied by a public
+one. It is only accepted under `verify-ca` and `verify-identity`; naming one
+under a mode that verifies nothing is refused rather than read and ignored. A
+file that cannot be read, or that holds no certificate, stops the connection
+instead of quietly falling back to the system roots.
+
+`verify-ca` exists for the case `verify-identity` cannot serve: a database
+reached by an address its certificate was never issued for — the local end of
+an SSH tunnel is `127.0.0.1`, a failover alias is not the instance's name —
+where the authority still says who answered.
 
 ## SSH tunnels
 

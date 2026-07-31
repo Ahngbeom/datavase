@@ -22,9 +22,25 @@ const DialTimeout = 10 * time.Second
 //
 // The DSN is assembled through mysql.Config rather than string concatenation
 // so that passwords containing "@", "/" or ":" are escaped correctly.
-func DSN(ds *config.DataSource, password, addr string) string {
+//
+// It fails rather than returning a usable-looking string when the TLS
+// settings cannot be honoured: a connection that quietly verified less than
+// was asked of it is the failure this whole path exists to prevent.
+func DSN(ds *config.DataSource, password, addr string) (string, error) {
 	if addr == "" {
 		addr = net.JoinHostPort(ds.Host, strconv.Itoa(ds.Port))
+	}
+
+	// An unset mode is resolved here rather than only in config.Parse,
+	// because DSN is also reached by callers that build a DataSource
+	// directly, and an empty string would otherwise mean "no TLS at all".
+	mode := ds.TLS
+	if mode == "" {
+		mode = config.DefaultTLSMode(ds.Env)
+	}
+	tlsConfig, err := tlsSetting(ds, mode)
+	if err != nil {
+		return "", err
 	}
 
 	c := mysql.NewConfig()
@@ -38,10 +54,11 @@ func DSN(ds *config.DataSource, password, addr string) string {
 	c.ParseTime = true
 	c.Loc = time.Local
 	c.Timeout = DialTimeout
+	c.TLSConfig = tlsConfig
 
 	// Left off deliberately: with multiple statements per round trip, guard
 	// would vet one statement while the server executed several.
 	c.MultiStatements = false
 
-	return c.FormatDSN()
+	return c.FormatDSN(), nil
 }

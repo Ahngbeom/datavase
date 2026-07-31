@@ -385,6 +385,63 @@ func TestRunningASelectFillsTheGrid(t *testing.T) {
 	}
 }
 
+// Run-everything is the path a file of statements takes, so it has to run
+// all of them.
+func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.typeSQL("SELECT 1; SELECT 2; SELECT 3")
+
+	h.do(keymap.ActionRunAll)
+
+	h.waitFor("the batch to report that all three ran", func(a *App) bool {
+		return strings.Contains(a.status.message, "3 statements") &&
+			strings.Contains(a.status.message, "3 ran")
+	})
+}
+
+// A refusal stops the rest. The statements after it were written to follow
+// the one that did not run, and with no transaction to unwind what already
+// happened, the count of what ran is the only thing that says where to look.
+func TestRunEverythingStopsAtARefusalAndSaysHowFarItGot(t *testing.T) {
+	h := newHarness(t, config.EnvProd)
+	h.typeSQL("SELECT 1; DELETE FROM dv_seq; SELECT 3")
+
+	h.do(keymap.ActionRunAll)
+
+	h.waitFor("the batch to report where it stopped", func(a *App) bool {
+		return strings.Contains(a.status.message, "refused at statement 2")
+	})
+	h.waitFor("the third statement to have been left alone", func(a *App) bool {
+		return strings.Contains(a.status.message, "1 ran")
+	})
+
+	if !h.waitForScreen("Refused") {
+		t.Errorf("the refusal itself never reached the screen:\n%s", h.text())
+	}
+}
+
+// Declining the confirmation is a decision about the whole batch, not about
+// one statement: carrying on would run the statements that were written to
+// follow the one just refused.
+func TestDecliningAConfirmationStopsTheRestOfTheBatch(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.typeSQL("SELECT 1; DELETE FROM dv_seq WHERE id = 1; SELECT 3")
+
+	h.do(keymap.ActionRunAll)
+
+	if !h.waitForScreen("Run it?") {
+		t.Fatalf("no confirmation appeared:\n%s", h.text())
+	}
+
+	// Cancel is the button the dialog opens on, so Enter declines.
+	h.press(tcell.KeyEnter)
+
+	h.waitFor("the batch to stop where it was declined", func(a *App) bool {
+		return strings.Contains(a.status.message, "cancelled at statement 2") &&
+			strings.Contains(a.status.message, "1 ran")
+	})
+}
+
 // The guard's decision has to reach the screen, not just the policy engine.
 func TestProductionDeleteIsRefusedOnScreen(t *testing.T) {
 	h := newHarness(t, config.EnvProd)

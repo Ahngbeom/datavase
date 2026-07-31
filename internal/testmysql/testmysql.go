@@ -48,6 +48,13 @@ func DataSource(t *testing.T) (*config.DataSource, string) {
 		Port:     envIntOr(t, EnvPort, DefaultPort),
 		User:     envOr(EnvUser, DefaultUser),
 		Database: envOr(EnvDatabase, DefaultDatabase),
+
+		// Stated rather than left to the env default, because tests relabel
+		// this datasource: a harness asking for a production environment
+		// would otherwise inherit "required" and fail to reach a container
+		// on loopback that speaks no TLS — for reasons having nothing to do
+		// with what the test was about.
+		TLS: config.TLSDisabled,
 	}, envOr(EnvPassword, DefaultPassword)
 }
 

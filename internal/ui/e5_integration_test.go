@@ -56,11 +56,11 @@ func TestUseSchemaShowsInTheStatusBar(t *testing.T) {
 		return true
 	})
 
-	h.waitFor("the status bar to follow", func(a *App) bool {
-		return a.currentStatus().schema == "information_schema"
+	h.waitFor("the top bar to follow", func(a *App) bool {
+		return a.currentTopBar().schema == "information_schema"
 	})
 	if !strings.Contains(h.text(), "@information_schema") {
-		t.Errorf("the status bar does not show the chosen schema:\n%s", h.text())
+		t.Errorf("the top bar does not show the chosen schema:\n%s", h.text())
 	}
 }
 

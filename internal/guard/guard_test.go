@@ -23,8 +23,6 @@ func TestReadsAreAllowedEverywhere(t *testing.T) {
 		"SHOW TABLES",
 		"DESCRIBE users",
 		"EXPLAIN SELECT 1",
-		"USE app_db",
-		"SET autocommit = 1",
 	}
 
 	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
@@ -36,6 +34,73 @@ func TestReadsAreAllowedEverywhere(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Each statement runs on its own connection out of the pool, so a
+// transaction cannot span two of them: BEGIN would open one on a connection
+// that is handed straight back, and the ROLLBACK meant to undo the damage
+// would find nothing to undo while reporting success. Refusing is the only
+// honest answer until a transaction holds one connection for its lifetime.
+func TestTransactionControlIsRefusedRatherThanSilentlyDiscarded(t *testing.T) {
+	control := []string{
+		"BEGIN",
+		"START TRANSACTION",
+		"COMMIT",
+		"ROLLBACK",
+		"SAVEPOINT sp1",
+		"RELEASE SAVEPOINT sp1",
+	}
+
+	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
+		for _, sql := range control {
+			t.Run(string(env)+"/"+sql, func(t *testing.T) {
+				got := decide(t, sql, policy(env))
+				if got.Verdict != Deny {
+					t.Errorf("Evaluate(%q) verdict = %v (%s), want Deny", sql, got.Verdict, got.Reason)
+				}
+				if !strings.Contains(got.Reason, "connection") {
+					t.Errorf("reason = %q, want it to explain that the connection is not held", got.Reason)
+				}
+			})
+		}
+	}
+}
+
+// The same trap, one class wider: "SET SESSION sql_mode = ..." is accepted by
+// the server and thrown away with the connection, so the next statement runs
+// under the old mode while the user believes they changed it.
+func TestSessionStateIsRefusedRatherThanSilentlyDiscarded(t *testing.T) {
+	session := []string{
+		"SET autocommit = 0",
+		"SET SESSION sql_mode = 'STRICT_ALL_TABLES'",
+		"SET @x = 1",
+		"LOCK TABLES t WRITE",
+		"UNLOCK TABLES",
+	}
+
+	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
+		for _, sql := range session {
+			t.Run(string(env)+"/"+sql, func(t *testing.T) {
+				if got := decide(t, sql, policy(env)); got.Verdict != Deny {
+					t.Errorf("Evaluate(%q) verdict = %v (%s), want Deny", sql, got.Verdict, got.Reason)
+				}
+			})
+		}
+	}
+}
+
+// USE is refused for the same reason, but it is the one session statement
+// with somewhere else to go, so its refusal has to say so rather than leaving
+// the user to guess that the schema picker exists.
+func TestUseIsRefusedAndPointsAtTheSchemaPicker(t *testing.T) {
+	got := decide(t, "USE app_db", policy(config.EnvDev))
+
+	if got.Verdict != Deny {
+		t.Fatalf("verdict = %v (%s), want Deny", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "schema") {
+		t.Errorf("reason = %q, want it to send the user to the schema picker", got.Reason)
 	}
 }
 
@@ -54,8 +119,8 @@ func TestProductionWritesAreDeniedUntilWritesAreEnabled(t *testing.T) {
 			if locked.Verdict != Deny {
 				t.Errorf("with writes locked: verdict = %v, want Deny", locked.Verdict)
 			}
-			if !strings.Contains(locked.Reason, ":write") {
-				t.Errorf("reason = %q, want it to mention the :write command", locked.Reason)
+			if !locked.Unlockable {
+				t.Errorf("Unlockable = false; the caller has no way to offer the way past")
 			}
 
 			p := policy(config.EnvProd)
@@ -63,6 +128,36 @@ func TestProductionWritesAreDeniedUntilWritesAreEnabled(t *testing.T) {
 			unlocked := Evaluate(sqlparse.Parse(sql), p)
 			if unlocked.Verdict != Confirm {
 				t.Errorf("with writes enabled: verdict = %v, want Confirm", unlocked.Verdict)
+			}
+		})
+	}
+}
+
+// Unlockable is what the dialog reads to decide whether to offer a way past,
+// so a refusal that the unlock would not actually lift must never carry it.
+// Offering an escape hatch that does nothing is how a refusal stops being
+// believed.
+func TestRefusalsTheUnlockCannotLiftAreNotAdvertisedAsUnlockable(t *testing.T) {
+	p := policy(config.EnvProd)
+	p.WritesEnabled = true
+
+	for _, sql := range []string{
+		"DELETE FROM t",
+		"UPDATE t SET x = 1",
+		"DROP TABLE users",
+		"TRUNCATE TABLE users",
+		"ALTER TABLE users DROP COLUMN email",
+		"GRANT ALL ON *.* TO u",
+		"BEGIN",
+		"SET autocommit = 0",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			got := Evaluate(sqlparse.Parse(sql), p)
+			if got.Verdict != Deny {
+				t.Fatalf("verdict = %v, want Deny", got.Verdict)
+			}
+			if got.Unlockable {
+				t.Errorf("Unlockable = true, but enabling writes does not lift this refusal")
 			}
 		})
 	}

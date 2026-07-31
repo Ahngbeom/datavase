@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
@@ -22,16 +21,16 @@ const (
 	phaseFailed
 )
 
-// status is everything the bottom bar reports.
+// status is what just happened.
+//
+// Where the session is — the environment, the datasource, the schema, the
+// branch — lives on the top bar, and the open file on the editor's own header.
+// Splitting them is what stopped a schema name and a row count competing for
+// the same space, with the loser silently gone.
 //
 // It is a plain value with a pure render method, so what the user is told
 // about a production database can be tested without starting a terminal.
 type status struct {
-	dsName string
-	env    config.Env
-	// schema is the one an unqualified query will hit. It is shown at all
-	// times because nothing else on screen says which it is.
-	schema string
 	// vimMode and vimPending describe the modal keyboard, and are empty on
 	// the keyboards that do not have one.
 	vimMode       string
@@ -174,8 +173,8 @@ func dropOne(fields *[]field) bool {
 
 // fields lists what the bar would show at unlimited width.
 //
-// The ranks encode a judgement: an elapsed time is a nicety, the environment
-// badge and the warnings about an incomplete result are not.
+// The ranks encode a judgement: an elapsed time is a nicety, and the warnings
+// about an incomplete result are not.
 func (s status) fields() []field {
 	add := func(list []field, text string, expendable bool, rank int) []field {
 		return append(list, field{
@@ -186,12 +185,10 @@ func (s status) fields() []field {
 		})
 	}
 
-	// Never dropped.
-	out := add(nil, envBadge(s.env), false, 0)
-
-	// The mode comes second, before anything that can be dropped: on a modal
+	// The mode comes first, before anything that can be dropped: on a modal
 	// keyboard it is what explains why an ordinary letter did nothing, so it
 	// has to survive both the dropping and the truncating.
+	var out []field
 	if s.vimMode != "" {
 		mode := s.vimMode
 		if s.vimPending != "" {
@@ -200,14 +197,6 @@ func (s status) fields() []field {
 		out = add(out, tag(colourNotice, mode), false, 0)
 	}
 
-	// The datasource is usually obvious from context; the schema is not.
-	out = add(out, result.EscapeTags(s.dsName), true, 20)
-	if s.schema != "" {
-		// "@schema" rather than the bare name: a datasource is often called
-		// the same thing as its main schema, and the two would be
-		// unreadable side by side.
-		out = add(out, "@"+result.EscapeTags(s.schema), true, 10)
-	}
 	if s.writesEnabled {
 		out = add(out, tag(colourNotice, "writes on"), false, 0)
 	}
@@ -217,7 +206,7 @@ func (s status) fields() []field {
 		out = add(out, tag(colourNotice, "running… ^C cancels"), false, 0)
 
 	case phaseDone:
-		out = add(out, fmt.Sprintf("%d rows", s.rows), true, 25)
+		out = add(out, plural(s.rows, "row"), true, 25)
 		out = add(out, formatElapsed(s.elapsed), true, 30)
 		if s.limitInjected > 0 {
 			// A quietly added LIMIT makes a partial result look complete.
@@ -229,12 +218,16 @@ func (s status) fields() []field {
 
 	case phaseFailed:
 		if s.err != nil {
-			out = add(out, tag(colourError, oneLine(s.err.Error())), false, 0)
+			out = add(out, tag(colourDanger, oneLine(s.err.Error())), false, 0)
 		}
 	}
 
 	if s.message != "" {
-		out = add(out, result.EscapeTags(oneLine(s.message)), true, 15)
+		// Cut rather than dropped. A message is the whole of what this line
+		// says when nothing is running, and shedding the field left the bar
+		// blank on a narrow terminal — half a sentence beats none. It is last,
+		// so truncation takes it and leaves the warnings above intact.
+		out = add(out, result.EscapeTags(oneLine(s.message)), false, 0)
 	}
 	return out
 }
@@ -262,19 +255,6 @@ func visibleCost(s string) int {
 	return runewidth.StringWidth(b.String())
 }
 
-// envBadge renders the environment label. Production is red wherever it
-// appears, because it is the cue that has to survive being glanced at.
-func envBadge(env config.Env) string {
-	switch env {
-	case config.EnvProd:
-		return tag(colourEnvProd, " "+string(env)+" ")
-	case config.EnvStage:
-		return tag(colourEnvStage, " "+string(env)+" ")
-	default:
-		return tag(colourEnvDev, " "+string(env)+" ")
-	}
-}
-
 // tag wraps text in a tview colour tag. The text is escaped first: server
 // messages and datasource names can contain "[", which tview would read as
 // the start of a tag and swallow.
@@ -286,6 +266,15 @@ func tag(colour fmt.Stringer, text string) string {
 // contract, and a driver error with newlines would push the layout apart.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(strings.ReplaceAll(s, "\n", " ")), " ")
+}
+
+// plural counts a thing without saying "1 rows", which reads as a bug in the
+// counter rather than as a result of one.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // formatElapsed favours the unit that keeps the number readable.

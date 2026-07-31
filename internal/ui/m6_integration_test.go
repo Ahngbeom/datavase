@@ -24,7 +24,7 @@ func TestRunningAStatementIsRecorded(t *testing.T) {
 	h.typeSQL("SELECT 4242 AS marker")
 
 	h.do(keymap.ActionRun)
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Fatalf("the statement never finished:\n%s", h.text())
 	}
 
@@ -56,7 +56,7 @@ func TestHistorySearchOpensAndFilters(t *testing.T) {
 		}
 	}
 
-	h.do(keymap.ActionFind)
+	h.do(keymap.ActionSearchHistory)
 
 	got := h.text()
 	if !strings.Contains(got, "alpha") || !strings.Contains(got, "beta") {
@@ -80,7 +80,7 @@ func TestChoosingAHistoryEntryFillsTheEditor(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	h.do(keymap.ActionFind)
+	h.do(keymap.ActionSearchHistory)
 	h.press(tcell.KeyDown)  // move focus into the list
 	h.press(tcell.KeyEnter) // accept
 
@@ -95,10 +95,27 @@ func TestCommandPaletteOpens(t *testing.T) {
 	h.do(keymap.ActionCommandPalette)
 
 	got := h.text()
-	for _, want := range []string{"export csv", "history", "quit"} {
+	for _, want := range []string{"export csv", "history"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the palette does not offer %q:\n%s", want, got)
 		}
+	}
+}
+
+// There are more commands than a modest terminal has rows, which is what the
+// filter is for. A command past the fold has to be reachable by typing, or the
+// palette stops being the route to everything it is supposed to be.
+func TestTheFilterReachesACommandPastTheFold(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.do(keymap.ActionCommandPalette)
+	if strings.Contains(h.text(), "leave datavase") {
+		t.Skip("the terminal is tall enough to show every command; nothing to prove")
+	}
+
+	h.typeInto("quit")
+	if !h.waitForScreen("leave datavase") {
+		t.Errorf("filtering did not reach the last command:\n%s", h.text())
 	}
 }
 
@@ -143,7 +160,7 @@ func TestExportWritesACSVFile(t *testing.T) {
 	h.do(keymap.ActionRun)
 	// Wait on the status bar, not on a value: "alice" is also sitting in the
 	// editor, so matching it would not mean the result had arrived.
-	if !h.waitForScreen("1 rows") {
+	if !h.waitForScreen("1 row") {
 		t.Fatalf("the statement never finished:\n%s", h.text())
 	}
 

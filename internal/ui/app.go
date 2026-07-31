@@ -20,9 +20,11 @@ import (
 	"github.com/Ahngbeom/datavase/internal/guard"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
+	"github.com/Ahngbeom/datavase/internal/worktree"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -36,6 +38,7 @@ type App struct {
 	tree      *tview.TreeView
 	editor    *tview.TextArea
 	grid      *tview.Table
+	topBar    *topBar
 	statusBar *statusBar
 
 	// vim is the modal input state. It exists whatever the preset is, so
@@ -57,8 +60,14 @@ type App struct {
 	keys *keymap.Map
 
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
-	// around when it is toggled.
+	// around when it is toggled. sidebarRule is the hairline beside it.
+	//
+	// It starts false. This application already chose overlay finders as its
+	// way around — a table, a schema and a file each have a key that opens a
+	// searchable list — and a permanent tree on top of them is a third of the
+	// screen spent saying what those already answer. It is one key away.
 	sidebarVisible bool
+	sidebarRule    *rule
 	body           *tview.Flex
 	rightPane      tview.Primitive
 
@@ -75,9 +84,11 @@ type App struct {
 	selectionAnchor int
 	selectionCaret  int
 
-	// schemaTabs and resultTabs are the two tabbed panes.
-	schemaTabs *tabbed
-	resultTabs *tabbed
+	// The three regions of the body. Each owns a one-line header; none draws
+	// a box.
+	editorRegion *tabbed
+	schemaTabs   *tabbed
+	resultTabs   *tabbed
 
 	// The tables tab, and the schema it lists. selectedSchema follows the
 	// tree; empty means the datasource's configured default.
@@ -98,9 +109,64 @@ type App struct {
 	cache      *catalog.Cache
 	history    *history.Store
 
+	// wt is the attached directory of SQL work, nil until one is attached.
+	// wtSnap is the last listing taken from it, held so the finder can filter
+	// without asking git on every keystroke.
+	wt     *worktree.Worktree
+	wtSnap worktree.Snapshot
+	// openFile is the file the editor was loaded from, if any.
+	openFile openFile
+	// recentDirs are the directories attached before, offered by the attach
+	// dialog before anything has been typed. Nil when the state directory
+	// could not be read.
+	recentDirs *recent.List
+	// search is the last pattern looked for and where, so that n and N have
+	// something to repeat once the prompt has closed.
+	search searchState
+
+	// openGitLab builds a reader on demand; gitlabHost is the configured
+	// instance, empty when an attached checkout is to decide.
+	openGitLab func(ctx context.Context, host string) (GitLabSource, error)
+	gitlabHost string
+
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
+
+	// batch is a "run everything" in flight, nil otherwise. Like running, it
+	// is touched only from the UI goroutine: each statement resumes the batch
+	// from the same callback that reports the last one finished.
+	batch *batch
+}
+
+// batch is the state of a Run-everything.
+//
+// It is a queue rather than a loop because every step can stop to ask
+// something: the guard may refuse, or want a phrase typed, and both answers
+// arrive from a dialog long after the statement that raised them returned.
+type batch struct {
+	stmts []sqlparse.Statement
+	// next is the index of the statement to consider next, so it doubles as
+	// the human number of the statement being considered once incremented.
+	next int
+	// ran counts the statements that reached the server and finished without
+	// an error.
+	ran int
+}
+
+// batchSummary is what the status bar says when a Run-everything ends.
+//
+// It always reports how many of the statements actually ran, including when
+// everything succeeded. A batch that stopped in the middle has left the
+// database in a state neither the buffer nor the editor shows, and with no
+// transaction to unwind it the only remedy is knowing exactly where it
+// stopped — so the count is not an error-only detail.
+func batchSummary(total, ran int, why string) string {
+	summary := fmt.Sprintf("%s · %d ran", plural(total, "statement"), ran)
+	if why != "" {
+		summary += " · " + why
+	}
+	return summary
 }
 
 // Deps are the optional collaborators an interface can be given.
@@ -112,6 +178,21 @@ type Deps struct {
 	Keys    *keymap.Map
 	Cache   *catalog.Cache
 	History *history.Store
+	// Worktree is the directory named by --dir, if any. Nil means the session
+	// starts unattached, which is the ordinary case.
+	Worktree *worktree.Worktree
+	// Recent is the list of directories attached before. Nil costs the
+	// shortcut and nothing else.
+	Recent *recent.List
+	// GitLab opens a reader for an instance. It is called the first time the
+	// GitLab command is used, never at startup: borrowing the credential from
+	// glab costs half a second of keyring access, and a session that never
+	// touches GitLab should not pay it.
+	GitLab func(ctx context.Context, host string) (GitLabSource, error)
+	// GitLabHost is the configured instance, empty when none is named. Empty
+	// means an attached checkout's origin decides, so a checkout is all the
+	// configuration there is.
+	GitLabHost string
 }
 
 // New builds the interface for an open connection.
@@ -130,15 +211,13 @@ func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
 		keys:            keys,
 		cache:           deps.Cache,
 		history:         deps.History,
+		wt:              deps.Worktree,
+		recentDirs:      deps.Recent,
+		openGitLab:      deps.GitLab,
+		gitlabHost:      deps.GitLabHost,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
-		sidebarVisible:  true,
 		selectionAnchor: noAnchor,
-		status: status{
-			dsName: ds.Name,
-			env:    ds.Env,
-			schema: ds.Database,
-		},
 	}
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
@@ -151,6 +230,9 @@ func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
 	a.bindEditor()
 	a.captureScreen()
 	a.loadSchemas()
+	// A worktree given on the command line is listed before the first draw, so
+	// the status bar names the branch rather than filling in a moment later.
+	a.rescan()
 
 	return a
 }
@@ -171,7 +253,10 @@ func (a *App) captureScreen() {
 // nothing happen is the worst way to learn it; the status bar is already
 // there and costs nothing to read.
 func (a *App) openingMessage(serverVersion string) string {
-	msg := fmt.Sprintf("server %s · %s for keys", serverVersion, a.helpKeyLabel())
+	// The schema tree is not on screen, so this is where anyone learns it
+	// exists at all.
+	msg := fmt.Sprintf("server %s · %s for keys · %s for the schema tree",
+		serverVersion, a.helpKeyLabel(), a.keyLabel(keymap.ActionToggleSidebar))
 
 	// A modal editor that nobody was told about is one where the first
 	// keystroke does nothing, which reads as a broken application rather
@@ -192,6 +277,22 @@ func (a *App) helpKeyLabel() string {
 	bindings := a.keys.DisplayBindings(keymap.ActionHelp)
 	if len(bindings) == 0 {
 		return "F1"
+	}
+	return bindings[0].Label(onMac)
+}
+
+// keyLabel names an action's key as this terminal can actually deliver it.
+//
+// On a terminal without the extended keyboard protocol the primary binding is
+// one the user cannot press, so the function-key fallback is named instead —
+// advice nobody can follow is worse than none.
+func (a *App) keyLabel(action keymap.Action) string {
+	bindings := a.keys.DisplayBindings(action)
+	if len(bindings) == 0 {
+		return action.String()
+	}
+	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
+		return bindings[len(bindings)-1].Label(onMac)
 	}
 	return bindings[0].Label(onMac)
 }
@@ -237,9 +338,12 @@ func (a *App) Stop() { a.app.Stop() }
 func (a *App) buildWidgets() {
 	ds := a.conn.DataSource()
 
+	// The root is the tree's one heading. It no longer carries the
+	// environment's colour: the spine does that now, and saying it twice is
+	// what made the palette run out of meanings.
 	a.tree = tview.NewTreeView().
 		SetRoot(tview.NewTreeNode(rootLabel(ds, sidebarWidth-4)).
-			SetColor(envColour(ds.Env)))
+			SetColor(colourAccent))
 	// Explicit tree lines: indentation alone reads as a weak hierarchy, and
 	// a weak hierarchy is what made schemas look nested under the server.
 	a.tree.SetGraphics(true)
@@ -248,25 +352,66 @@ func (a *App) buildWidgets() {
 	a.editor = tview.NewTextArea().
 		SetPlaceholder(a.editorPlaceholder()).
 		SetWrap(false)
-	a.editor.SetBorder(true).SetTitle(" editor ")
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.grid = tview.NewTable().
 		SetContent(newGridContent(a.buf)).
 		SetFixed(1, 0).
 		SetSelectable(true, true)
+	a.grid.SetInputCapture(a.gridKey)
 
-	// Both panes are tabbed, and share one component so they cannot drift
-	// apart in behaviour.
-	a.schemaTabs = newTabbed(" schema ")
+	// Every region shares one component so they cannot drift apart in
+	// behaviour, including the editor — which has no tabs, only a header
+	// saying which file it holds.
+	a.editorRegion = newTabbed().watch(a.editorDetail)
+	a.editorRegion.only(a.editor)
+
+	a.schemaTabs = newTabbed()
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
 
-	a.resultTabs = newTabbed(" results ")
+	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 
+	a.topBar = newTopBar(a.currentTopBar)
 	a.statusBar = newStatusBar(a.currentStatus)
+}
+
+// editorDetail names the file the buffer came from, and whether it has
+// diverged from it. Empty for a scratch buffer, which has no file to name.
+func (a *App) editorDetail() string {
+	if !a.openFile.isOpen() {
+		return ""
+	}
+	if a.fileDirty() {
+		return a.openFile.rel + " *"
+	}
+	return a.openFile.rel
+}
+
+// resultDetail says what the empty results tab would otherwise not say.
+//
+// With no box around it, an empty region is simply blank — which reads as a
+// gap in the layout rather than as a pane waiting for a statement.
+func (a *App) resultDetail() string {
+	if a.resultTabs.current() == tabResults && a.buf.ColumnCount() == 0 {
+		return "run a statement to see rows here"
+	}
+	return ""
+}
+
+// currentTopBar is where the session is, read at draw time so the schema and
+// the branch cannot lag behind the thing that changed them.
+func (a *App) currentTopBar() topBarState {
+	ds := a.conn.DataSource()
+	return topBarState{
+		env:     ds.Env,
+		dsName:  ds.Name,
+		schema:  a.currentSchema(),
+		branch:  a.worktreeLabel(),
+		helpKey: a.helpKeyLabel(),
+	}
 }
 
 // sidebarWidth is the schema pane's fixed width. Fixed rather than
@@ -275,15 +420,29 @@ const sidebarWidth = 34
 
 func (a *App) buildLayout() {
 	a.rightPane = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(a.editor, 0, 2, true).
+		AddItem(a.editorRegion, 0, 2, true).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.resultTabs, 0, 3, false)
+
+	// Held rather than built per toggle, so showing the sidebar does not leave
+	// a discarded primitive behind on every press.
+	a.sidebarRule = newRule(true)
 
 	a.body = tview.NewFlex()
 	a.layoutBody()
 
-	root := tview.NewFlex().SetDirection(tview.FlexRow).
+	// The top line says where the session is, the bottom what just happened.
+	inner := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(a.topBar, 1, 0, false).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.body, 0, 1, true).
+		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.statusBar, 1, 0, false)
+
+	// The environment runs down the outside of everything.
+	root := tview.NewFlex().
+		AddItem(newSpine(a.conn.DataSource().Env), 1, 0, false).
+		AddItem(inner, 0, 1, true)
 
 	a.pages = tview.NewPages().AddPage(pageMain, root, true, true)
 }
@@ -294,17 +453,18 @@ func (a *App) layoutBody() {
 	a.body.Clear()
 	if a.sidebarVisible {
 		a.body.AddItem(a.schemaTabs, sidebarWidth, 0, false)
+		a.body.AddItem(a.sidebarRule, 1, 0, false)
 	}
 	a.body.AddItem(a.rightPane, 0, 1, true)
 }
 
-// setSchema points completion, the tables tab and the status bar at a schema.
+// setSchema points completion and the tables tab at a schema.
 //
-// One place to change it, so the three can never disagree about which schema
-// an unqualified query will reach.
+// One place to change it, so the two can never disagree about which schema an
+// unqualified query will reach. The top bar is not told: it reads
+// currentSchema() when it draws, so it cannot be left behind.
 func (a *App) setSchema(schema string) {
 	a.selectedSchema = schema
-	a.status.schema = schema
 
 	if a.completion != nil {
 		a.completion.SetSchema(schema)
@@ -349,7 +509,9 @@ const (
 	tabTree    = "tree"
 	tabTables  = "tables"
 	tabResults = "results"
-	tabDDL     = "DDL"
+	// Lower case like the others. A single shouted name in a strip of quiet
+	// ones reads as an error rather than as an acronym.
+	tabDDL = "ddl"
 )
 
 const (
@@ -361,6 +523,12 @@ const (
 	pageHistory   = "history"
 	pageGoTo      = "goto"
 	pageUseSchema = "useschema"
+	pageFiles     = "files"
+	pageAttach    = "attach"
+	pageSearch    = "search"
+
+	pageGitLab      = "gitlab"
+	pageGitLabFiles = "gitlabfiles"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than
@@ -449,9 +617,19 @@ func (a *App) dispatch(action keymap.Action) bool {
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
+		a.showTextSearch(false)
+	case keymap.ActionFindNext:
+		a.searchAgain(false)
+	case keymap.ActionFindPrev:
+		a.searchAgain(true)
+	case keymap.ActionSearchHistory:
 		a.showHistory()
 	case keymap.ActionGoToTable:
 		a.showGoToTable()
+	case keymap.ActionFindFile:
+		a.showFindFile()
+	case keymap.ActionSaveFile:
+		a.saveFile()
 
 	case keymap.ActionHelp:
 		a.showHelp()
@@ -484,7 +662,23 @@ func (a *App) cycleFocus(delta int) {
 	a.app.SetFocus(order[0])
 }
 
+// quit leaves, asking first when the buffer holds unsaved file changes.
+//
+// The confirmation only appears for an edited file, not for a scratch buffer:
+// text typed into datavase has never been anywhere else, and prompting about
+// every session's leftovers is how a prompt stops being read.
 func (a *App) quit() {
+	if a.fileDirty() {
+		a.confirmDiscard(
+			fmt.Sprintf("%s has unsaved changes.\n\nQuit and lose them?", a.openFile.rel),
+			"Quit",
+			a.forceQuit)
+		return
+	}
+	a.forceQuit()
+}
+
+func (a *App) forceQuit() {
 	if a.running != nil {
 		// Leaving a statement running server-side after the client exits
 		// would keep burning resources with nobody watching.
@@ -524,23 +718,100 @@ func (a *App) runStatement(stmt sqlparse.Statement) {
 	}
 }
 
-// executeAll runs every statement in the editor, stopping at the first
-// refusal so a rejected statement cannot be skipped over silently.
+// executeAll runs every statement in the editor, in order, stopping at the
+// first refusal so a rejected statement cannot be skipped over silently.
 func (a *App) executeAll() {
-	stmts := sqlparse.Split(a.editor.GetText())
-	if len(stmts) == 0 {
-		a.notice("nothing to run")
+	if a.running != nil {
+		a.notice("a statement is already running; ^C cancels it")
 		return
 	}
-	if len(stmts) == 1 {
+
+	stmts := sqlparse.Split(a.editor.GetText())
+	switch len(stmts) {
+	case 0:
+		a.notice("nothing to run")
+		return
+	case 1:
+		// One statement is not a batch. Going through the queue would only
+		// add a summary line saying "1 statement · 1 ran" to something the
+		// row count already describes.
 		a.runStatement(stmts[0])
 		return
 	}
 
-	// Running a batch means confirming each guarded statement in turn, which
-	// needs a queue the dialogs can walk. Until that exists, be explicit
-	// rather than running only part of the buffer.
-	a.notice(fmt.Sprintf("running all %d statements is not built yet — place the cursor on one and run it", len(stmts)))
+	a.batch = &batch{stmts: stmts}
+	a.advanceBatch()
+}
+
+// advanceBatch puts the next statement of a Run-everything through the guard.
+//
+// Each verdict either continues the queue or ends it. Nothing is skipped: a
+// refusal in the middle stops the rest, because the statements after it were
+// written to follow the one that did not run.
+func (a *App) advanceBatch() {
+	b := a.batch
+	if b == nil {
+		return
+	}
+	if b.next >= len(b.stmts) {
+		a.finishBatch("")
+		return
+	}
+
+	stmt := b.stmts[b.next]
+	b.next++
+
+	decision := guard.Evaluate(stmt, a.policy())
+	switch decision.Verdict {
+	case guard.Deny:
+		a.finishBatch(fmt.Sprintf("refused at statement %d", b.next))
+		a.refuse(decision)
+	case guard.Confirm:
+		a.confirm(stmt, decision)
+	default:
+		a.start(stmt, decision)
+	}
+}
+
+// resumeBatch continues the queue after a statement has finished, or ends it
+// if that statement did not.
+//
+// A failure stops the rest. The statements in a file are written to run in
+// order, so continuing past a broken one applies the later half of a change
+// to a database that never received the first.
+func (a *App) resumeBatch(err error) {
+	b := a.batch
+	if b == nil {
+		return
+	}
+
+	switch {
+	case err == nil:
+		b.ran++
+		a.advanceBatch()
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), db.IsInterrupted(err):
+		a.finishBatch(fmt.Sprintf("cancelled at statement %d", b.next))
+	default:
+		a.finishBatch(fmt.Sprintf("failed at statement %d", b.next))
+	}
+}
+
+// abandonBatch ends the queue because the user declined a confirmation.
+func (a *App) abandonBatch() {
+	if a.batch == nil {
+		return
+	}
+	a.finishBatch(fmt.Sprintf("cancelled at statement %d", a.batch.next))
+}
+
+// finishBatch ends a Run-everything and reports how far it got.
+func (a *App) finishBatch(why string) {
+	b := a.batch
+	if b == nil {
+		return
+	}
+	a.batch = nil
+	a.notice(batchSummary(len(b.stmts), b.ran, why))
 }
 
 // copyOrCancel resolves Ctrl+C, whose meaning depends on what is on screen.
@@ -657,6 +928,11 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 			a.status.phase = phaseFailed
 			a.status.err = err
 		}
+
+		// The queue is resumed from here rather than from start(), because
+		// this is the first moment the next statement may be sent: MySQL will
+		// not accept one until this result set has been read to the end.
+		a.resumeBatch(err)
 	})
 	stream.Close()
 }
@@ -695,17 +971,6 @@ func (a *App) currentStatus() status {
 		s.vimPending = a.vim.Pending()
 	}
 	return s
-}
-
-func envColour(env config.Env) tcell.Color {
-	switch env {
-	case config.EnvProd:
-		return colourEnvProd
-	case config.EnvStage:
-		return colourEnvStage
-	default:
-		return colourEnvDev
-	}
 }
 
 // record adds a finished statement to the query history.

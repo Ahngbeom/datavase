@@ -10,30 +10,86 @@ import (
 
 	"github.com/Ahngbeom/datavase/internal/export"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/match"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/vim"
+)
+
+// paletteNameColumn is the width the command names are padded to, so the
+// summaries line up in a second column on the same row.
+const paletteNameColumn = 17
+
+// The two commands the guard's refusal has to be able to name. They are
+// constants so the message and the palette entry cannot drift apart — a test
+// checks the hint names a command the palette really offers.
+const (
+	cmdEnableWrites  = "write"
+	cmdDisableWrites = "readonly"
 )
 
 // command is one entry of the command palette.
 type command struct {
 	name    string
 	summary string
-	run     func(a *App)
+
+	// covers names the action this command performs, where there is one.
+	//
+	// It is what lets a test prove that no action is reachable only through a
+	// chord some other application can claim — which is not hypothetical: a
+	// terminal that keeps ⌘ for its own menus left the schema tree with no way
+	// in at all, since ⌘B and Ctrl+B were the only two ways to ask for it.
+	covers keymap.Action
+
+	run func(a *App)
 }
 
-// commands are what the palette offers. Keeping them in one list means the
-// palette and any future ":" prompt cannot drift apart.
-var commands = buildCommands()
+// paletteExempt lists the actions the palette deliberately does not offer.
+//
+// The rule the test enforces is that every action is reachable without a
+// chord: bound to a plain key, or named here in the palette. These are the
+// exceptions, and each needs a reason rather than an omission.
+var paletteExempt = map[keymap.Action]bool{
+	// Moving the caret by a word. Opening a palette and typing a command to go
+	// one word left is not a route anyone would take — these are keystrokes or
+	// they are nothing.
+	//
+	// Only the word motions are here: start and end of line are Home and End,
+	// which no chord is involved in and nothing upstream claims.
+	keymap.ActionWordLeft:        true,
+	keymap.ActionWordRight:       true,
+	keymap.ActionSelectWordLeft:  true,
+	keymap.ActionSelectWordRight: true,
 
-func buildCommands() []command {
+	// The terminal's own copy and paste are what claimed these keys in the
+	// first place, and they do the same job. A paste that goes through a
+	// palette is worse than no paste at all.
+	keymap.ActionCopyOrCancel: true,
+	keymap.ActionCopy:         true,
+	keymap.ActionCut:          true,
+	keymap.ActionPaste:        true,
+
+	// Faster ways to do what plain Backspace already does. Losing the shortcut
+	// costs keystrokes, not the ability.
+	keymap.ActionDeleteWordLeft:    true,
+	keymap.ActionDeleteToLineStart: true,
+}
+
+// paletteCommands are what the palette offers. Keeping them in one list means
+// the palette, the key reference and any future ":" prompt cannot drift apart.
+//
+// It is a function rather than a package variable because the list names
+// showHelp, and the help screen now lists the commands: as a variable that is
+// an initialisation cycle the compiler refuses, even though nothing recurses
+// at run time.
+func paletteCommands() []command {
 	cmds := []command{
 		{
-			name:    "write",
+			name:    cmdEnableWrites,
 			summary: "unlock writes to this production datasource for the session",
 			run:     (*App).enableWrites,
 		},
 		{
-			name:    "readonly",
+			name:    cmdDisableWrites,
 			summary: "lock writes again",
 			run:     (*App).disableWrites,
 		},
@@ -48,28 +104,131 @@ func buildCommands() []command {
 			run:     func(a *App) { a.exportResult(formatJSON) },
 		},
 		{
+			name:    "cancel",
+			summary: "stop the running statement",
+			covers:  keymap.ActionCancel,
+			run:     (*App).cancelRunning,
+		},
+		{
+			name:    "find in text",
+			summary: "search the editor, or the results when they have focus",
+			covers:  keymap.ActionFind,
+			run:     func(a *App) { a.showTextSearch(false) },
+		},
+		{
+			name:    "find next",
+			summary: "go to the next match of the last search",
+			covers:  keymap.ActionFindNext,
+			run:     func(a *App) { a.searchAgain(false) },
+		},
+		{
+			name:    "find previous",
+			summary: "go to the previous match of the last search",
+			covers:  keymap.ActionFindPrev,
+			run:     func(a *App) { a.searchAgain(true) },
+		},
+		{
 			name:    "history",
 			summary: "search previously run statements",
+			covers:  keymap.ActionSearchHistory,
 			run:     (*App).showHistory,
+		},
+		{
+			name:    "go to table",
+			summary: "find a table anywhere on the server by name",
+			covers:  keymap.ActionGoToTable,
+			run:     (*App).showGoToTable,
+		},
+		{
+			name:    "schema tree",
+			summary: "show or hide the schema pane",
+			covers:  keymap.ActionToggleSidebar,
+			run:     (*App).toggleSidebar,
+		},
+		{
+			name:    "complete",
+			summary: "complete the word at the cursor",
+			covers:  keymap.ActionComplete,
+			run:     (*App).showCompletion,
+		},
+		{
+			name:    "attach directory",
+			summary: "point this session at a worktree of SQL files",
+			run:     (*App).showAttachDirectory,
+		},
+		{
+			name:    "open from gitlab",
+			summary: "read SQL out of an open merge request or a snippet",
+			run:     (*App).showGitLab,
+		},
+		{
+			name:    "detach directory",
+			summary: "forget the attached worktree",
+			run:     (*App).detach,
+		},
+		{
+			name:    "open file",
+			summary: "open a SQL file from the attached worktree",
+			covers:  keymap.ActionFindFile,
+			run:     (*App).showFindFile,
+		},
+		{
+			name:    "save file",
+			summary: "write the editor back to the file it came from",
+			covers:  keymap.ActionSaveFile,
+			run:     (*App).saveFile,
 		},
 		{
 			name:    "use schema",
 			summary: "choose the schema unqualified names resolve against",
+			covers:  keymap.ActionUseSchema,
 			run:     (*App).showUseSchema,
 		},
 		{
 			name:    "refresh schema",
 			summary: "reload the schema tree and completion cache",
+			covers:  keymap.ActionRefreshSchema,
 			run:     (*App).loadSchemas,
 		},
+
+		// Editing, for the keyboards where these arrive as ⌘ chords and never
+		// reach us. They go through the editor's own dispatcher, so the palette
+		// cannot drift from what the keys do.
+		{
+			name:    "select all",
+			summary: "select the whole editor buffer",
+			covers:  keymap.ActionSelectAll,
+			run:     func(a *App) { a.editorAction(keymap.ActionSelectAll) },
+		},
+		{
+			name:    "comment",
+			summary: "comment or uncomment the selected lines",
+			covers:  keymap.ActionToggleComment,
+			run:     func(a *App) { a.editorAction(keymap.ActionToggleComment) },
+		},
+		{
+			name:    "duplicate line",
+			summary: "duplicate the current line",
+			covers:  keymap.ActionDuplicateLine,
+			run:     func(a *App) { a.editorAction(keymap.ActionDuplicateLine) },
+		},
+		{
+			name:    "delete line",
+			summary: "delete the current line",
+			covers:  keymap.ActionDeleteLine,
+			run:     func(a *App) { a.editorAction(keymap.ActionDeleteLine) },
+		},
+
 		{
 			name:    "help",
 			summary: "show the key reference",
+			covers:  keymap.ActionHelp,
 			run:     (*App).showHelp,
 		},
 		{
 			name:    "quit",
 			summary: "leave datavase",
+			covers:  keymap.ActionQuit,
 			run:     (*App).quit,
 		},
 	}
@@ -115,40 +274,65 @@ func (a *App) setPreset(p keymap.Preset) {
 // find is one you will not find.
 func (a *App) showCommandPalette() {
 	box := a.newSearchBox("command: ", " commands ", pagePalette, func(term string) []searchItem {
-		items := make([]searchItem, 0, len(commands))
+		cmds := paletteCommands()
+		rows := make([]ranked, 0, len(cmds))
 
-		for _, c := range commands {
+		for _, c := range cmds {
 			cmd := c
-			if !matchesCommand(cmd, term) {
+			tier, score, ok := rankCommand(cmd, term)
+			if !ok {
 				continue
 			}
-			items = append(items, searchItem{
-				primary:   cmd.name,
-				secondary: cmd.summary,
-				accept: func() {
-					a.closeSearchBox(pagePalette)
-					cmd.run(a)
+			rows = append(rows, ranked{
+				item: searchItem{
+					// Name and summary share one row so that every command fits
+					// on a modest terminal. A palette you have to scroll to find
+					// "quit" in is one where the keyboard was quicker.
+					primary: fmt.Sprintf("%-*s %s", paletteNameColumn, cmd.name, cmd.summary),
+					accept: func() {
+						a.closeSearchBox(pagePalette)
+						cmd.run(a)
+					},
 				},
+				tier:  tier,
+				score: score,
 			})
 		}
-		if len(items) == 0 {
+		if len(rows) == 0 {
 			return []searchItem{message("no matching command", "press Escape to close")}
 		}
-		return items
+		return sortRanked(rows)
 	})
 
-	a.pages.AddPage(pagePalette, centred(box, 66, 20), true, true)
+	// The height is a maximum — centred shrinks it to whatever the terminal
+	// has — so asking for room enough for every command costs nothing.
+	a.pages.AddPage(pagePalette, centred(box, 80, 40), true, true)
 }
 
-// matchesCommand filters on the name and the summary, so "keyboard" finds the
-// preset commands even though none of them says the word.
-func matchesCommand(c command, term string) bool {
-	term = strings.ToLower(strings.TrimSpace(term))
+// Match tiers for the palette, highest first.
+const (
+	// tierName is a hit on what the command is called.
+	tierName = 1
+	// tierSummary is a hit only in the description, which is what lets
+	// "keyboard" find the preset commands even though none of them says the
+	// word. It never outranks a name: someone typing "quit" means the command
+	// called quit, not one that mentions quitting.
+	tierSummary = 0
+)
+
+// rankCommand scores a command against what has been typed.
+func rankCommand(c command, term string) (tier, score int, ok bool) {
+	term = strings.TrimSpace(term)
 	if term == "" {
-		return true
+		return tierName, 0, true
 	}
-	return strings.Contains(strings.ToLower(c.name), term) ||
-		strings.Contains(strings.ToLower(c.summary), term)
+	if score, ok := match.Fuzzy(term, c.name); ok {
+		return tierName, score, true
+	}
+	if score, ok := match.Fuzzy(term, c.summary); ok {
+		return tierSummary, score, true
+	}
+	return 0, 0, false
 }
 
 // enableWrites unlocks writes against production for this session only.

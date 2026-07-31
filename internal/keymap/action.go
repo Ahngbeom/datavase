@@ -53,8 +53,15 @@ const (
 
 	ActionComplete
 	ActionFind
+	ActionFindNext
+	ActionFindPrev
+	ActionSearchHistory
 	ActionCommandPalette
 	ActionGoToTable
+	// ActionFindFile opens the attached worktree's SQL files.
+	ActionFindFile
+	// ActionSaveFile writes the editor back to the file it was loaded from.
+	ActionSaveFile
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
 	// ActionInspect shows the definition of the selected table.
@@ -95,8 +102,13 @@ var actionNames = map[Action]string{
 	ActionUseSchema:         "use-schema",
 	ActionComplete:          "complete",
 	ActionFind:              "find",
+	ActionFindNext:          "find-next",
+	ActionFindPrev:          "find-previous",
+	ActionSearchHistory:     "search-history",
 	ActionCommandPalette:    "command-palette",
 	ActionGoToTable:         "go-to-table",
+	ActionFindFile:          "find-file",
+	ActionSaveFile:          "save-file",
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionHelp:              "help",
@@ -132,9 +144,14 @@ var descriptions = map[Action]string{
 	ActionRefreshSchema:     "reload the schema tree",
 	ActionUseSchema:         "choose the schema unqualified names resolve against",
 	ActionComplete:          "complete the word at the cursor",
-	ActionFind:              "find in the editor",
+	ActionFind:              "find in the editor or results",
+	ActionFindNext:          "go to the next match",
+	ActionFindPrev:          "go to the previous match",
+	ActionSearchHistory:     "search the query history",
 	ActionCommandPalette:    "open the command palette",
 	ActionGoToTable:         "jump to a table",
+	ActionFindFile:          "open a SQL file from the attached worktree",
+	ActionSaveFile:          "save the open file",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected table's definition",
 	ActionHelp:              "show this help",
@@ -157,7 +174,9 @@ var order = []Action{
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
-	ActionFind, ActionCommandPalette, ActionGoToTable, ActionInspect,
+	ActionSaveFile,
+	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
+	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema,
 	ActionHelp, ActionQuit,

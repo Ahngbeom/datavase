@@ -220,7 +220,7 @@ func columnNode(schema string, c catalog.Column) *tview.TreeNode {
 		label += "  NOT NULL"
 	}
 
-	colour := colourDim
+	colour := colourMuted
 	if c.IsPrimaryKey {
 		colour = colourNotice
 	}

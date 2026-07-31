@@ -51,6 +51,13 @@ func (a *App) runVimCommand(cmd vim.Command) *tcell.EventKey {
 	case vim.KindPaste:
 		a.vimPut(cmd.At)
 
+	case vim.KindSearch:
+		a.showTextSearch(cmd.Backward)
+	case vim.KindSearchNext:
+		a.searchAgain(false)
+	case vim.KindSearchPrev:
+		a.searchAgain(true)
+
 	// TextArea keeps its own undo stack and exposes it only through its key
 	// handling, so u and Ctrl+R are delivered as the keys it recognises.
 	// Reimplementing undo here would mean a second, disagreeing history.

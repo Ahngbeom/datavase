@@ -64,6 +64,14 @@ type Decision struct {
 	TypeToConfirm string
 	// InjectLimit is the LIMIT to append, or zero to leave the SQL alone.
 	InjectLimit int
+	// Unlockable reports that the production write lock is the only thing in
+	// the way, so the caller may offer the way past it.
+	//
+	// It is a flag rather than a sentence because guard must not name a route
+	// through an interface it cannot see: the reason once read "unlock with
+	// :write", which was a command no preset had. Whoever draws the dialog
+	// knows what the keys are; this package does not.
+	Unlockable bool
 }
 
 // Evaluate applies p to stmt.
@@ -79,8 +87,11 @@ func Evaluate(stmt sqlparse.Statement, p Policy) Decision {
 	case sqlparse.StmtSelect:
 		return Decision{Verdict: Allow, InjectLimit: p.autoLimitFor(stmt)}
 
-	case sqlparse.StmtRead, sqlparse.StmtSession:
+	case sqlparse.StmtRead:
 		return Decision{Verdict: Allow}
+
+	case sqlparse.StmtTransaction, sqlparse.StmtSession:
+		return refuseUnheldState(stmt, kind)
 
 	case sqlparse.StmtUpdate, sqlparse.StmtDelete:
 		return evaluateRowWrite(stmt, kind, p, prod)
@@ -115,6 +126,43 @@ func Evaluate(stmt sqlparse.Statement, p Policy) Decision {
 			Verdict: Confirm,
 			Reason:  "this statement could not be classified",
 		}
+	}
+}
+
+// refuseUnheldState handles the statements whose whole effect lives on the
+// connection that ran them.
+//
+// Statements are run on a connection borrowed from the pool and handed back
+// when they finish, so none of this reaches the next statement: BEGIN opens a
+// transaction nothing will commit, SET SESSION is accepted and discarded, and
+// ROLLBACK reports success having undone nothing. Every one of them looks
+// like it worked, which is worse than being refused — an abandoned
+// transaction can also sit on the pooled connection holding locks.
+//
+// This is the fail-closed rule reaching a case that used to escape it: these
+// were classified and then allowed, so the tokenizer's understanding was the
+// very thing that let them through.
+func refuseUnheldState(stmt sqlparse.Statement, kind sqlparse.StmtKind) Decision {
+	// USE is the one that has somewhere else to go. Naming the schema picker
+	// matters more than explaining the connection pool, because the user
+	// wanted a schema rather than a session.
+	if stmt.Verb() == "USE" {
+		return Decision{
+			Verdict: Deny,
+			Reason: "USE would apply to this statement alone; choose the schema instead, " +
+				"and it travels with every statement",
+		}
+	}
+
+	what := "session state"
+	if kind == sqlparse.StmtTransaction {
+		what = "a transaction"
+	}
+	return Decision{
+		Verdict: Deny,
+		Reason: fmt.Sprintf(
+			"%s does not survive to the next statement: each one runs on its own connection from the pool",
+			what),
 	}
 }
 
@@ -160,8 +208,9 @@ func evaluateDestructive(kind sqlparse.StmtKind, prod bool) Decision {
 func gateWrite(p Policy, prod bool, reason string) Decision {
 	if prod && !p.WritesEnabled {
 		return Decision{
-			Verdict: Deny,
-			Reason:  reason + "; writes to production are locked (unlock with :write)",
+			Verdict:    Deny,
+			Reason:     reason + "; writes to production are locked",
+			Unlockable: true,
 		}
 	}
 	return Decision{Verdict: Confirm, Reason: reason}

@@ -166,6 +166,14 @@ func TestStatementKind(t *testing.T) {
 		{"EXPLAIN SELECT 1", StmtRead},
 		{"USE app_db", StmtSession},
 		{"SET autocommit = 1", StmtSession},
+		{"LOCK TABLES t WRITE", StmtSession},
+		{"UNLOCK TABLES", StmtSession},
+		{"BEGIN", StmtTransaction},
+		{"START TRANSACTION", StmtTransaction},
+		{"COMMIT", StmtTransaction},
+		{"ROLLBACK", StmtTransaction},
+		{"SAVEPOINT sp1", StmtTransaction},
+		{"RELEASE SAVEPOINT sp1", StmtTransaction},
 		{"GRANT ALL ON *.* TO u", StmtOther},
 		{"", StmtOther},
 		{"/*! DELETE FROM t */", StmtDelete},
@@ -176,6 +184,25 @@ func TestStatementKind(t *testing.T) {
 			stmt := Parse(tt.sql)
 			if got := stmt.Kind(); got != tt.want {
 				t.Errorf("Parse(%q).Kind() = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}
+
+// START and RELEASE begin more than one kind of statement, and calling
+// "START REPLICA" a transaction would hand it the explanation meant for
+// COMMIT while letting a replication command past the fail-closed default.
+func TestOnlyTheTransactionSenseOfStartAndReleaseCounts(t *testing.T) {
+	for _, sql := range []string{
+		"START REPLICA",
+		"START SLAVE",
+		"START GROUP_REPLICATION",
+		"RELEASE",
+		"RELEASE ALL_LOCKS",
+	} {
+		t.Run(sql, func(t *testing.T) {
+			if got := Parse(sql).Kind(); got != StmtOther {
+				t.Errorf("Parse(%q).Kind() = %v, want StmtOther", sql, got)
 			}
 		})
 	}

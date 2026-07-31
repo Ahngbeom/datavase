@@ -14,7 +14,12 @@ import (
 // sql.Open only validates the DSN, so it succeeds even against a host that
 // is down. The version query is what actually proves reachability.
 func Probe(ctx context.Context, ds *config.DataSource, password string) (string, error) {
-	handle, err := sql.Open("mysql", DSN(ds, password, ""))
+	dsn, err := DSN(ds, password, "")
+	if err != nil {
+		return "", err
+	}
+
+	handle, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return "", fmt.Errorf("opening connection: %w", err)
 	}

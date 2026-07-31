@@ -55,7 +55,12 @@ type Conn struct {
 // Open connects to ds. addr overrides the dialled address, which is how an
 // SSH tunnel is wired in.
 func Open(ctx context.Context, ds *config.DataSource, password, addr string) (*Conn, error) {
-	pool, err := sql.Open("mysql", DSN(ds, password, addr))
+	dsn, err := DSN(ds, password, addr)
+	if err != nil {
+		return nil, fmt.Errorf("opening %s: %w", ds.Name, err)
+	}
+
+	pool, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", ds.Name, err)
 	}

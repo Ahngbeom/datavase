@@ -5,54 +5,71 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Ahngbeom/datavase/internal/config"
 )
 
-func baseStatus() status {
-	return status{dsName: "prod-app", env: config.EnvProd}
-}
-
-// The environment badge is the last visual cue between the user and a
-// production mistake, so it must always be present and always be red.
-func TestStatusAlwaysShowsTheEnvironmentBadge(t *testing.T) {
+// A batch that stopped part-way has left the database in a state nothing on
+// screen describes, and there is no transaction to unwind it. The count of
+// what actually ran is the only thing that tells the user where to look, so
+// it is reported whether or not anything went wrong.
+func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
 	tests := []struct {
-		env    config.Env
-		colour string
+		name             string
+		total, ran       int
+		why              string
+		wantAll, wantNot []string
 	}{
-		{env: config.EnvProd, colour: "red"},
-		{env: config.EnvStage, colour: "yellow"},
-		{env: config.EnvDev, colour: "green"},
+		{
+			name:    "every statement ran",
+			total:   5,
+			ran:     5,
+			wantAll: []string{"5 statements", "5 ran"},
+		},
+		{
+			name:    "refused part-way",
+			total:   5,
+			ran:     2,
+			why:     "refused at statement 3",
+			wantAll: []string{"5 statements", "2 ran", "refused at statement 3"},
+		},
+		{
+			name:    "the first statement was refused",
+			total:   4,
+			ran:     0,
+			why:     "refused at statement 1",
+			wantAll: []string{"0 ran", "refused at statement 1"},
+			// "0 ran" has to be said, not left to be inferred from silence.
+			wantNot: []string{"1 ran"},
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.env), func(t *testing.T) {
-			s := baseStatus()
-			s.env = tt.env
-
-			for _, phase := range []runPhase{phaseIdle, phaseRunning, phaseDone, phaseFailed} {
-				s.phase = phase
-				got := s.render()
-
-				if !strings.Contains(got, string(tt.env)) {
-					t.Errorf("phase %v: render() = %q, want it to name the environment", phase, got)
+		t.Run(tt.name, func(t *testing.T) {
+			got := batchSummary(tt.total, tt.ran, tt.why)
+			for _, want := range tt.wantAll {
+				if !strings.Contains(got, want) {
+					t.Errorf("batchSummary() = %q, want it to contain %q", got, want)
 				}
-				if !strings.Contains(got, tt.colour) {
-					t.Errorf("phase %v: render() = %q, want the %s badge colour", phase, got, tt.colour)
+			}
+			for _, unwanted := range tt.wantNot {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("batchSummary() = %q, want it not to contain %q", got, unwanted)
 				}
 			}
 		})
 	}
 }
 
-// Without this, there is no way to tell which schema an unqualified query
-// will hit — the tree marker only helps if you scroll to it.
+// baseStatus is an idle bar. Where the session is — the environment, the
+// datasource, the schema — is the top bar's business now; see topbar_test.go.
+func baseStatus() status {
+	return status{}
+}
+
 // The status bar is one line on a terminal of unknown width. When it does
 // not fit, what disappears must be chosen deliberately: an elapsed time is
 // expendable, a truncation warning is not.
 func TestStatusDropsExpendableFieldsBeforeWarnings(t *testing.T) {
 	s := baseStatus()
-	s.schema = "acme-dev"
 	s.phase = phaseDone
 	s.rows = 50000
 	s.elapsed = 1234 * time.Millisecond
@@ -65,10 +82,7 @@ func TestStatusDropsExpendableFieldsBeforeWarnings(t *testing.T) {
 		if w := visibleWidth(got); w > width {
 			t.Errorf("width %d: status is %d cells: %q", width, w, got)
 		}
-		// The environment and the warnings survive at every width.
-		if !strings.Contains(got, string(config.EnvProd)) {
-			t.Errorf("width %d: the environment badge was dropped: %q", width, got)
-		}
+		// The warnings survive at every width.
 		if !strings.Contains(strings.ToUpper(got), "LIMIT") {
 			t.Errorf("width %d: the injected LIMIT warning was dropped: %q", width, got)
 		}
@@ -81,7 +95,6 @@ func TestStatusDropsExpendableFieldsBeforeWarnings(t *testing.T) {
 // An error is the other thing that must never be squeezed out.
 func TestStatusKeepsTheErrorAtAnyWidth(t *testing.T) {
 	s := baseStatus()
-	s.schema = "acme-dev"
 	s.phase = phaseFailed
 	s.err = errors.New("Error 1064: syntax")
 
@@ -114,35 +127,6 @@ func visibleWidth(s string) int {
 		}
 	}
 	return count
-}
-
-func TestStatusShowsTheCurrentSchema(t *testing.T) {
-	s := baseStatus()
-	s.schema = "acme-dev"
-
-	got := s.render()
-	if !strings.Contains(got, "acme-dev") {
-		t.Errorf("render() = %q, want it to name the current schema", got)
-	}
-	// The datasource is also called acme-dev here, so the schema needs a
-	// marker of its own to be legible.
-	if !strings.Contains(got, "@acme-dev") {
-		t.Errorf("render() = %q, want the schema marked with @", got)
-	}
-}
-
-func TestStatusWithoutASchema(t *testing.T) {
-	got := baseStatus().render()
-
-	if strings.Contains(got, "@") {
-		t.Errorf("render() = %q, want no schema marker when none is set", got)
-	}
-}
-
-func TestStatusShowsTheDataSourceName(t *testing.T) {
-	if got := baseStatus().render(); !strings.Contains(got, "prod-app") {
-		t.Errorf("render() = %q, want it to name the datasource", got)
-	}
 }
 
 func TestStatusWhileRunning(t *testing.T) {
@@ -248,13 +232,13 @@ func TestStatusShowsAMessage(t *testing.T) {
 // a colour tag and swallow.
 func TestStatusEscapesTagsInDynamicText(t *testing.T) {
 	s := baseStatus()
-	s.dsName = "db[1]"
+	s.message = "wrote rows to out[1].csv"
 	s.phase = phaseFailed
 	s.err = errors.New("bad [thing]")
 
 	got := s.render()
-	if !strings.Contains(got, "db[[1]") {
-		t.Errorf("render() = %q, want the datasource name escaped", got)
+	if !strings.Contains(got, "out[[1]") {
+		t.Errorf("render() = %q, want the message escaped", got)
 	}
 	if !strings.Contains(got, "[[thing]") {
 		t.Errorf("render() = %q, want the error text escaped", got)

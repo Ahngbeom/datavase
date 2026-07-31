@@ -50,6 +50,10 @@ func Reference() []Group {
 				{"$", "to the end of the line"},
 				{"gg", "to the start"},
 				{"G", "to the end"},
+				{"/", "search forwards"},
+				{"?", "search backwards"},
+				{"n", "to the next match"},
+				{"N", "to the previous match"},
 			},
 		},
 		{

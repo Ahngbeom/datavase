@@ -14,6 +14,7 @@ import (
 // root looked like a schema and the real schemas looked nested under it.
 func TestTreeRootIsDistinguishableFromASchemaOfTheSameName(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
 
 	got := h.text()
 
@@ -26,6 +27,7 @@ func TestTreeRootIsDistinguishableFromASchemaOfTheSameName(t *testing.T) {
 // The default schema is the one an unqualified query hits, so it is marked.
 func TestCurrentSchemaIsMarkedInTheTree(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
 
 	if !h.waitForScreen(currentSchemaMarker) {
 		t.Errorf("no schema is marked as current:\n%s", h.text())

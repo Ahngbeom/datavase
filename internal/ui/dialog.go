@@ -14,17 +14,42 @@ import (
 	"github.com/rivo/tview"
 )
 
+// refusalText is the whole of what a refused statement says, and it is a
+// plain function so a test can read it without a screen.
+//
+// The unlock is offered here rather than as a button. A button next to the
+// refusal is the "run anyway" this dialog exists not to have; making the user
+// leave, open the palette and name the command is the deliberateness that a
+// production write is supposed to cost.
+func refusalText(d guard.Decision, paletteKey string) string {
+	text := fmt.Sprintf("Refused\n\n%s", d.Reason)
+	if d.Unlockable {
+		text += "\n\n" + unlockHint(paletteKey)
+	}
+	return text
+}
+
+// unlockHint names the route past the production write lock.
+//
+// guard deliberately does not compose this: it cannot know which preset is in
+// force or which keys the terminal can deliver, and the reason it used to
+// carry named ":write", a command no preset has ever had.
+func unlockHint(paletteKey string) string {
+	return fmt.Sprintf("Writes can be unlocked for this session: %s, then %q.",
+		paletteKey, cmdEnableWrites)
+}
+
 // refuse tells the user why a statement will not run. There is no override
 // here on purpose: a dialog offering "run anyway" is a dialog people learn
 // to dismiss, which is exactly how the production accident happens.
 func (a *App) refuse(d guard.Decision) {
 	modal := tview.NewModal().
-		SetText(fmt.Sprintf("Refused\n\n%s", d.Reason)).
+		SetText(refusalText(d, a.keyLabel(keymap.ActionCommandPalette))).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(int, string) { a.closeDialog() })
 
 	modal.SetBackgroundColor(tcell.ColorBlack)
-	modal.SetTextColor(colourError)
+	modal.SetTextColor(colourDanger)
 	a.openDialog(modal)
 }
 
@@ -46,9 +71,11 @@ func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
 		AddButtons([]string{"Cancel", "Run"}).
 		SetDoneFunc(func(_ int, label string) {
 			a.closeDialog()
-			if label == "Run" {
-				a.start(stmt, d)
+			if label != "Run" {
+				a.abandonBatch()
+				return
 			}
+			a.start(stmt, d)
 		})
 
 	modal.SetBackgroundColor(tcell.ColorBlack)
@@ -62,7 +89,10 @@ func (a *App) confirmByTyping(stmt sqlparse.Statement, d guard.Decision) {
 	form.AddTextView("", fmt.Sprintf("%s\n\n%s", d.Reason, preview(stmt.SQL)), 60, 6, true, false).
 		AddInputField(fmt.Sprintf("Type %s to proceed", d.TypeToConfirm), "", 24,
 			nil, func(text string) { typed = text }).
-		AddButton("Cancel", func() { a.closeDialog() }).
+		AddButton("Cancel", func() {
+			a.closeDialog()
+			a.abandonBatch()
+		}).
 		AddButton("Run", func() {
 			// Comparison is case-insensitive: the point is deliberate
 			// effort, not exact keystrokes.
@@ -136,13 +166,16 @@ var helpGroups = []struct {
 			keymap.ActionSelectAll, keymap.ActionToggleComment,
 			keymap.ActionDuplicateLine, keymap.ActionDeleteLine,
 			keymap.ActionDeleteWordLeft, keymap.ActionDeleteToLineStart,
+			keymap.ActionSaveFile,
 		},
 	},
 	{
 		title: "Finding things",
 		actions: []keymap.Action{
-			keymap.ActionFind, keymap.ActionGoToTable, keymap.ActionInspect,
-			keymap.ActionCommandPalette,
+			keymap.ActionFind, keymap.ActionFindNext, keymap.ActionFindPrev,
+			keymap.ActionSearchHistory,
+			keymap.ActionGoToTable, keymap.ActionFindFile,
+			keymap.ActionInspect, keymap.ActionCommandPalette,
 		},
 	},
 	{
@@ -183,6 +216,7 @@ func (a *App) helpText() string {
 		}
 	}
 
+	b.WriteString(commandHelpText(a.keyLabel(keymap.ActionCommandPalette)))
 	b.WriteString(a.vimHelp())
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
@@ -195,6 +229,27 @@ func (a *App) helpText() string {
 	}
 
 	b.WriteString("\n[gray]Press Escape to close.[-]")
+	return b.String()
+}
+
+// commandHelpText lists the command palette's entries.
+//
+// These carry no key of their own, so without this the only way to find one is
+// to already know it exists — which is how attaching a worktree, the entry
+// point to a whole feature, became undiscoverable while the keys that need it
+// were listed above.
+//
+// It is generated from the same list the palette offers, so the two cannot
+// drift apart, and it takes the palette's key label rather than the App so the
+// section can be rendered in a test without a terminal.
+func commandHelpText(paletteKey string) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "\n[yellow]Commands — %s, then type[-]\n", result.EscapeTags(paletteKey))
+	for _, c := range paletteCommands() {
+		fmt.Fprintf(&b, "  %s  %s\n",
+			keymap.PadLabel(result.EscapeTags(c.name), helpKeyColumn), result.EscapeTags(c.summary))
+	}
 	return b.String()
 }
 

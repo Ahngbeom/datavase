@@ -12,11 +12,15 @@ import (
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/gitlab"
+	"github.com/Ahngbeom/datavase/internal/glab"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/ui"
+	"github.com/Ahngbeom/datavase/internal/worktree"
 	"golang.org/x/term"
 )
 
@@ -70,7 +74,7 @@ func run() int {
 // openUI connects and hands control to the terminal interface. The context
 // bounds the connection attempt only; the interface itself runs until the
 // user quits.
-func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
+func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config, opt cli.UIOptions) error {
 	// Key bindings are resolved before connecting: a typo in the keymap
 	// should fail immediately, not after a password prompt and a handshake.
 	keys, err := keymap.FromConfig(cfg.Keymap.Preset, cfg.Keymap.Actions)
@@ -99,13 +103,54 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		}
 	}
 
+	// The list of directories attached before, optional for the same reason.
+	var recents *recent.List
+	if path, err := recent.DefaultPath(); err == nil {
+		if opened, err := recent.Open(path); err == nil {
+			recents = opened
+		}
+	}
+
+	// GitLab borrows its credential from glab rather than keeping one of its
+	// own. Nothing runs here: the lookup reads the OS keyring and costs half a
+	// second, so it happens the first time the GitLab command is used.
+	glCLI := glab.New()
+	openGitLab := func(ctx context.Context, host string) (ui.GitLabSource, error) {
+		token, err := glCLI.Token(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		return gitlab.New("https://"+host, token), nil
+	}
+
+	// The worktree is optional in the same way: a path that no longer exists —
+	// a branch cleaned up since the command was last run — should cost the
+	// file list, not the session the user is trying to start.
+	var wt *worktree.Worktree
+	if opt.WorkDir != "" {
+		opened, err := worktree.Open(opt.WorkDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "no worktree attached: %v\n", err)
+		} else {
+			wt = opened
+		}
+	}
+
 	sess, err := session.Open(ctx, ds, password)
 	if err != nil {
 		return err
 	}
 	defer sess.Close()
 
-	return ui.New(sess.Conn, cfg, ui.Deps{Keys: keys, Cache: cache, History: hist}).Run()
+	return ui.New(sess.Conn, cfg, ui.Deps{
+		Keys:       keys,
+		Cache:      cache,
+		History:    hist,
+		Worktree:   wt,
+		Recent:     recents,
+		GitLab:     openGitLab,
+		GitLabHost: cfg.GitLab.Host,
+	}).Run()
 }
 
 // probe verifies reachability, raising the tunnel first when one is needed,

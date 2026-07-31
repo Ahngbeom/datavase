@@ -64,6 +64,14 @@ type Decision struct {
 	TypeToConfirm string
 	// InjectLimit is the LIMIT to append, or zero to leave the SQL alone.
 	InjectLimit int
+	// Unlockable reports that the production write lock is the only thing in
+	// the way, so the caller may offer the way past it.
+	//
+	// It is a flag rather than a sentence because guard must not name a route
+	// through an interface it cannot see: the reason once read "unlock with
+	// :write", which was a command no preset had. Whoever draws the dialog
+	// knows what the keys are; this package does not.
+	Unlockable bool
 }
 
 // Evaluate applies p to stmt.
@@ -200,8 +208,9 @@ func evaluateDestructive(kind sqlparse.StmtKind, prod bool) Decision {
 func gateWrite(p Policy, prod bool, reason string) Decision {
 	if prod && !p.WritesEnabled {
 		return Decision{
-			Verdict: Deny,
-			Reason:  reason + "; writes to production are locked (unlock with :write)",
+			Verdict:    Deny,
+			Reason:     reason + "; writes to production are locked",
+			Unlockable: true,
 		}
 	}
 	return Decision{Verdict: Confirm, Reason: reason}

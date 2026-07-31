@@ -185,32 +185,44 @@ func (a *App) openingMessage(serverVersion string) string {
 	return msg
 }
 
+// keyLabel names an action's key as this terminal can actually deliver it.
+//
+// On a terminal without the extended keyboard protocol the primary binding is
+// one the user cannot press, so the plain function key at the end of the list
+// is named instead — advice nobody can follow is worse than none.
+//
+// It returns "" for an unbound action, leaving each caller to say what belongs
+// there in its place.
+func (a *App) keyLabel(action keymap.Action) string {
+	bindings := a.keys.DisplayBindings(action)
+	if len(bindings) == 0 {
+		return ""
+	}
+	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
+		return bindings[len(bindings)-1].Label(onMac)
+	}
+	return bindings[0].Label(onMac)
+}
+
 // helpKeyLabel names the key that opens the key reference. It is looked up
 // rather than hardcoded because a rebound help key that the status bar still
 // advertises as F1 is worse than no hint at all.
 func (a *App) helpKeyLabel() string {
-	bindings := a.keys.DisplayBindings(keymap.ActionHelp)
-	if len(bindings) == 0 {
-		return "F1"
+	if label := a.keyLabel(keymap.ActionHelp); label != "" {
+		return label
 	}
-	return bindings[0].Label(onMac)
+	return "F1"
 }
 
 // editorPlaceholder names the run key, preferring one this terminal can
 // actually deliver so the hint is not advice the user cannot follow.
 func (a *App) editorPlaceholder() string {
-	bindings := a.keys.DisplayBindings(keymap.ActionRun)
-	if len(bindings) == 0 {
+	label := a.keyLabel(keymap.ActionRun)
+	if label == "" {
 		return "SELECT …"
 	}
 
-	binding := bindings[0]
-	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
-		// Fall back to the last binding, which is the plain function key
-		// that works everywhere.
-		binding = bindings[len(bindings)-1]
-	}
-	hint := "SELECT … then " + binding.Label(onMac) + " to run"
+	hint := "SELECT … then " + label + " to run"
 	if a.keys.Modal() {
 		// The empty buffer is exactly where a modal editor is most confusing:
 		// typing does nothing until insert mode is entered.

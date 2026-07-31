@@ -119,8 +119,8 @@ func TestProductionWritesAreDeniedUntilWritesAreEnabled(t *testing.T) {
 			if locked.Verdict != Deny {
 				t.Errorf("with writes locked: verdict = %v, want Deny", locked.Verdict)
 			}
-			if !strings.Contains(locked.Reason, ":write") {
-				t.Errorf("reason = %q, want it to mention the :write command", locked.Reason)
+			if !locked.Unlockable {
+				t.Errorf("Unlockable = false; the caller has no way to offer the way past")
 			}
 
 			p := policy(config.EnvProd)
@@ -133,17 +133,31 @@ func TestProductionWritesAreDeniedUntilWritesAreEnabled(t *testing.T) {
 	}
 }
 
-// The session opt-in is for writes, and these are not writes: enabling it
-// must not turn a refusal about an unheld connection into a runnable
-// statement.
-func TestEnablingWritesDoesNotMakeTransactionControlRunnable(t *testing.T) {
-	p := policy(config.EnvDev)
+// Unlockable is what the dialog reads to decide whether to offer a way past,
+// so a refusal that the unlock would not actually lift must never carry it.
+// Offering an escape hatch that does nothing is how a refusal stops being
+// believed.
+func TestRefusalsTheUnlockCannotLiftAreNotAdvertisedAsUnlockable(t *testing.T) {
+	p := policy(config.EnvProd)
 	p.WritesEnabled = true
 
-	for _, sql := range []string{"BEGIN", "COMMIT", "ROLLBACK", "SET autocommit = 0"} {
+	for _, sql := range []string{
+		"DELETE FROM t",
+		"UPDATE t SET x = 1",
+		"DROP TABLE users",
+		"TRUNCATE TABLE users",
+		"ALTER TABLE users DROP COLUMN email",
+		"GRANT ALL ON *.* TO u",
+		"BEGIN",
+		"SET autocommit = 0",
+	} {
 		t.Run(sql, func(t *testing.T) {
-			if got := Evaluate(sqlparse.Parse(sql), p); got.Verdict != Deny {
-				t.Errorf("verdict = %v, want Deny", got.Verdict)
+			got := Evaluate(sqlparse.Parse(sql), p)
+			if got.Verdict != Deny {
+				t.Fatalf("verdict = %v, want Deny", got.Verdict)
+			}
+			if got.Unlockable {
+				t.Errorf("Unlockable = true, but enabling writes does not lift this refusal")
 			}
 		})
 	}

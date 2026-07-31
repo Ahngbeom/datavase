@@ -12,8 +12,12 @@ const (
 	StmtSelect
 	// StmtRead is a non-SELECT read: SHOW, DESCRIBE, EXPLAIN.
 	StmtRead
-	// StmtSession changes connection state: USE, SET.
+	// StmtSession changes connection state: USE, SET, LOCK TABLES.
 	StmtSession
+	// StmtTransaction opens, ends or marks a transaction. It is separate from
+	// StmtSession because the caller's answer differs: session state is lost,
+	// whereas an abandoned transaction can hold locks after it is lost.
+	StmtTransaction
 	// StmtInsert adds rows (INSERT, REPLACE).
 	StmtInsert
 	// StmtUpdate modifies rows.
@@ -36,6 +40,8 @@ func (k StmtKind) String() string {
 		return "read"
 	case StmtSession:
 		return "session"
+	case StmtTransaction:
+		return "transaction control"
 	case StmtInsert:
 		return "INSERT"
 	case StmtUpdate:
@@ -92,6 +98,27 @@ func (s Statement) firstWord() (Token, bool) {
 	return Token{}, false
 }
 
+// kindIfSecondWordIs resolves a verb that starts more than one kind of
+// statement, falling back to StmtOther so the guard's fail-closed default
+// covers whatever else the verb might have begun.
+func kindIfSecondWordIs(s Statement, want string, kind StmtKind) StmtKind {
+	var seen bool
+	for _, tk := range s.Tokens {
+		if tk.Kind != Word {
+			continue
+		}
+		if !seen {
+			seen = true
+			continue
+		}
+		if strings.EqualFold(tk.Text, want) {
+			return kind
+		}
+		return StmtOther
+	}
+	return StmtOther
+}
+
 // Kind reports what the statement does.
 func (s Statement) Kind() StmtKind {
 	first, ok := s.firstWord()
@@ -104,8 +131,18 @@ func (s Statement) Kind() StmtKind {
 		return StmtSelect
 	case "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "ANALYZE", "CHECK":
 		return StmtRead
-	case "USE", "SET":
+	case "USE", "SET", "LOCK", "UNLOCK":
 		return StmtSession
+	case "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT":
+		return StmtTransaction
+
+	// START and RELEASE each begin two unrelated statements, and the wrong
+	// one would be handed an explanation about transactions while escaping
+	// the fail-closed default meant for anything unrecognised.
+	case "START":
+		return kindIfSecondWordIs(s, "TRANSACTION", StmtTransaction)
+	case "RELEASE":
+		return kindIfSecondWordIs(s, "SAVEPOINT", StmtTransaction)
 	case "INSERT", "REPLACE":
 		return StmtInsert
 	case "UPDATE":
@@ -121,6 +158,17 @@ func (s Statement) Kind() StmtKind {
 	default:
 		return StmtOther
 	}
+}
+
+// Verb is the statement's leading keyword, upper-cased, or "" if it has none.
+// Kind is the right question almost everywhere; this exists for the few
+// places that have to tell two statements of one kind apart.
+func (s Statement) Verb() string {
+	first, ok := s.firstWord()
+	if !ok || first.Kind != Word {
+		return ""
+	}
+	return strings.ToUpper(first.Text)
 }
 
 // HasTopLevelWhere reports whether the statement is bounded by a WHERE

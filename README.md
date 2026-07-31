@@ -10,10 +10,25 @@ to damage a production database by accident.
 
 ## Status
 
-Everything planned for v1 is built: connect (directly or through an SSH
-bastion), browse the schema, edit and run SQL with schema-aware completion,
-stream large results, cancel a runaway query, search the query history,
-export to CSV or JSON, and the production guard.
+Usable, and specific about its edges.
+
+Built: connect (directly or through an SSH bastion), browse the schema, edit
+and run SQL with schema-aware completion, stream large results, cancel a
+runaway query, search the query history, export to CSV or JSON, and the
+production guard.
+
+Not built, and worth knowing before you lean on it:
+
+- **No transactions.** Each statement runs on its own connection out of a
+  pool, so `BEGIN` cannot reach the statement after it. Rather than let a
+  `ROLLBACK` report success having undone nothing, transaction control and
+  session statements are [refused with that explanation](#what-is-refused-for-a-different-reason).
+- **A write does not say how many rows it changed.** The count on the status
+  bar describes a result set, and a write has none.
+- **The result grid is plain.** No vertical view for a wide row, no way to
+  open a truncated value in full, no sorting.
+
+Those are tracked in the issues, roughly in that order.
 
 ## Install
 
@@ -222,6 +237,22 @@ more than decoration:
 
 The refusal dialog has no "run anyway" button. A dialog people can dismiss is
 a dialog people learn to dismiss.
+
+### What is refused for a different reason
+
+`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET` and `LOCK TABLES` are
+refused in **every** environment, dev included. This is not about danger.
+
+Statements run on a connection borrowed from a pool and handed back when they
+finish, so none of that state reaches the next statement: `BEGIN` would open a
+transaction nothing could commit, `SET SESSION sql_mode = …` would be accepted
+and thrown away, and `ROLLBACK` would report success having undone nothing.
+Every one of them would look like it worked. Refusing them and saying why is
+the only honest answer until a transaction can hold one connection for its
+whole life.
+
+`USE` is refused too, and points at the schema picker instead — that choice
+does travel with every statement, which is exactly what `USE` was reached for.
 
 ## Cancellation
 

@@ -40,6 +40,9 @@ Or take a prebuilt binary for macOS, Linux or Windows from
 [Releases](https://github.com/Ahngbeom/datavase/releases) — put `dv` on your
 PATH and check it with `dv version`.
 
+Upgrading an existing setup: [CHANGELOG.md](CHANGELOG.md) says what changed
+and whether anything needs doing to your configuration first.
+
 From a clone:
 
 ```sh

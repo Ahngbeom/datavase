@@ -244,3 +244,128 @@ datasources:
 		})
 	}
 }
+
+// A datasource that says nothing about TLS still gets a decision, and the
+// decision follows env for the same reason the guard does: production is
+// where an unencrypted credential on the wire costs the most, and it is the
+// one environment where the operator is most likely able to fix it.
+func TestTLSDefaultsFollowTheEnvironment(t *testing.T) {
+	const src = `
+datasources:
+  - name: prod-app
+    env: prod
+    host: db.internal
+    user: readonly
+  - name: staging
+    env: stage
+    host: db.stage
+    user: readonly
+  - name: local
+    env: dev
+    host: 127.0.0.1
+    user: root
+`
+
+	cfg, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil", err)
+	}
+
+	want := map[string]TLSMode{
+		"prod-app": TLSRequired,
+		"staging":  TLSPreferred,
+		"local":    TLSPreferred,
+	}
+	for _, ds := range cfg.DataSources {
+		if ds.TLS != want[ds.Name] {
+			t.Errorf("%s: TLS = %q, want %q", ds.Name, ds.TLS, want[ds.Name])
+		}
+	}
+}
+
+// The default is a default, not a policy: a production database that genuinely
+// cannot speak TLS has to remain reachable, and saying so in the file is the
+// deliberate act that makes it visible.
+func TestAnExplicitTLSModeOverridesTheDefault(t *testing.T) {
+	const src = `
+datasources:
+  - name: prod-app
+    env: prod
+    host: db.internal
+    user: readonly
+    tls: disabled
+`
+
+	cfg, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("Parse() error = %v, want nil", err)
+	}
+	if got := cfg.DataSources[0].TLS; got != TLSDisabled {
+		t.Errorf("TLS = %q, want %q", got, TLSDisabled)
+	}
+}
+
+// An unrecognised mode must not degrade into a permissive one, which is the
+// same rule env already follows.
+func TestParseRejectsAnUnknownTLSMode(t *testing.T) {
+	const src = `
+datasources:
+  - name: prod-app
+    env: prod
+    host: db.internal
+    user: readonly
+    tls: sortof
+`
+
+	_, err := Parse(strings.NewReader(src))
+	if err == nil {
+		t.Fatal("Parse() error = nil, want a refusal of the unknown mode")
+	}
+	if !strings.Contains(err.Error(), "tls") {
+		t.Errorf("error = %q, want it to name the offending key", err)
+	}
+}
+
+// A CA under a mode that verifies nothing would be read, ignored, and leave
+// the operator believing the server was checked against it.
+func TestParseRejectsACertificateAuthorityNothingWouldVerifyAgainst(t *testing.T) {
+	for _, mode := range []TLSMode{TLSDisabled, TLSPreferred, TLSRequired} {
+		t.Run(string(mode), func(t *testing.T) {
+			src := `
+datasources:
+  - name: prod-app
+    env: prod
+    host: db.internal
+    user: readonly
+    tls: ` + string(mode) + `
+    tls_ca: /etc/ssl/internal.pem
+`
+			if _, err := Parse(strings.NewReader(src)); err == nil {
+				t.Errorf("Parse() error = nil; %q verifies nothing, so the CA would be ignored", mode)
+			}
+		})
+	}
+}
+
+func TestParseAcceptsACertificateAuthorityUnderAVerifyingMode(t *testing.T) {
+	for _, mode := range []TLSMode{TLSVerifyCA, TLSVerifyIdentity} {
+		t.Run(string(mode), func(t *testing.T) {
+			src := `
+datasources:
+  - name: prod-app
+    env: prod
+    host: db.internal
+    user: readonly
+    tls: ` + string(mode) + `
+    tls_ca: /etc/ssl/internal.pem
+`
+			cfg, err := Parse(strings.NewReader(src))
+			if err != nil {
+				t.Fatalf("Parse() error = %v, want nil", err)
+			}
+			if got := cfg.DataSources[0].TLSCA; got != "/etc/ssl/internal.pem" {
+				t.Errorf("TLSCA = %q, want the configured path", got)
+			}
+		})
+	}
+}

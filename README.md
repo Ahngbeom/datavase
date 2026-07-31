@@ -22,8 +22,7 @@ production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **The result grid is plain.** No sorting, and no way to copy a value out of
-  it.
+- **The result grid has no sorting.**
 
 Those are tracked in the issues, roughly in that order.
 
@@ -116,7 +115,7 @@ your hands reach for.
 | Run the statement under the cursor | `⌘↩` | `Ctrl+↩` |
 | Run everything | `⌘⇧↩` | `Ctrl+Shift+↩` |
 | Cancel the running statement | `⌘F2` | `Ctrl+F2` |
-| Copy the selection, or cancel if nothing is selected | `⌘C` | `Ctrl+C` |
+| Copy what has focus, or cancel a running statement | `⌘C` | `Ctrl+C` |
 | Cut / paste | `⌘X` `⌘V` | `Ctrl+X` `Ctrl+V` |
 | Undo / redo | `⌘Z` `⌘⇧Z` | `Ctrl+Z` `Ctrl+Shift+Z` |
 | Select all | `⌘A` | `Ctrl+A` |
@@ -543,8 +542,19 @@ per line, names lined up, every value in full.
  payload  {"a":1,"b":[2,3], … the whole of it …}
 ```
 
-`j` and `k` step to the next row without leaving, because comparing two rows
-is most of what the view is opened for. `Esc` or `q` closes it.
+Each name carries the column's type, which the buffer has always known and
+nothing used to show. `j` and `k` step to the next row without leaving,
+because comparing two rows is most of what the view is opened for. `Esc` or
+`q` closes it.
+
+`⌘C` on the results copies the selected value — in full, as the server sent
+it, not the truncated and escaped copy the grid draws. `copy row` in the
+palette takes the whole row, tab separated, so it pastes into a spreadsheet
+as columns.
+
+**While a statement is running that key cancels instead,** whatever has focus.
+A grid always has a cell under the cursor, so the alternative was for the way
+to stop a runaway statement to disappear the moment the results were focused.
 
 It is the same key that shows a table's definition in the schema pane.
 **`inspect` means "show me this in full"**, and which thing depends on where

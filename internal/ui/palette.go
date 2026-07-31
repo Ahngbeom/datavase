@@ -149,6 +149,11 @@ func paletteCommands() []command {
 			run:     (*App).showHistory,
 		},
 		{
+			name:    "copy row",
+			summary: "put the selected result row on the clipboard, tab separated",
+			run:     (*App).copyRow,
+		},
+		{
 			name:    "inspect",
 			summary: "show the selected table or result row in full",
 			covers:  keymap.ActionInspect,

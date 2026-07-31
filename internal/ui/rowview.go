@@ -27,20 +27,30 @@ func rowDetail(buf *result.Buffer, row int) string {
 	}
 
 	columns := buf.Columns()
+
+	// The type goes with the name rather than in the grid header, where it
+	// would cost width the values already have too little of. Here there is
+	// room, and knowing a column is BIGINT rather than VARCHAR changes how
+	// its contents read.
+	labels := make([]string, len(columns))
 	width := 0
-	for _, name := range columns {
-		if n := len([]rune(name)); n > width {
+	for i, name := range columns {
+		labels[i] = name
+		if t := buf.ColumnType(i); t != "" {
+			labels[i] += " " + t
+		}
+		if n := len([]rune(labels[i])); n > width {
 			width = n
 		}
 	}
 
 	var b strings.Builder
-	for col, name := range columns {
+	for col, label := range labels {
 		// Deliberately not buf.Cell: that truncates at CellLimit and is
 		// exactly what this view exists to get past.
 		value := result.Format(buf.Raw(row, col))
 
-		b.WriteString(tag(colourAccent, pad(result.EscapeTags(name), width)))
+		b.WriteString(tag(colourAccent, pad(result.EscapeTags(label), width)))
 		b.WriteString("  ")
 		if value == result.NullText {
 			// Dimmed for the same reason as in the grid: so an absent value

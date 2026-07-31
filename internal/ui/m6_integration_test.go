@@ -307,3 +307,41 @@ func TestInspectStillShowsATableDefinitionFromTheSchemaPane(t *testing.T) {
 		t.Errorf("inspect took the results branch from the schema pane:\n%s", h.text())
 	}
 }
+
+// With the grid focused the copy key used to fall through to "nothing
+// selected and nothing running". Lifting one value out of a result is an
+// everyday action and there was no way to do it.
+func TestCopyingFromTheGridTakesTheSelectedValue(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SELECT 'ada@example.com' AS email")
+	h.do(keymap.ActionRun)
+	h.waitFor("the row to arrive", func(a *App) bool { return a.buf.RowCount() == 1 })
+
+	h.focusGrid()
+	h.do(keymap.ActionCopyOrCancel)
+
+	h.waitFor("the value to reach the clipboard", func(a *App) bool {
+		return a.readClipboard() == "ada@example.com"
+	})
+}
+
+// The types have been kept in the buffer since the first release and nothing
+// ever showed them.
+func TestTheRowViewNamesTheColumnsType(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SELECT 'ada' AS email")
+	h.do(keymap.ActionRun)
+	h.waitFor("the row to arrive", func(a *App) bool { return a.buf.RowCount() == 1 })
+
+	h.focusGrid()
+	h.do(keymap.ActionInspect)
+
+	// What the driver reports, not what SQL was written: MariaDB answers
+	// VARCHAR here, and the point is that the column's own type reaches the
+	// screen at all.
+	if !h.waitForScreen("VARCHAR") {
+		t.Errorf("the row view does not name the column's type:\n%s", h.text())
+	}
+}

@@ -833,20 +833,29 @@ func (a *App) finishBatch(why string) {
 // means they want it stopped. This mirrors how a terminal behaves and avoids
 // forcing a choice between the two most expected behaviours of one key.
 func (a *App) copyOrCancel() {
-	// Inside the DDL tab the obvious thing to copy is the definition on
-	// screen, not whatever happens to be selected in the editor.
-	if a.app.GetFocus() == a.ddlView && a.copyDDL() {
-		return
-	}
-	if a.editor.HasSelection() {
-		a.copySelection()
-		return
-	}
-	if a.running != nil {
+	intent := copyContext{
+		running:      a.running != nil,
+		onDDL:        a.app.GetFocus() == a.ddlView,
+		onGrid:       a.app.GetFocus() == a.grid,
+		hasSelection: a.editor.HasSelection(),
+	}.resolve()
+
+	switch intent {
+	case intentCancel:
 		a.cancelRunning()
-		return
+	case intentDefinition:
+		if !a.copyDDL() {
+			a.notice("nothing to copy")
+		}
+	case intentSelection:
+		a.copySelection()
+	case intentCell:
+		if !a.copyCell() {
+			a.notice("nothing to copy")
+		}
+	default:
+		a.notice("nothing selected and nothing running")
 	}
-	a.notice("nothing selected and nothing running")
 }
 
 func (a *App) policy() guard.Policy {

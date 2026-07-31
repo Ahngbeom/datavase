@@ -620,3 +620,147 @@ func TestAStatementWithNothingWrongReportsNoWarnings(t *testing.T) {
 		t.Errorf("Warnings() = %v, want none", got)
 	}
 }
+
+// The point of a transaction is that the work is invisible until it is
+// committed and gone if it is not. Neither is true while each statement runs
+// on its own connection out of the pool, so this checks both from a second
+// connection that can only see what the server has committed.
+func TestATransactionIsInvisibleUntilCommittedAndGoneAfterRollback(t *testing.T) {
+	conn := openTestConn(t)
+	other := openTestConn(t)
+	mustExec(t, conn, "DROP TABLE IF EXISTS dv_tx")
+	mustExec(t, conn, "CREATE TABLE dv_tx (n INT PRIMARY KEY)")
+	t.Cleanup(func() { mustExec(t, conn, "DROP TABLE IF EXISTS dv_tx") })
+
+	ctx := context.Background()
+	if err := conn.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	if !conn.InTransaction() {
+		t.Error("InTransaction() = false straight after Begin()")
+	}
+
+	runOnStream(t, conn, "INSERT INTO dv_tx (n) VALUES (1)")
+	if got := countRows(t, other, "dv_tx"); got != 0 {
+		t.Errorf("a second connection sees %d rows before COMMIT, want 0", got)
+	}
+
+	if err := conn.Rollback(ctx); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if conn.InTransaction() {
+		t.Error("InTransaction() = true after Rollback()")
+	}
+	if got := countRows(t, other, "dv_tx"); got != 0 {
+		t.Errorf("%d rows survived the rollback, want 0", got)
+	}
+
+	if err := conn.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	runOnStream(t, conn, "INSERT INTO dv_tx (n) VALUES (2)")
+	if err := conn.Commit(ctx); err != nil {
+		t.Fatalf("Commit() error = %v", err)
+	}
+	if got := countRows(t, other, "dv_tx"); got != 1 {
+		t.Errorf("a second connection sees %d rows after COMMIT, want 1", got)
+	}
+}
+
+// Every statement of a transaction has to reach the connection the
+// transaction was opened on. If any of them took a fresh one from the pool it
+// would run outside the transaction, and the rollback above would leave it
+// behind.
+func TestEveryStatementInATransactionRunsOnTheOneConnection(t *testing.T) {
+	conn := openTestConn(t)
+	ctx := context.Background()
+
+	if err := conn.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	t.Cleanup(func() { conn.Rollback(context.Background()) })
+
+	ids := map[uint64]bool{}
+	for i := 0; i < 3; i++ {
+		stream := conn.Query(ctx, "SELECT 1", Options{})
+		drain(t, stream)
+		id, err := stream.WaitConnectionID(ctx)
+		if err != nil {
+			t.Fatalf("WaitConnectionID() error = %v", err)
+		}
+		stream.Close()
+		ids[id] = true
+	}
+
+	if len(ids) != 1 {
+		t.Errorf("statements ran on %d connections, want 1 — a transaction cannot span connections", len(ids))
+	}
+}
+
+// Outside a transaction nothing is pinned, and reusing one connection for
+// everything would give up the pool that keeps a long stream from blocking
+// the next statement.
+func TestWithoutATransactionStatementsStillTakeTheirOwnConnection(t *testing.T) {
+	conn := openTestConn(t)
+	if conn.InTransaction() {
+		t.Fatal("InTransaction() = true on a fresh connection")
+	}
+
+	stream := conn.Query(context.Background(), "SELECT 1", Options{})
+	drain(t, stream)
+	stream.Close()
+
+	if conn.InTransaction() {
+		t.Error("running a statement opened a transaction")
+	}
+}
+
+func TestBeginTwiceIsRefused(t *testing.T) {
+	conn := openTestConn(t)
+	ctx := context.Background()
+
+	if err := conn.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	t.Cleanup(func() { conn.Rollback(context.Background()) })
+
+	if err := conn.Begin(ctx); err == nil {
+		t.Error("Begin() error = nil inside a transaction, want a refusal")
+	}
+}
+
+func TestCommitWithoutATransactionIsRefused(t *testing.T) {
+	conn := openTestConn(t)
+
+	if err := conn.Commit(context.Background()); err == nil {
+		t.Error("Commit() error = nil with no transaction open")
+	}
+	if err := conn.Rollback(context.Background()); err == nil {
+		t.Error("Rollback() error = nil with no transaction open")
+	}
+}
+
+// runOnStream sends a statement the way the interface does, so the test
+// exercises the path a user's statement actually takes.
+func runOnStream(t *testing.T, conn *Conn, sql string) {
+	t.Helper()
+
+	stream := conn.Query(context.Background(), sql, Options{Exec: true})
+	defer stream.Close()
+	if got := drain(t, stream); got.err != nil {
+		t.Fatalf("%s: %v", sql, got.err)
+	}
+}
+
+func countRows(t *testing.T, conn *Conn, table string) int {
+	t.Helper()
+
+	var n int
+	err := conn.WithControl(context.Background(), func(c *sql.Conn) error {
+		return c.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("counting %s: %v", table, err)
+	}
+	return n
+}

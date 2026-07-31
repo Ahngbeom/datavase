@@ -51,6 +51,10 @@ type Policy struct {
 	// relaxes a Deny into a Confirm, and never for unbounded or destructive
 	// statements.
 	WritesEnabled bool
+	// InTransaction says a transaction is open, which changes what is true
+	// rather than what is permitted: the connection is held for its whole
+	// life, so session state set on it does reach the next statement.
+	InTransaction bool
 }
 
 // Decision is the result of evaluating one statement.
@@ -90,8 +94,13 @@ func Evaluate(stmt sqlparse.Statement, p Policy) Decision {
 	case sqlparse.StmtRead:
 		return Decision{Verdict: Allow}
 
-	case sqlparse.StmtTransaction, sqlparse.StmtSession:
-		return refuseUnheldState(stmt, kind)
+	// Transaction control is honoured: it opens, ends or marks a transaction
+	// whose connection is pinned for the duration.
+	case sqlparse.StmtTransaction:
+		return Decision{Verdict: Allow}
+
+	case sqlparse.StmtSession:
+		return evaluateSessionState(stmt, p)
 
 	case sqlparse.StmtUpdate, sqlparse.StmtDelete:
 		return evaluateRowWrite(stmt, kind, p, prod)
@@ -103,6 +112,17 @@ func Evaluate(stmt sqlparse.Statement, p Policy) Decision {
 		return evaluateDestructive(kind, prod)
 
 	case sqlparse.StmtDDL:
+		if p.InTransaction {
+			// MySQL commits the open transaction when it meets DDL. Someone
+			// who opened one to make an ALTER undoable has to learn that
+			// before running it, not from the rollback that does nothing.
+			return Decision{
+				Verdict: Confirm,
+				Reason: fmt.Sprintf(
+					"%s changes the schema, and MySQL will commit the open transaction to do it",
+					kind),
+			}
+		}
 		if prod {
 			return Decision{
 				Verdict: Deny,
@@ -142,27 +162,37 @@ func Evaluate(stmt sqlparse.Statement, p Policy) Decision {
 // This is the fail-closed rule reaching a case that used to escape it: these
 // were classified and then allowed, so the tokenizer's understanding was the
 // very thing that let them through.
-func refuseUnheldState(stmt sqlparse.Statement, kind sqlparse.StmtKind) Decision {
-	// USE is the one that has somewhere else to go. Naming the schema picker
-	// matters more than explaining the connection pool, because the user
-	// wanted a schema rather than a session.
-	if stmt.Verb() == "USE" {
+func evaluateSessionState(stmt sqlparse.Statement, p Policy) Decision {
+	switch stmt.Verb() {
+	// USE is the one that has somewhere else to go, transaction or not.
+	// Naming the schema picker matters more than explaining connections,
+	// because the user wanted a schema rather than a session.
+	case "USE":
 		return Decision{
 			Verdict: Deny,
 			Reason: "USE would apply to this statement alone; choose the schema instead, " +
 				"and it travels with every statement",
 		}
+
+	// LOCK TABLES commits an open transaction in MySQL. Allowing it inside one
+	// would end the transaction the user believes they are still in, which is
+	// worse than refusing something they can do another way.
+	case "LOCK", "UNLOCK":
+		return Decision{
+			Verdict: Deny,
+			Reason:  "LOCK TABLES commits an open transaction, so it is refused here",
+		}
 	}
 
-	what := "session state"
-	if kind == sqlparse.StmtTransaction {
-		what = "a transaction"
+	// Everything else is SET, and whether it works depends on whether the
+	// connection is held.
+	if p.InTransaction {
+		return Decision{Verdict: Allow}
 	}
 	return Decision{
 		Verdict: Deny,
-		Reason: fmt.Sprintf(
-			"%s does not survive to the next statement: each one runs on its own connection from the pool",
-			what),
+		Reason: "session state does not survive to the next statement: each one runs on its " +
+			"own connection from the pool. Open a transaction if you need it to stick",
 	}
 }
 

@@ -14,16 +14,13 @@ Usable, and specific about its edges.
 
 Built: connect (directly, over TLS, or through an SSH bastion), browse the
 schema, edit and run SQL with schema-aware completion, run a whole file a
-statement at a time, stream large results, cancel a runaway query — including
-a write — see what a write changed and what the server warned about, search
-the query history, export to CSV or JSON, and the production guard.
+statement at a time, wrap work in a transaction and take it back, stream large
+results, cancel a runaway query — including a write — see what a write changed
+and what the server warned about, search the query history, export to CSV or
+JSON, and the production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **No transactions.** Each statement runs on its own connection out of a
-  pool, so `BEGIN` cannot reach the statement after it. Rather than let a
-  `ROLLBACK` report success having undone nothing, transaction control and
-  session statements are [refused with that explanation](#what-is-refused-for-a-different-reason).
 - **The result grid is plain.** No vertical view for a wide row, no way to
   open a truncated value in full, no sorting.
 
@@ -260,21 +257,45 @@ What that unlocks is narrow, and the narrowness is the point:
 So the escape hatch exists for the statement you meant to write, and not for
 the one that would rewrite a table.
 
+### Transactions
+
+Type `BEGIN`. The connection it opens on is then held for the transaction's
+whole life, so everything after it runs there — which is what makes `COMMIT`
+and `ROLLBACK` mean anything. `commit` and `rollback` are in the palette as
+well, and the status bar carries `TX` while one is open.
+
+```sql
+BEGIN;
+UPDATE orders SET status = 'X' WHERE id = 42;
+SELECT * FROM orders WHERE id = 42;   -- read it back
+ROLLBACK;                              -- or COMMIT
+```
+
+Quitting with a transaction open asks first, and rolls back if you say so.
+Leaving one behind would hold locks on the server with nobody watching.
+
+Two things it will not pretend:
+
+- **`ALTER` and friends commit the transaction.** That is MySQL, not a choice
+  made here: DDL causes an implicit commit. The confirmation says so before
+  the statement runs, rather than leaving you to discover it from a `ROLLBACK`
+  that did nothing.
+- **`LOCK TABLES` is refused inside one,** for the same reason — it would
+  commit the transaction you believe you are still in.
+
 ### What is refused for a different reason
 
-`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET` and `LOCK TABLES` are
-refused in **every** environment, dev included. This is not about danger.
+`SET` outside a transaction, and `USE` anywhere.
 
-Statements run on a connection borrowed from a pool and handed back when they
-finish, so none of that state reaches the next statement: `BEGIN` would open a
-transaction nothing could commit, `SET SESSION sql_mode = …` would be accepted
-and thrown away, and `ROLLBACK` would report success having undone nothing.
-Every one of them would look like it worked. Refusing them and saying why is
-the only honest answer until a transaction can hold one connection for its
-whole life.
+Statements ordinarily run on a connection borrowed from a pool and handed back
+when they finish, so `SET SESSION sql_mode = …` would be accepted and thrown
+away with the connection while looking like it worked. Open a transaction and
+it sticks, because then the connection is held — so the refusal names that
+rather than being a dead end.
 
-`USE` is refused too, and points at the schema picker instead — that choice
-does travel with every statement, which is exactly what `USE` was reached for.
+`USE` is refused even in a transaction, and points at the schema picker
+instead: that choice travels with every statement, which is exactly what `USE`
+was reached for.
 
 ### What a write reports
 

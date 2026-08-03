@@ -652,6 +652,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.showDataSources()
 	case keymap.ActionExplain:
 		a.explainStatement()
+	case keymap.ActionAnalyze:
+		a.analyzeStatement()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
@@ -958,7 +960,10 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	})
 	a.running = stream
 
-	go a.consume(stream, sql, started)
+	// Whether the answer is a plan is settled here, from the statement that
+	// was sent, rather than remembered from the key that asked: a confirmation
+	// dialog can sit between the two for as long as the user likes.
+	go a.consume(stream, sql, started, stmt.PlansAsJSON())
 }
 
 // consume forwards stream events onto the UI goroutine.
@@ -966,7 +971,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 // tview may only be touched from its own goroutine, hence QueueUpdateDraw.
 // Rows land in the buffer immediately so the grid can show them as they
 // arrive rather than waiting for the statement to finish.
-func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
+func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plansJSON bool) {
 	for ev := range stream.Events {
 		switch ev.Kind {
 		case db.EventColumns:
@@ -1005,6 +1010,11 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 		switch {
 		case err == nil:
 			a.status.phase = phaseDone
+			// A statement that answered in JSON answered with a plan, and a
+			// screenful of braces in the grid is not what was asked for.
+			if plansJSON && a.buf.RowCount() > 0 {
+				a.showPlanFrom(a.buf)
+			}
 
 		// A cancellation is an outcome the user asked for, so it reads as a
 		// normal finish. The driver usually notices the cancelled context

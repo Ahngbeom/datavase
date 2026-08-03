@@ -684,8 +684,25 @@ sent: an object's scalar fields are one step's attributes and its nested
 objects are that step's children.
 
 `EXPLAIN` does not run the statement, which is why this needs no confirmation
-even against production. `EXPLAIN ANALYZE` does run it, and is deliberately not
-on this key.
+even against production.
+
+**`⌘⇧E` runs it and reports what actually happened.** Where `⌘E` shows what the
+optimiser expected, this shows both:
+
+```
+dv_orders  ALL  rows 20084 → 20000  ⚠ full scan, estimate wrong
+   filtered: 33.2 → 0
+```
+
+The optimiser expected a third of the rows to pass the filter; none did. That
+gap is what an `ANALYZE` is run for, and it is called out — but only when it is
+worth acting on. A count has to be both wide of the mark and large enough to
+matter, since ten rows against one is tenfold and tells nobody anything.
+
+Because it runs the statement, **it goes through the guard as that statement**.
+`⌘⇧E` on an unbounded `DELETE` against production is refused exactly as running
+it would be, and a bounded one asks for the same word to be typed. The buffer is
+still not touched: the wrapping happens on the way to the server.
 
 ### Switching datasource
 

@@ -1,0 +1,61 @@
+{
+  "query_optimization": {
+    "r_total_time_ms": 0.512687802
+  },
+  "query_block": {
+    "select_id": 1,
+    "cost": 3.94700656,
+    "r_loops": 1,
+    "r_total_time_ms": 5.420778941,
+    "nested_loop": [
+      {
+        "table": {
+          "table_name": "a",
+          "access_type": "range",
+          "possible_keys": ["PRIMARY", "bucket"],
+          "key": "PRIMARY",
+          "key_length": "4",
+          "used_key_parts": ["id"],
+          "loops": 1,
+          "r_loops": 1,
+          "rows": 4,
+          "r_rows": 4,
+          "cost": 0.00320452,
+          "r_table_time_ms": 0.01361155,
+          "r_other_time_ms": 0.024175115,
+          "r_engine_stats": {
+            "pages_accessed": 4
+          },
+          "filtered": 100,
+          "r_filtered": 100,
+          "attached_condition": "a.`id` < 5 and a.bucket is not null"
+        }
+      },
+      {
+        "table": {
+          "table_name": "b",
+          "access_type": "ref",
+          "possible_keys": ["bucket"],
+          "key": "bucket",
+          "key_length": "5",
+          "used_key_parts": ["bucket"],
+          "ref": ["datavase_test.a.bucket"],
+          "loops": 4,
+          "r_loops": 4,
+          "rows": 6694,
+          "r_rows": 6666.75,
+          "cost": 3.94380204,
+          "r_table_time_ms": 3.620046022,
+          "r_other_time_ms": 1.755138402,
+          "r_engine_stats": {
+            "pages_accessed": 34
+          },
+          "filtered": 100,
+          "r_filtered": 100,
+          "using_index": true
+        }
+      }
+    ]
+  }
+}
+

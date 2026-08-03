@@ -147,7 +147,7 @@ var helpGroups = []struct {
 		title: "Running",
 		actions: []keymap.Action{
 			keymap.ActionRun, keymap.ActionRunAll, keymap.ActionCancel,
-			keymap.ActionExplain,
+			keymap.ActionExplain, keymap.ActionAnalyze,
 		},
 	},
 	{

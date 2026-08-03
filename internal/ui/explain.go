@@ -77,10 +77,7 @@ func (a *App) buildPlanTab() tview.Primitive {
 // it out again is the thing this replaces, and it is exactly the edit that
 // gets left behind and then run.
 func (a *App) explainStatement() {
-	text := a.editor.GetText()
-	row, column, _, _ := a.editor.GetCursor()
-
-	stmt, ok := sqlparse.StatementAt(text, offsetAt(text, row, column))
+	stmt, ok := a.statementUnderCursor()
 	if !ok {
 		a.notice("no statement under the cursor")
 		return
@@ -92,6 +89,81 @@ func (a *App) explainStatement() {
 	// not this key.
 	a.notice("asking for the plan…")
 	a.fetchPlan(stmt.SQL, a.currentSchema())
+}
+
+// analyzeStatement runs the statement under the cursor and shows what it
+// actually did.
+//
+// The statement is wrapped and then handed to the ordinary run path, which is
+// the whole of the safety story: the guard judges a wrapper by the statement
+// it carries, so "ANALYZE FORMAT=JSON DELETE FROM orders" is refused, confirmed
+// and typed-for exactly as the bare delete is. Nothing here re-implements that
+// decision, and nothing here can get it wrong separately.
+//
+// It goes down the query path rather than the control connection for the same
+// reason: this runs the statement. It may take as long as the statement takes,
+// and it has to be cancellable — occupying the control connection would also
+// leave KILL QUERY with no way out.
+func (a *App) analyzeStatement() {
+	if a.running != nil {
+		a.notice("a statement is already running; ^C cancels it")
+		return
+	}
+
+	stmt, ok := a.statementUnderCursor()
+	if !ok {
+		a.notice("no statement under the cursor")
+		return
+	}
+
+	wrapped := sqlparse.Split("ANALYZE FORMAT=JSON " + stmt.SQL)
+	if len(wrapped) != 1 {
+		a.notice("that is more than one statement")
+		return
+	}
+	a.runStatement(wrapped[0])
+}
+
+// statementUnderCursor is what both the plan and the run act on.
+func (a *App) statementUnderCursor() (sqlparse.Statement, bool) {
+	text := a.editor.GetText()
+	row, column, _, _ := a.editor.GetCursor()
+
+	return sqlparse.StatementAt(text, offsetAt(text, row, column))
+}
+
+// showPlanFrom renders a plan the server sent as a result row.
+//
+// A statement that answers in JSON has one row and one column, and putting
+// that in the grid would be a screenful of braces where a tree was asked for.
+func (a *App) showPlanFrom(buf *result.Buffer) {
+	plan, err := explain.Parse(planBytes(buf.Raw(0, 0)))
+	if err != nil {
+		a.notice(fmt.Sprintf("explaining: %v", err))
+		return
+	}
+
+	a.resultTabs.show(tabPlan)
+	a.planView.show(plan)
+	a.notice(fmt.Sprintf("plan · %s copies it", a.copyKeyLabel()))
+}
+
+// planBytes takes a cell's characters as the server sent them.
+//
+// Deliberately not result.Format, which escapes control characters so a value
+// cannot disturb the terminal it is drawn into. A plan is parsed rather than
+// drawn, and every newline in it arrives as a literal backslash and n — which
+// is not JSON, and says so in a way that reads as the server having answered
+// with nonsense.
+func planBytes(v any) []byte {
+	switch value := v.(type) {
+	case []byte:
+		return value
+	case string:
+		return []byte(value)
+	default:
+		return []byte(result.Format(v))
+	}
 }
 
 func (a *App) fetchPlan(statement, schema string) {

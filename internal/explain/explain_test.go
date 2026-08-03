@@ -246,3 +246,119 @@ func TestTheWarningsDoNotCryWolf(t *testing.T) {
 		}
 	})
 }
+
+// ANALYZE runs the statement, so its plan carries what actually happened
+// beside what was expected. Showing them as two unrelated numbers — "rows" and
+// "r_rows", eleven lines apart — leaves the reader to do the only arithmetic
+// the output exists for.
+func TestAnActualIsShownBesideItsEstimate(t *testing.T) {
+	plan, err := Parse(fixture(t, "mariadb-analyze-wrong.json"))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	table := find(plan, func(n *Node) bool { return n.Name == "dv_skew" })
+	if table == nil {
+		t.Fatalf("the scanned table is missing:\n%s", Render(plan, 80))
+	}
+
+	// The optimiser expected a third of the rows to pass the filter. None did.
+	if got := table.Attr("filtered"); got != "33.19557953 → 0" {
+		t.Errorf("filtered reads %q, want the estimate and the actual together", got)
+	}
+	// The row count was out by 84 in twenty thousand, and that is shown too.
+	// The arrow is what the server said; the warning is the judgement, and
+	// putting the judgement in the arrow would mean deciding for the reader
+	// which numbers they are allowed to see.
+	if got := table.Attr("rows"); got != "20084 → 20000" {
+		t.Errorf("rows reads %q, want both numbers", got)
+	}
+	// And the raw actual is not left lying beside its pair.
+	if got := table.Attr("r_filtered"); got != "" {
+		t.Errorf("r_filtered is still shown separately as %q", got)
+	}
+	// A measurement with no estimate to fold into keeps its own name.
+	if got := table.Attr("r_table_time_ms"); got == "" {
+		t.Error("the measured time was dropped, though nothing estimated it")
+	}
+}
+
+// An estimate the run merely rounded off is not a finding. Showing the pair
+// and warning about it are different acts, and only the second one is a claim.
+func TestASmallMissIsShownWithoutBeingFlagged(t *testing.T) {
+	plan, err := Parse(fixture(t, "mariadb-analyze-wrong.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	table := find(plan, func(n *Node) bool { return n.Name == "dv_skew" })
+	if !strings.Contains(table.Attr("rows"), "→") {
+		t.Errorf("the row estimate and the actual were not shown together: %q", table.Attr("rows"))
+	}
+	if !estimateWrong("filtered", "33.19557953", "0") {
+		t.Error("the filter miss should be what raises the warning")
+	}
+	if estimateWrong("rows", "20084", "20000") {
+		t.Error("84 rows in twenty thousand was treated as a finding")
+	}
+}
+
+// The fourth warning #14 asked for, and the only one that needs the statement
+// to have actually run.
+func TestAnEstimateTheRunContradictedIsCalledOut(t *testing.T) {
+	wrong, err := Parse(fixture(t, "mariadb-analyze-wrong.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := find(wrong, func(n *Node) bool { return n.Name == "dv_skew" })
+	if !contains(table.Warnings, "estimate wrong") {
+		t.Errorf("a filter the optimiser was 33%% wrong about went unflagged: %v\n%s",
+			table.Warnings, Render(wrong, 80))
+	}
+
+	// And a plan whose estimates held up says nothing, or the warning means
+	// nothing.
+	right, err := Parse(fixture(t, "mariadb-analyze-join.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk(right, func(n *Node) {
+		if contains(n.Warnings, "estimate wrong") {
+			t.Errorf("%s was flagged though its estimates held:\n%s", n.Name, Render(right, 80))
+		}
+	})
+}
+
+// The rule itself, at the boundaries. Written rather than captured: this is
+// arithmetic, not a plan's shape, and a server cannot be asked to be wrong by
+// a stated factor on demand.
+func TestWhatCountsAsAnEstimateWorthReporting(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		estimate, actual string
+		field            string
+		want             bool
+	}{
+		{"a tenfold miss on a big table", "100000", "500", "rows", true},
+		{"the same miss the other way", "500", "100000", "rows", true},
+		{"a tenfold miss on a handful of rows is noise", "50", "2", "rows", false},
+		{"close enough is not worth saying", "20000", "18000", "rows", false},
+		{"exactly right", "4", "4", "rows", false},
+
+		// filtered is a percentage, so a ratio means nothing at the bottom of
+		// the range: 1% against 0.1% is tenfold and worth nobody's attention.
+		{"a filter that passed nothing when a third was expected", "33.335", "0", "filtered", true},
+		{"a filter that passed everything when little was expected", "5", "100", "filtered", true},
+		{"a few points out is not worth saying", "100", "92", "filtered", false},
+		{"tenfold at the bottom of the range is noise", "1", "0.1", "filtered", false},
+
+		{"anything unparseable is not a claim", "n/a", "0", "rows", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := estimateWrong(tt.field, tt.estimate, tt.actual); got != tt.want {
+				t.Errorf("estimateWrong(%s, %s → %s) = %v, want %v",
+					tt.field, tt.estimate, tt.actual, got, tt.want)
+			}
+		})
+	}
+}

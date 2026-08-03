@@ -12,16 +12,20 @@ to damage a production database by accident.
 
 Usable, and specific about its edges.
 
-Built: connect directly, over TLS or through an SSH bastion. Browse the
-schema, edit and run SQL with schema-aware completion, run a whole file a
-statement at a time, and wrap the work in a transaction you can take back.
-Switch datasource without restarting. Read a query plan as a tree.
-Stream large results and cancel a runaway query — a write included. See what a
-write changed and what the server warned about, read a wide row down the page,
-sort a column, copy a value out of it. Search the text on screen and the query
-history alike.
-Attach a directory of SQL and open, run and save the files in it. Export to
-CSV or JSON. And the production guard.
+Built:
+
+- **Connect** directly, over TLS, or through an SSH bastion — and switch
+  datasource without restarting.
+- **Write SQL** with schema-aware completion, in a modal editor — with `:w`,
+  `:q` and the rest — or in an ordinary one.
+- **Run** one statement, or a whole file a statement at a time; wrap the work
+  in a transaction you can take back; cancel a runaway query, a write included.
+- **Read the answer**: stream large results, sort a column, take a wide row
+  down the page, copy a value out, search what is on screen. See what a write
+  changed and what the server warned about, and read a query plan as a tree.
+- **Work in a directory of SQL**: open, run and save its files, with git
+  telling you which have changed.
+- **The production guard**, which is the reason for the rest.
 
 Not built, and worth knowing before you lean on it:
 
@@ -112,9 +116,10 @@ dv open local --dir ~/work/migrations   # with a worktree of SQL attached
 `F1` lists the vim keys and how to leave them. To use an ordinary typing
 editor instead, see [Changing the keys](#changing-the-keys).
 
-`:` opens a command line. `:w` saves, `:q` quits — asking first if there is
-unsaved work — `:q!` does not ask, `:wq` does both, and `:e path` opens a file
-from the attached worktree (`:e` on its own opens the finder).
+`:` opens a command line — on the modal keyboard, since that is where the key
+is free. `:w` saves, `:q` quits — asking first if there is unsaved work — `:q!`
+does not ask, `:wq` does both, and `:e path` opens a file from the attached
+worktree (`:e` on its own opens the finder).
 
 Beyond those it runs the same commands as the palette, by name: `:history`,
 `:commit`, `:unlock writes`. An abbreviation works while it names one command

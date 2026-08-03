@@ -5,7 +5,11 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.4.0 — 2026-08-03
+
+Everything the roadmap called for is now built. Nothing here breaks a
+configuration file, but one command changed its name and two function keys are
+now spoken for — both under **Changed**.
 
 ### Added
 
@@ -56,7 +60,8 @@ It sorts the rows this session is holding, and says so when those are not the
 result: a result cut at its row limit, or one still arriving, reports how many
 rows were sorted rather than claiming the column was.
 
-**A `:` command line.** `:w` saves, `:q` quits and asks first if there is
+**A `:` command line**, on the modal keyboard — the default one. `:w` saves,
+`:q` quits and asks first if there is
 unsaved work, `:q!` does not ask, `:wq` does both, and `:e path` opens a file
 from the attached worktree. Beyond those it runs the palette's commands by
 name, so there is one set of names rather than two.
@@ -75,10 +80,15 @@ and a command line has already been committed to by the time Enter is pressed.
 the guard's refusal names the new one, so the only thing to relearn is what to
 type into the palette.
 
-The reason is the `:` command line being built next. It resolves the same
-command names, and to anyone with vim in their fingers `:write` saves a file.
-Leaving the unlock called `write` would have put the most dangerous thing here
-behind the most reflexive thing a vim user types.
+The reason is the `:` command line above. It resolves the same command names,
+and to anyone with vim in their fingers `:write` saves a file. Leaving the
+unlock called `write` would have put the most dangerous thing here behind the
+most reflexive thing a vim user types.
+
+**`F11` and `F12` are now bound**, to switching datasource and sorting a column.
+If your configuration rebinds some other action onto either, that action keeps
+the key and the new one is reachable by its `⌘`/`Ctrl` binding or the palette —
+`dv keys` shows what your map actually resolves to.
 
 ### Fixed
 

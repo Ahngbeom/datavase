@@ -51,8 +51,12 @@ type App struct {
 	listPending rune
 	pages       *tview.Pages
 
-	buf    *result.Buffer
-	status status
+	buf *result.Buffer
+	// content is held rather than handed to the table and forgotten, because
+	// it owns the row ordering and so is the only thing that can say which
+	// buffer row a grid row draws.
+	content *gridContent
+	status  status
 
 	// keys resolves key events to actions. Holding it here rather than
 	// consulting package-level state is what lets the bindings come from
@@ -348,8 +352,9 @@ func (a *App) buildWidgets() {
 		SetWrap(false)
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
+	a.content = newGridContent(a.buf)
 	a.grid = tview.NewTable().
-		SetContent(newGridContent(a.buf)).
+		SetContent(a.content).
 		SetFixed(1, 0).
 		SetSelectable(true, true)
 	a.grid.SetInputCapture(a.gridKey)
@@ -606,6 +611,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.cycleTab()
 	case keymap.ActionInspect:
 		a.inspect()
+	case keymap.ActionSortColumn:
+		a.sortColumn()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
@@ -879,6 +886,9 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	}
 
 	a.buf.Reset()
+	// A column chosen on the last result says nothing about this one, which
+	// may not even have that many columns.
+	a.content.unsort()
 	a.grid.ScrollToBeginning()
 	a.resultTabs.show(tabResults)
 

@@ -17,13 +17,15 @@ schema, edit and run SQL with schema-aware completion, run a whole file a
 statement at a time, and wrap the work in a transaction you can take back.
 Stream large results and cancel a runaway query — a write included. See what a
 write changed and what the server warned about, read a wide row down the page,
-copy a value out of it. Search the text on screen and the query history alike.
+sort a column, copy a value out of it. Search the text on screen and the query
+history alike.
 Attach a directory of SQL and open, run and save the files in it. Export to
 CSV or JSON. And the production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **The result grid has no sorting.**
+- **One datasource per session.** Which one is fixed at startup; changing it
+  means restarting.
 
 Those are tracked in the issues, roughly in that order.
 
@@ -203,7 +205,7 @@ You can also just move the key. Listed bindings replace an action's defaults:
 ```yaml
 keymap:
   actions:
-    toggle-sidebar: ["f12"]
+    toggle-sidebar: ["f11"]
 ```
 
 ### Making your terminal deliver them
@@ -578,6 +580,28 @@ It is the same key that shows a table's definition in the schema pane.
 **`inspect` means "show me this in full"**, and which thing depends on where
 the caret is — the same way `⌘C` copies or cancels, and `/` searches whichever
 pane has focus.
+
+### Sorting a column
+
+`⌘⇧S` (`Ctrl+Shift+S`, `F12`, or just `s` with the grid focused) orders the
+results by the column under the cursor. Pressing it again reverses it, and a
+third time puts the rows back the way the server sent them — which is the
+answer to any `ORDER BY` the statement itself carried, and worth being able to
+get back to. An arrow in the header says which column and which way, so a
+sorted grid never looks like the server's own ordering.
+
+The sort is client-side, over the rows this session is holding, and it says so
+when those are not the result: a result cut at its row limit is missing exactly
+the rows that might have sorted to the top, and one still arriving has not been
+told what they are yet. In both cases the status bar reports how many rows were
+sorted rather than claiming the column was.
+
+**A column is ordered by its declared type, not by how its values look.**
+Values arrive as bytes, so `9` and `10` look alike whether the column is a
+`BIGINT` or a `VARCHAR`; deciding from the bytes would sort a `VARCHAR`
+numerically and disagree with the server about its own column. Where the driver
+reports no type, the column sorts as text — a coarse ordering being better than
+one nothing justifies.
 
 The result pane has two tabs as well: **results** and **ddl**. `⌘I` on a
 selected table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches

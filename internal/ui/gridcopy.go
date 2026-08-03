@@ -87,8 +87,7 @@ func rowValues(buf *result.Buffer, row int) (string, bool) {
 func (a *App) copyCell() bool {
 	row, col := a.grid.GetSelection()
 
-	// Row zero is the header, which the buffer does not count.
-	value, ok := cellValue(a.buf, row-1, col)
+	value, ok := cellValue(a.buf, a.content.bufferRow(row), col)
 	if !ok {
 		return false
 	}
@@ -102,7 +101,7 @@ func (a *App) copyCell() bool {
 func (a *App) copyRow() {
 	row, _ := a.grid.GetSelection()
 
-	values, ok := rowValues(a.buf, row-1)
+	values, ok := rowValues(a.buf, a.content.bufferRow(row))
 	if !ok {
 		a.notice("no row selected")
 		return

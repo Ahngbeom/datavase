@@ -179,6 +179,12 @@ var helpGroups = []struct {
 		},
 	},
 	{
+		title: "Results",
+		actions: []keymap.Action{
+			keymap.ActionSortColumn,
+		},
+	},
+	{
 		title: "Moving around",
 		actions: []keymap.Action{
 			keymap.ActionNextPane, keymap.ActionPrevPane, keymap.ActionCycleTab,

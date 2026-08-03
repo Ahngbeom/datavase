@@ -213,13 +213,13 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 		return s.applyMotion(m)
 	}
 
-	// Search reaches the interface from normal mode, from visual mode and from
-	// the middle of a half-typed operator alike. It goes before the operator
-	// block below, which would otherwise abandon the sequence and swallow this
-	// key along with it, leaving "/" looking like a key that stopped working.
-	// The operator is dropped, because searching moves the cursor rather than
-	// giving an operator something to reach.
-	if cmd, ok := searchCommand(r); ok {
+	// A prompt reaches the interface from normal mode, from visual mode and
+	// from the middle of a half-typed operator alike. It goes before the
+	// operator block below, which would otherwise abandon the sequence and
+	// swallow this key along with it, leaving "/" or ":" looking like a key
+	// that stopped working. The operator is dropped, because neither searching
+	// nor a command gives an operator something to reach.
+	if cmd, ok := promptCommand(r); ok {
 		s.clearPending()
 		return cmd, OutcomeExecute
 	}
@@ -253,9 +253,12 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 	return s.feedNormal(r)
 }
 
-// searchCommand maps the keys that start or repeat a search.
-func searchCommand(r rune) (Command, bool) {
+// promptCommand maps the keys that open a prompt, or repeat what one asked
+// for.
+func promptCommand(r rune) (Command, bool) {
 	switch r {
+	case ':':
+		return Command{Kind: KindCommandLine}, true
 	case '/':
 		return Command{Kind: KindSearch}, true
 	case '?':

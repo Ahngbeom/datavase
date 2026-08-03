@@ -106,6 +106,19 @@ dv open local --dir ~/work/migrations   # with a worktree of SQL attached
 `F1` lists the vim keys and how to leave them. To use an ordinary typing
 editor instead, see [Changing the keys](#changing-the-keys).
 
+`:` opens a command line. `:w` saves, `:q` quits — asking first if there is
+unsaved work — `:q!` does not ask, `:wq` does both, and `:e path` opens a file
+from the attached worktree (`:e` on its own opens the finder).
+
+Beyond those it runs the same commands as the palette, by name: `:history`,
+`:commit`, `:unlock writes`. An abbreviation works while it names one command
+and is refused when it does not — `:c` says that it could be `cancel`,
+`comment`, `commit`, `complete` or `copy row` rather than picking one, because
+`cancel` and `commit` are opposite outcomes and Enter has already been pressed
+by the time it would matter. `Tab` completes as far as one name.
+
+`unlock writes` answers only to its whole name, never to an abbreviation.
+
 Everything outside the editor is the same on every keyboard, and follows
 DataGrip. Where DataGrip and VS Code agree, that key is used; where they
 differ, DataGrip wins. **`⌘` and `Ctrl` do the same thing** — use whichever

@@ -68,6 +68,9 @@ func (a *App) runVimCommand(cmd vim.Command) *tcell.EventKey {
 	case vim.KindPaste:
 		a.vimPut(cmd.At)
 
+	case vim.KindCommandLine:
+		a.showCommandLine()
+
 	case vim.KindSearch:
 		a.showTextSearch(cmd.Backward)
 	case vim.KindSearchNext:

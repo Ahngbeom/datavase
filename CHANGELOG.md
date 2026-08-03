@@ -7,6 +7,20 @@ edited account — and the place anything that needs action is written down.
 
 ## Unreleased
 
+### Added
+
+**A `:` command line.** `:w` saves, `:q` quits and asks first if there is
+unsaved work, `:q!` does not ask, `:wq` does both, and `:e path` opens a file
+from the attached worktree. Beyond those it runs the palette's commands by
+name, so there is one set of names rather than two.
+
+An abbreviation runs only while it names one command. `:c` is refused with a
+list of what it could have been — `cancel` and `commit` are opposite outcomes,
+and a command line has already been committed to by the time Enter is pressed.
+`Tab` completes as far as one name reaches.
+
+`unlock writes` answers to nothing but its whole name.
+
 ### Changed
 
 **The production write unlock is now called `unlock writes`, not `write`**, and

@@ -37,6 +37,16 @@ type command struct {
 	name    string
 	summary string
 
+	// exact keeps the command off the ":" line's abbreviations, so only its
+	// whole name reaches it.
+	//
+	// The palette can afford to guess because it shows the row it picked and
+	// Enter chooses from a visible list. A command line runs on Enter, and a
+	// prefix that is unique today stops being unique the moment a command is
+	// added — which is a fine way to reach "history" and no way at all to
+	// reach an unlock on production.
+	exact bool
+
 	// covers names the action this command performs, where there is one.
 	//
 	// It is what lets a test prove that no action is reachable only through a
@@ -91,6 +101,7 @@ func paletteCommands() []command {
 		{
 			name:    cmdEnableWrites,
 			summary: "allow writes to this production datasource for the session",
+			exact:   true,
 			run:     (*App).enableWrites,
 		},
 		{

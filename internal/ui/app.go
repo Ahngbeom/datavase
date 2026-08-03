@@ -520,6 +520,7 @@ const (
 	pageFiles     = "files"
 	pageAttach    = "attach"
 	pageSearch    = "search"
+	pageCommand   = "command"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than

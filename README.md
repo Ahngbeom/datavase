@@ -508,6 +508,21 @@ you have not connected to before:
 ssh-keyscan -H bastion.example.com >> ~/.ssh/known_hosts
 ```
 
+**When the bastion goes away, the message says so.** A laptop that slept, a
+bastion that restarted, a network that moved — the MySQL driver reports the
+same thing for all of them and for a database that has died: a socket that has
+gone. Being wrong about which hop failed is the difference between reconnecting
+and paging whoever owns the database, so a failure that could have happened
+anywhere between here and the server names the bastion when the tunnel has
+recorded a forwarding failure.
+
+A statement the *server* refused keeps its own message. A numbered MySQL error
+is proof the statement arrived and was answered, so whatever the tunnel has
+recorded, it is not what stopped that one.
+
+The connection does not come back on its own. Switching datasource (`⌘⇧D`)
+opens a fresh one, and so does restarting.
+
 ## The screen
 
 ```

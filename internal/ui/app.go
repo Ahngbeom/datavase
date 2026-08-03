@@ -1018,7 +1018,10 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 
 		default:
 			a.status.phase = phaseFailed
-			a.status.err = err
+			// What failed and where are different questions, and the driver
+			// only answers the first: a bastion that has stopped forwarding
+			// looks exactly like a database that has.
+			a.status.err = failureCause(err, a.transportFailure(), a.bastionName())
 		}
 
 		// The queue is resumed from here rather than from start(), because

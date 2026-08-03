@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
@@ -23,6 +24,13 @@ type Server struct {
 	HostKey ssh.PublicKey
 
 	rejectForward bool
+
+	// mu guards what Stop touches. Accepted connections are handled on their
+	// own goroutines, so stopping is a cross-goroutine act.
+	mu       sync.Mutex
+	listener net.Listener
+	conns    []net.Conn
+	stopped  bool
 }
 
 // Start launches a server that forwards direct-tcpip channels.
@@ -44,13 +52,13 @@ func start(t *testing.T, rejectForward bool) *Server {
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
 	}
-	t.Cleanup(func() { listener.Close() })
-
 	s := &Server{
 		Addr:          listener.Addr().String(),
 		HostKey:       signer.PublicKey(),
 		rejectForward: rejectForward,
+		listener:      listener,
 	}
+	t.Cleanup(s.Stop)
 
 	cfg := &ssh.ServerConfig{
 		// Any key is accepted: these tests are about forwarding, not about
@@ -67,11 +75,48 @@ func start(t *testing.T, rejectForward bool) *Server {
 			if err != nil {
 				return
 			}
+			s.track(conn)
 			go s.handle(conn, cfg)
 		}
 	}()
 
 	return s
+}
+
+// Stop takes the bastion away, closing the connections it has accepted along
+// with the listener.
+//
+// This is the event a session cannot see coming: a bastion restarted, a laptop
+// suspended, a network moved. Rejecting new forwards would not do — the
+// forwards already carrying a session would keep working, which is not what
+// happens when a bastion goes.
+func (s *Server) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.stopped {
+		return
+	}
+	s.stopped = true
+
+	s.listener.Close()
+	for _, c := range s.conns {
+		c.Close()
+	}
+	s.conns = nil
+}
+
+// track records an accepted connection so Stop can close it, and closes it
+// straight away if the server has already been stopped.
+func (s *Server) track(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.stopped {
+		conn.Close()
+		return
+	}
+	s.conns = append(s.conns, conn)
 }
 
 // Bastion describes this server as a datasource tunnel configuration.

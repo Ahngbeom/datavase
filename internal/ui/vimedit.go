@@ -29,7 +29,21 @@ func (a *App) vimKey(ev *tcell.EventKey) *tcell.EventKey {
 	case vim.OutcomePending:
 		return nil
 	}
-	return a.runVimCommand(cmd)
+
+	if cmd.Kind == vim.KindRepeat {
+		a.repeatChange(cmd.Count)
+		return nil
+	}
+
+	out := a.runVimCommand(cmd)
+
+	// Escape is what ends the insert a change opened, so the text typed into
+	// it can be read back only now.
+	if cmd.Kind == vim.KindEscape {
+		a.closeInsertRecording()
+	}
+	a.recordChange(cmd)
+	return out
 }
 
 // runVimCommand carries out a completed command, returning a key for the

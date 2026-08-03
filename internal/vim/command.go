@@ -42,6 +42,13 @@ const (
 	// KindSearchPrev repeats it the other way.
 	KindSearchNext
 	KindSearchPrev
+	// KindRepeat asks for the last change to be carried out again.
+	//
+	// It names no command of its own on purpose. A change that entered insert
+	// mode includes the text that was typed, and insert-mode keys go straight
+	// to the widget without this package seeing them — so what to replay is
+	// known only to whoever ran the change.
+	KindRepeat
 )
 
 // Motion is where a command reaches.
@@ -183,4 +190,19 @@ func (m Mode) String() string {
 	default:
 		return "NORMAL"
 	}
+}
+
+// Changes reports whether a command altered the buffer, and is therefore what
+// "." would repeat.
+//
+// The rule is vim's rather than the interface's, so it lives here: a yank
+// copies without changing, a motion moves, and an undo is not a change to be
+// done again. Repeating the repeat is excluded because recording it would
+// lose the original it stands for.
+func (c Command) Changes() bool {
+	switch c.Kind {
+	case KindDelete, KindChange, KindPaste, KindInsert:
+		return true
+	}
+	return false
 }

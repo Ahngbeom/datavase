@@ -78,6 +78,7 @@ func Reference() []Group {
 				{"yw", "yank a word"},
 				{"p", "put after the cursor"},
 				{"P", "put before the cursor"},
+				{".", "repeat the last change"},
 				{"u", "undo"},
 				{"<c-r>", "redo"},
 			},

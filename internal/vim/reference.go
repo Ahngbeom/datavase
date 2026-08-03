@@ -83,5 +83,15 @@ func Reference() []Group {
 				{"<c-r>", "redo"},
 			},
 		},
+		{
+			Title: "The command line",
+			Entries: []Entry{
+				// One entry, and it is the colon rather than ":w". What comes
+				// after it is typed into a prompt this package never sees, so
+				// listing ":w" here would be a sequence the state machine
+				// cannot be asked to confirm.
+				{":", "run a command: :w saves, :q quits, :e opens a file"},
+			},
+		},
 	}
 }

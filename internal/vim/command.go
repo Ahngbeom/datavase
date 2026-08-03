@@ -42,6 +42,12 @@ const (
 	// KindSearchPrev repeats it the other way.
 	KindSearchNext
 	KindSearchPrev
+	// KindCommandLine asks for the ":" prompt.
+	//
+	// It carries nothing typed at that prompt, for the same reason KindSearch
+	// carries no pattern: the keys after the colon go to a widget, not to this
+	// package.
+	KindCommandLine
 	// KindRepeat asks for the last change to be carried out again.
 	//
 	// It names no command of its own on purpose. A change that entered insert

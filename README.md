@@ -12,13 +12,14 @@ to damage a production database by accident.
 
 Usable, and specific about its edges.
 
-Built: connect (directly, over TLS, or through an SSH bastion), browse the
+Built: connect directly, over TLS or through an SSH bastion. Browse the
 schema, edit and run SQL with schema-aware completion, run a whole file a
-statement at a time, wrap work in a transaction and take it back, stream large
-results, cancel a runaway query — including a write — see what a write changed
-and what the server warned about, search the query history, export to CSV or
-JSON, attach a worktree and open, run and save the `.sql` files in it, and the
-production guard.
+statement at a time, and wrap the work in a transaction you can take back.
+Stream large results and cancel a runaway query — a write included. See what a
+write changed and what the server warned about, read a wide row down the page,
+copy a value out of it. Search the text on screen and the query history alike.
+Attach a directory of SQL and open, run and save the files in it. Export to
+CSV or JSON. And the production guard.
 
 Not built, and worth knowing before you lean on it:
 

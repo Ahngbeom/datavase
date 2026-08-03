@@ -5,9 +5,59 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.3.0 — 2026-08-03
+
+Nothing breaking. One thing you will notice immediately: the schema tree no
+longer starts on screen.
+
+### Changed
+
+**The schema pane starts hidden.** `⌘B` brings it. The application already
+chose overlay finders as its way around — a table, a schema and a file each
+have a key that opens a searchable list — and a permanent tree on top of them
+spends a third of the screen saying what those already answer. The opening
+message names the key, because a pane nobody knows about is worse than one in
+the way.
+
+**The screen is framed differently.** The environment moved from a status-bar
+field to a column down the left. The bar sheds fields to fit, so on a narrow
+terminal the one cue that mattered was the one that disappeared; a column of
+the frame cannot be squeezed out. It is also the only colour here that ignores
+your terminal theme — a production cue that goes pale because someone softened
+their red is not a cue.
+
+The top line now says where you are and the bottom what just happened.
+Regions are separated by a hairline rather than boxed, and each names itself
+once on its own header.
 
 ### Added
+
+**Attach a directory of SQL and work in it.** `dv open local --dir ~/work/migrations`,
+or `attach directory` in the palette. `⌘⇧O` lists the `.sql` files, `⌘S` saves.
+
+The listing comes from git rather than a directory walk, so a file
+`.gitignore` excludes is never offered, and each row says what git makes of
+it. git stays optional — a plain directory still yields its files and only
+loses the branch and the markers.
+
+Four things it will not do quietly: overwrite an edit made since the file was
+opened, leave a half-written file, lose an unsaved buffer, or open something
+over 4 MiB that would stop the text widget drawing.
+
+**Search what is on screen.** `/` searches whatever has focus, `?` backwards,
+`n` and `N` step. The prompt sits on the bottom row rather than over the
+screen, so you can see what is being searched while you type it. Matching is
+literal and smart about case.
+
+Searching the results reads the data rather than what is drawn: the grid
+truncates long values and doubles their brackets for the markup parser, so a
+`[` in your data would otherwise never be findable, and nor would anything
+past the two-hundredth character.
+
+**The palette offers the commands that had only chords**, and a test now
+refuses to let an action exist that is reachable neither by a plain key nor by
+name — which is not hypothetical: a terminal keeping `⌘` for its own menus
+left the schema tree with no way in at all.
 
 **vim: `.` repeats the last change** — including the text typed into it, so
 `ciw` a name, then `.` on the next one. Insert-mode keys go straight to the

@@ -23,6 +23,7 @@ Built:
 - **Read the answer**: stream large results, sort a column, take a wide row
   down the page, copy a value out, search what is on screen. See what a write
   changed and what the server warned about, and read a query plan as a tree.
+- **See what else is running** on the server, and how long it has been running.
 - **Work in a directory of SQL**: open, run and save its files, with git
   telling you which have changed.
 - **The production guard**, which is the reason for the rest.
@@ -169,6 +170,7 @@ your hands reach for.
 | Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
 | Explain the statement under the cursor | `⌘E` | `Ctrl+E` |
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
+| List what else is running | `⌘⇧U` | `Ctrl+Shift+U` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
@@ -703,6 +705,24 @@ Because it runs the statement, **it goes through the guard as that statement**.
 `⌘⇧E` on an unbounded `DELETE` against production is refused exactly as running
 it would be, and a bounded one asks for the same word to be typed. The buffer is
 still not touched: the wrapping happens on the way to the server.
+
+### What else is running
+
+`⌘⇧U` (`Ctrl+Shift+U`), or `sessions` in the palette, lists the server's
+connections: who, from where, what they are doing and for how long. Working
+connections come first, longest first; the ones merely holding a socket open
+follow. A statement that has been running longer than a few seconds is red,
+because that is usually the answer.
+
+Reading is explicit rather than on a timer. A list that reloads under the
+cursor is how the wrong session gets acted on, and press the key again to
+refresh.
+
+**A user without the `PROCESS` privilege is told so.** The server does not
+refuse the query — it answers with that user's own connections and nothing
+else, so a list of one means either "nothing else is running" or "you cannot
+see it". Those are opposite answers to the question that was asked, and the
+status bar says which one you are looking at.
 
 ### Switching datasource
 

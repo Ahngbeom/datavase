@@ -307,6 +307,16 @@ func baseMap() *Map {
 	// from the plan, and never the key that is reached for by accident.
 	m.bind(ActionAnalyze, ctrlAndCmdRune('e', tcell.ModShift)...)
 
+	// What else is running. Not ⌘⇧P, which reads as "process list" and is the
+	// command palette on the VS Code preset — a collision the preset test
+	// caught. ⌘⇧U for "who else is using this".
+	//
+	// The first binding here with no function key behind it: F1 to F12 are
+	// spoken for. The palette carries it for a terminal that keeps ⌘ and Ctrl
+	// chords to itself, which is the rule the coverage test actually enforces
+	// — the function keys were always the convenience, not the guarantee.
+	m.bind(ActionSessions, ctrlAndCmdRune('u', tcell.ModShift)...)
+
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

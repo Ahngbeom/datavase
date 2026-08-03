@@ -265,6 +265,35 @@ var verbKinds = map[string]StmtKind{
 	"CREATE":   StmtDDL, "ALTER": StmtDDL, "RENAME": StmtDDL,
 }
 
+// PlansAsJSON reports whether the statement answers with a JSON plan rather
+// than with rows.
+//
+// EXPLAIN and ANALYZE send a table unless FORMAT=JSON asks otherwise, and a
+// table belongs in the grid like any other result. Only the JSON form is
+// something to draw as a tree, and telling them apart is a question about the
+// statement's words rather than about its result.
+func (s Statement) PlansAsJSON() bool {
+	words := s.words()
+	if len(words) == 0 {
+		return false
+	}
+	switch strings.ToUpper(words[0]) {
+	case "EXPLAIN", "ANALYZE":
+	default:
+		return false
+	}
+
+	// FORMAT, = and JSON are three tokens or two depending on the spacing, so
+	// the words are read in sequence rather than matched as a string.
+	for i, w := range words {
+		if strings.EqualFold(w, "FORMAT") && i+1 < len(words) &&
+			strings.EqualFold(words[i+1], "JSON") {
+			return true
+		}
+	}
+	return false
+}
+
 // Verb is the statement's leading keyword, upper-cased, or "" if it has none.
 // Kind is the right question almost everywhere; this exists for the few
 // places that have to tell two statements of one kind apart.

@@ -303,6 +303,10 @@ func baseMap() *Map {
 	// ⌘ and Ctrl chords for itself.
 	m.bind(ActionExplain, ctrlAndCmdRune('e', 0)...)
 
+	// ANALYZE runs the statement, so it is the shifted one: a finger away
+	// from the plan, and never the key that is reached for by accident.
+	m.bind(ActionAnalyze, ctrlAndCmdRune('e', tcell.ModShift)...)
+
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

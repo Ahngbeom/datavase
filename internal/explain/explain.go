@@ -16,7 +16,9 @@ package explain
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -33,6 +35,10 @@ type Node struct {
 	// Warnings name what will make this step slow, in the words a DBA would
 	// use rather than the server's.
 	Warnings []string
+
+	// wrong records that a measurement contradicted its estimate, decided
+	// while the pair was still together.
+	wrong bool
 }
 
 // Attr is one scalar field of a step.
@@ -100,10 +106,103 @@ func build(name string, obj map[string]any) *Node {
 		}
 	}
 
+	n.pairActuals()
 	sortAttrs(n.Attrs)
 	n.label()
 	n.warn()
 	return n
+}
+
+// pairActuals folds each "r_" measurement into the estimate it belongs to.
+//
+// ANALYZE runs the statement, so its plan carries what happened beside what
+// was expected — "rows" and "r_rows", "filtered" and "r_filtered". Left apart
+// they are two numbers a dozen lines from each other, and comparing them is
+// the only reason the statement was run rather than merely planned.
+//
+// A pair that agrees collapses back to one number: there is nothing to compare
+// when the run confirmed the estimate, and an arrow through every field would
+// bury the ones where it did not.
+func (n *Node) pairActuals() {
+	actual := make(map[string]string, len(n.Attrs))
+	for _, a := range n.Attrs {
+		if name, ok := strings.CutPrefix(a.Key, "r_"); ok {
+			actual[name] = a.Value
+		}
+	}
+
+	kept := n.Attrs[:0]
+	for _, a := range n.Attrs {
+		if name, ok := strings.CutPrefix(a.Key, "r_"); ok {
+			// Dropped only where there is an estimate to have folded it into;
+			// r_total_time_ms and r_engine_stats stand on their own.
+			if _, paired := estimateOf(n.Attrs, name); paired {
+				continue
+			}
+			kept = append(kept, a)
+			continue
+		}
+
+		if ran, ok := actual[a.Key]; ok && ran != a.Value {
+			n.wrong = n.wrong || estimateWrong(a.Key, a.Value, ran)
+			a.Value += " → " + ran
+		}
+		kept = append(kept, a)
+	}
+	n.Attrs = kept
+}
+
+func estimateOf(attrs []Attr, name string) (string, bool) {
+	for _, a := range attrs {
+		if a.Key == name {
+			return a.Value, true
+		}
+	}
+	return "", false
+}
+
+// estimateWrong reports whether an estimate missed by enough to say so.
+//
+// Enough is not a ratio alone. Ten rows against one is tenfold and tells
+// nobody anything, and a filter is a percentage, where a ratio at the bottom
+// of the range — one per cent against a tenth — is arithmetic rather than a
+// finding. So a count needs both a wide ratio and a size worth the reader's
+// attention, and a percentage is measured in the points between them.
+func estimateWrong(field, estimate, actual string) bool {
+	want, okA := asFloat(estimate)
+	got, okB := asFloat(actual)
+	if !okA || !okB {
+		return false
+	}
+
+	if field == "filtered" {
+		return math.Abs(want-got) >= filteredPointsWrong
+	}
+	if field != "rows" {
+		return false
+	}
+
+	high, low := math.Max(want, got), math.Min(want, got)
+	if high < rowsWorthReporting {
+		return false
+	}
+	if low <= 0 {
+		return true
+	}
+	return high/low >= rowsFactorWrong
+}
+
+const (
+	// A count has to be both wide of the mark and large enough to matter.
+	rowsFactorWrong    = 10
+	rowsWorthReporting = 100
+	// A filter is a percentage: the gap between the two is what reads.
+	filteredPointsWrong = 25
+)
+
+func asFloat(text string) (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(text), 64)
+	return f, err == nil
 }
 
 // appendList handles a field holding an array.
@@ -194,6 +293,12 @@ func (n *Node) warn() {
 	}
 	if n.Attr("using_temporary_table") == "true" {
 		n.Warnings = append(n.Warnings, "temporary table")
+	}
+
+	// Only ANALYZE can raise this one: it is the difference between what the
+	// optimiser expected and what running the statement actually did.
+	if n.wrong {
+		n.Warnings = append(n.Warnings, "estimate wrong")
 	}
 }
 

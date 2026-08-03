@@ -7,6 +7,23 @@ edited account — and the place anything that needs action is written down.
 
 ## Unreleased
 
+### Added
+
+**`⌘⇧E` runs the statement and reports what actually happened.** Where `⌘E`
+shows what the optimiser expected, this shows the estimate and the measurement
+together — `rows 20084 → 20000`, `filtered 33.2 → 0` — and calls out an
+estimate the run contradicted.
+
+Only when it is worth acting on: a count has to be both wide of the mark and
+large enough to matter, and a filter is measured in percentage points rather
+than as a ratio, where one per cent against a tenth would otherwise read as
+tenfold.
+
+Because it runs the statement, it goes through the guard **as** that statement.
+`⌘⇧E` on an unbounded `DELETE` against production is refused exactly as running
+it would be. The buffer is not touched; the wrapping happens on the way to the
+server.
+
 ### Fixed
 
 **`ANALYZE` was classified as a read, and it runs the statement it wraps.**

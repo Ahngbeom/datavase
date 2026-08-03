@@ -409,3 +409,34 @@ func TestAWrappedStatementKeepsItsBoundingClause(t *testing.T) {
 		t.Error("the WHERE was lost behind the ANALYZE prefix")
 	}
 }
+
+// A wrapper only answers in JSON when it was asked to, and the caller that
+// renders a plan has to know which it is getting: without FORMAT=JSON the
+// server sends rows, which belong in the grid like any other result.
+func TestPlansAsJSON(t *testing.T) {
+	for _, tt := range []struct {
+		sql  string
+		want bool
+	}{
+		{"EXPLAIN FORMAT=JSON SELECT 1", true},
+		{"ANALYZE FORMAT=JSON SELECT 1", true},
+		{"ANALYZE FORMAT = JSON DELETE FROM t", true},
+		{"explain format=json select 1", true},
+
+		{"EXPLAIN SELECT 1", false},
+		{"ANALYZE SELECT 1", false},
+		{"EXPLAIN FORMAT=TRADITIONAL SELECT 1", false},
+		{"SELECT 1", false},
+		{"SELECT 'FORMAT=JSON'", false},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			stmts := Split(tt.sql)
+			if len(stmts) != 1 {
+				t.Fatalf("Split(%q) produced %d statements", tt.sql, len(stmts))
+			}
+			if got := stmts[0].PlansAsJSON(); got != tt.want {
+				t.Errorf("PlansAsJSON(%q) = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}

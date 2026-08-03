@@ -226,3 +226,82 @@ func createSchemaFixture(t *testing.T, schema string) {
 		t.Fatalf("creating the second schema: %v", err)
 	}
 }
+
+// ANALYZE runs the statement, so the whole safety question is whether the
+// guard sees it. It does, because the wrapper is judged as what it wraps —
+// and the proof is that the rows are still there afterwards.
+func TestAnalyzingADeleteIsRefusedAgainstProductionAndDeletesNothing(t *testing.T) {
+	createPlanFixtures(t)
+	h := newHarness(t, config.EnvProd)
+
+	h.typeSQL("DELETE FROM dv_p_books")
+	h.do(keymap.ActionAnalyze)
+
+	if !h.waitForScreen("Refused") {
+		t.Fatalf("analysing a delete was not refused; screen:\n%s", h.text())
+	}
+	if got := countRows(t, "dv_p_books"); got != 3 {
+		t.Errorf("dv_p_books holds %d rows; the refusal did not hold", got)
+	}
+}
+
+// The output ANALYZE exists for: what the optimiser expected beside what
+// running it actually did.
+func TestAnalyzingShowsWhatActuallyHappened(t *testing.T) {
+	createPlanFixtures(t)
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SELECT * FROM dv_p_books WHERE title = 'zzz'")
+	h.do(keymap.ActionAnalyze)
+
+	h.waitFor("the plan", func(a *App) bool { return a.planView.text != "" })
+
+	joined := strings.Join(h.planLines(), "\n")
+	// An estimate and an actual, side by side. Nothing in a plain EXPLAIN can
+	// produce the arrow, because nothing ran.
+	if !strings.Contains(joined, "→") {
+		t.Errorf("the plan shows no measured value beside an estimate:\n%s", joined)
+	}
+	if !strings.Contains(joined, "dv_p_books") {
+		t.Errorf("the plan does not name the table:\n%s", joined)
+	}
+}
+
+// The buffer is not touched, exactly as for the plan: the statement is wrapped
+// on its way to the server, not in the editor.
+func TestAnalyzingLeavesTheBufferAlone(t *testing.T) {
+	createPlanFixtures(t)
+	h := newHarness(t, config.EnvDev)
+
+	const sql = "SELECT * FROM dv_p_books"
+	h.typeSQL(sql)
+	h.do(keymap.ActionAnalyze)
+	h.waitFor("the plan", func(a *App) bool { return a.planView.text != "" })
+
+	if got := h.editorText(); got != sql {
+		t.Errorf("the buffer reads %q, want %q", got, sql)
+	}
+}
+
+func countRows(t *testing.T, table string) int {
+	t.Helper()
+
+	ds, password := testmysql.DataSource(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	conn, err := db.Open(ctx, ds, password, "")
+	if err != nil {
+		t.Fatalf("db.Open() error = %v", err)
+	}
+	defer conn.Close()
+
+	var n int
+	err = conn.WithControl(ctx, func(c *sql.Conn) error {
+		return c.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n)
+	})
+	if err != nil {
+		t.Fatalf("counting %s: %v", table, err)
+	}
+	return n
+}

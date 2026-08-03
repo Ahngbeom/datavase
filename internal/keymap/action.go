@@ -76,6 +76,9 @@ const (
 	// ActionExplain asks the server how it would run the statement under the
 	// cursor, without running it.
 	ActionExplain
+	// ActionAnalyze runs the statement under the cursor and reports what it
+	// actually did, against what was expected.
+	ActionAnalyze
 
 	// Application.
 	ActionHelp
@@ -124,6 +127,7 @@ var actionNames = map[Action]string{
 	ActionSortColumn:        "sort-column",
 	ActionSwitchDataSource:  "switch-datasource",
 	ActionExplain:           "explain",
+	ActionAnalyze:           "analyze",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -170,6 +174,7 @@ var descriptions = map[Action]string{
 	ActionSortColumn:        "sort the results by the selected column",
 	ActionSwitchDataSource:  "switch to another datasource",
 	ActionExplain:           "explain the statement under the cursor",
+	ActionAnalyze:           "run it and report what it actually did",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -184,7 +189,7 @@ var reserved = map[Action]bool{}
 
 // order fixes how actions appear on the help screen, grouped by purpose.
 var order = []Action{
-	ActionRun, ActionRunAll, ActionCancel, ActionExplain,
+	ActionRun, ActionRunAll, ActionCancel, ActionExplain, ActionAnalyze,
 	ActionWordLeft, ActionWordRight, ActionSelectWordLeft, ActionSelectWordRight,
 	ActionLineStart, ActionLineEnd, ActionSelectLineStart, ActionSelectLineEnd,
 	ActionDeleteWordLeft, ActionDeleteToLineStart,

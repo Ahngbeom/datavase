@@ -134,6 +134,12 @@ func TestNormalModeSequences(t *testing.T) {
 			if out != OutcomeExecute {
 				t.Fatalf("Feed(%q) outcome = %v, want %v", tt.keys, out, OutcomeExecute)
 			}
+			// The machine guarantees a count of at least one, and none of
+			// these sequences types one. Stated here rather than repeated
+			// down a table that is about which command each sequence makes.
+			if tt.want.Count == 0 {
+				tt.want.Count = 1
+			}
 			if cmd != tt.want {
 				t.Errorf("Feed(%q) = %+v, want %+v", tt.keys, cmd, tt.want)
 			}
@@ -404,8 +410,14 @@ func TestReferenceOnlyListsKeysThatWork(t *testing.T) {
 				t.Errorf("%q has no description", entry.Keys)
 			}
 
+			// The reference writes the character a find motion takes as
+			// "{char}", the way vim's own documentation does. Standing a real
+			// one in keeps the entry readable without letting it advertise a
+			// sequence that does not complete.
+			keys := strings.ReplaceAll(entry.Keys, "{char}", ",")
+
 			s := New()
-			_, out := feed(t, s, entry.Keys)
+			_, out := feed(t, s, keys)
 			if out != OutcomeExecute {
 				t.Errorf("the reference lists %q, but typing it does nothing (%v)", entry.Keys, out)
 			}
@@ -436,6 +448,11 @@ func TestSearchKeysAskTheInterfaceForAPattern(t *testing.T) {
 			cmd, out := feed(t, New(), tc.keys)
 			if out != OutcomeExecute {
 				t.Fatalf("outcome = %v, want %v", out, OutcomeExecute)
+			}
+			// The machine guarantees a count of at least one on anything it
+			// runs; none of these sequences types one.
+			if tc.want.Count == 0 {
+				tc.want.Count = 1
 			}
 			if cmd != tc.want {
 				t.Errorf("command = %+v, want %+v", cmd, tc.want)
@@ -490,5 +507,160 @@ func TestSearchKeysAreOrdinaryTextInInsertMode(t *testing.T) {
 		if _, out := feed(t, s, key); out != OutcomePass {
 			t.Errorf("%q in insert mode gave %v, want %v", key, out, OutcomePass)
 		}
+	}
+}
+
+// A count is the first thing a vim user's hands reach for, and pressing "d"
+// three times instead is the moment the editor stops feeling like vim.
+func TestACountRepeatsTheMotion(t *testing.T) {
+	tests := []struct {
+		keys      string
+		wantCount int
+		wantWhat  Motion
+	}{
+		{"3j", 3, MotionDown},
+		{"12l", 12, MotionRight},
+		{"5w", 5, MotionWordForward},
+		// No count typed is one, not zero: the caller multiplies by it.
+		{"j", 1, MotionDown},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.keys, func(t *testing.T) {
+			cmd, out := feed(t, New(), tt.keys)
+			if out != OutcomeExecute {
+				t.Fatalf("outcome = %v, want OutcomeExecute", out)
+			}
+			if cmd.Motion != tt.wantWhat {
+				t.Errorf("motion = %v, want %v", cmd.Motion, tt.wantWhat)
+			}
+			if cmd.Count != tt.wantCount {
+				t.Errorf("count = %d, want %d", cmd.Count, tt.wantCount)
+			}
+		})
+	}
+}
+
+// "0" is the start of the line, and only a digit when something is already
+// being counted. Getting this wrong makes the most common motion in the file
+// unreachable.
+func TestZeroIsTheLineStartUntilACountIsUnderway(t *testing.T) {
+	cmd, out := feed(t, New(), "0")
+	if out != OutcomeExecute || cmd.Motion != MotionLineStart {
+		t.Errorf("bare 0 gave %v/%v, want the line start", out, cmd.Motion)
+	}
+
+	cmd, out = feed(t, New(), "10j")
+	if out != OutcomeExecute || cmd.Count != 10 {
+		t.Errorf("\"10j\" gave count %d (%v), want 10", cmd.Count, out)
+	}
+}
+
+// The status bar shows what has been half-typed, and a count that does not
+// appear there is indistinguishable from a keyboard that has stopped working.
+func TestAHalfTypedCountShowsOnTheStatusBar(t *testing.T) {
+	s := New()
+	feed(t, s, "12")
+
+	if got := s.Pending(); got != "12" {
+		t.Errorf("Pending() = %q, want %q", got, "12")
+	}
+}
+
+// Counts multiply around an operator, as vim's do: "2d3w" is six words.
+func TestCountsOnBothSidesOfAnOperatorMultiply(t *testing.T) {
+	cmd, out := feed(t, New(), "2d3w")
+
+	if out != OutcomeExecute {
+		t.Fatalf("outcome = %v, want OutcomeExecute", out)
+	}
+	if cmd.Kind != KindDelete || cmd.Motion != MotionWordForward {
+		t.Fatalf("got %v/%v, want a word delete", cmd.Kind, cmd.Motion)
+	}
+	if cmd.Count != 6 {
+		t.Errorf("count = %d, want 6", cmd.Count)
+	}
+}
+
+func TestACountAppliesToALinewiseOperator(t *testing.T) {
+	cmd, out := feed(t, New(), "3dd")
+
+	if out != OutcomeExecute {
+		t.Fatalf("outcome = %v, want OutcomeExecute", out)
+	}
+	if cmd.Kind != KindDelete || !cmd.Linewise || cmd.Count != 3 {
+		t.Errorf("got kind=%v linewise=%v count=%d, want a 3-line delete",
+			cmd.Kind, cmd.Linewise, cmd.Count)
+	}
+}
+
+// f and t are how anyone moves along a line of SQL — "f," across a column
+// list is the motion this editor is used for most.
+func TestFindMotionsCarryTheCharacterTheyWereGiven(t *testing.T) {
+	tests := []struct {
+		keys string
+		want Motion
+	}{
+		{"f,", MotionFindForward},
+		{"t,", MotionTillForward},
+		{"F,", MotionFindBackward},
+		{"T,", MotionTillBackward},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.keys, func(t *testing.T) {
+			cmd, out := feed(t, New(), tt.keys)
+			if out != OutcomeExecute {
+				t.Fatalf("outcome = %v, want OutcomeExecute", out)
+			}
+			if cmd.Motion != tt.want {
+				t.Errorf("motion = %v, want %v", cmd.Motion, tt.want)
+			}
+			if cmd.Target != ',' {
+				t.Errorf("target = %q, want %q", cmd.Target, ',')
+			}
+		})
+	}
+}
+
+// Waiting for the character is a pending state like any other, and the bar
+// has to say so rather than looking like nothing happened.
+func TestFindWaitsForItsCharacterAndSaysSo(t *testing.T) {
+	s := New()
+
+	if _, out := feed(t, s, "f"); out != OutcomePending {
+		t.Fatalf("outcome after f = %v, want OutcomePending", out)
+	}
+	if got := s.Pending(); got != "f" {
+		t.Errorf("Pending() = %q, want %q", got, "f")
+	}
+}
+
+// The whole point of f as an operator motion: "df," deletes up to the comma.
+func TestAnOperatorTakesAFindMotion(t *testing.T) {
+	cmd, out := feed(t, New(), "df,")
+
+	if out != OutcomeExecute {
+		t.Fatalf("outcome = %v, want OutcomeExecute", out)
+	}
+	if cmd.Kind != KindDelete || cmd.Motion != MotionFindForward || cmd.Target != ',' {
+		t.Errorf("got kind=%v motion=%v target=%q, want a delete to the comma",
+			cmd.Kind, cmd.Motion, cmd.Target)
+	}
+}
+
+// Escape has to clear a half-typed count too, or the next motion silently
+// carries a multiplier nobody can see.
+func TestEscapeClearsAHalfTypedCount(t *testing.T) {
+	s := New()
+	feed(t, s, "12")
+	feed(t, s, "<esc>")
+
+	if got := s.Pending(); got != "" {
+		t.Errorf("Pending() = %q after Escape, want empty", got)
+	}
+	cmd, _ := feed(t, s, "j")
+	if cmd.Count != 1 {
+		t.Errorf("count = %d after Escape, want 1", cmd.Count)
 	}
 }

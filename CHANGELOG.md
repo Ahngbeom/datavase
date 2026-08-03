@@ -9,6 +9,16 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**vim: counts and the find motions.** `3j`, `2dw` and `3dd` — a count in front
+of any motion or operator, which is the first thing a vim user's hands reach
+for and which pressing `d` three times is not. And `f`, `t`, `F`, `T`: `f,`
+across a column list is the motion a SQL editor is used for most, and none of
+them did anything at all before.
+
+Counts multiply around an operator as vim's do, so `2d3w` is six words. `f`
+and `t` are inclusive when an operator is using them, so `df,` takes the comma
+with it rather than leaving the separator behind.
+
 **A value can be copied out of the results.** With the grid focused the copy
 key used to fall through to "nothing selected and nothing running", so lifting
 one value into a ticket or the next query was impossible. `⌘C` now copies the

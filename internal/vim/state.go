@@ -1,6 +1,7 @@
 package vim
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -17,6 +18,14 @@ type State struct {
 	op Kind
 	// gPrefix records that "g" has been typed and is waiting for the rest.
 	gPrefix bool
+	// count is the digits typed so far, zero when none have been. Counts on
+	// both sides of an operator multiply, as vim's do, so opCount holds the
+	// one that was complete when the operator arrived.
+	count   int
+	opCount int
+	// findPending is the find motion waiting for its character, MotionNone
+	// when none is.
+	findPending Motion
 }
 
 // New returns a state in normal mode, which is where vim starts.
@@ -33,6 +42,11 @@ func (s *State) Mode() Mode { return s.mode }
 func (s *State) Pending() string {
 	var b strings.Builder
 
+	// Written in the order it was typed, so the bar reads back what the hands
+	// did: "2d3" rather than the state's own field order.
+	if s.opCount > 0 {
+		b.WriteString(strconv.Itoa(s.opCount))
+	}
 	switch s.op {
 	case KindDelete:
 		b.WriteByte('d')
@@ -41,8 +55,21 @@ func (s *State) Pending() string {
 	case KindYank:
 		b.WriteByte('y')
 	}
+	if s.count > 0 {
+		b.WriteString(strconv.Itoa(s.count))
+	}
 	if s.gPrefix {
 		b.WriteByte('g')
+	}
+	switch s.findPending {
+	case MotionFindForward:
+		b.WriteByte('f')
+	case MotionFindBackward:
+		b.WriteByte('F')
+	case MotionTillForward:
+		b.WriteByte('t')
+	case MotionTillBackward:
+		b.WriteByte('T')
 	}
 	return b.String()
 }
@@ -67,6 +94,18 @@ var motionKeys = map[rune]Motion{
 // The outcome says whether the editor should type the key, keep waiting, or
 // run the returned command.
 func (s *State) Feed(ev *tcell.EventKey) (Command, Outcome) {
+	cmd, out := s.feedEvent(ev)
+
+	// Count is never zero on a command that is about to run. Guaranteeing it
+	// here rather than at each of the dozen places a command is built is what
+	// lets every caller multiply by it without checking first.
+	if out == OutcomeExecute && cmd.Count == 0 {
+		cmd.Count = 1
+	}
+	return cmd, out
+}
+
+func (s *State) feedEvent(ev *tcell.EventKey) (Command, Outcome) {
 	// Escape is the way out of everything, from every mode, including a
 	// sequence that was only half typed.
 	if ev.Key() == tcell.KeyEscape {
@@ -114,6 +153,24 @@ func arrowMotion(key tcell.Key) (Motion, bool) {
 }
 
 func (s *State) feedRune(r rune) (Command, Outcome) {
+	// A find motion waiting for its character takes whatever comes, literally
+	// and before anything else can claim it: "fg" finds a "g" rather than
+	// starting the g prefix, and "f3" finds a "3" rather than a count.
+	if s.findPending != MotionNone {
+		return s.applyMotionTo(s.findPending, r)
+	}
+
+	// A digit continues a count, and has to be seen before the motion table:
+	// "0" is in there as the start of the line, which would otherwise swallow
+	// the second half of "10j".
+	if s.digit(r) {
+		return Command{}, OutcomePending
+	}
+	if m, ok := findKeys[r]; ok {
+		s.findPending = m
+		return Command{}, OutcomePending
+	}
+
 	// "g" is a prefix in its own right, and it can follow an operator: "dgg"
 	// deletes to the top of the file.
 	if s.gPrefix {
@@ -148,11 +205,12 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 	if s.op != KindNone {
 		if r == operatorRune(s.op) {
 			op := s.op
-			s.op = KindNone
+			count := s.resolveCount()
+			s.clearPending()
 			if op == KindChange {
 				s.mode = ModeInsert
 			}
-			return Command{Kind: op, Linewise: true}, OutcomeExecute
+			return Command{Kind: op, Linewise: true, Count: count}, OutcomeExecute
 		}
 		return s.abandon()
 	}
@@ -183,27 +241,31 @@ func searchCommand(r rune) (Command, bool) {
 // completions.
 func (s *State) feedNormal(r rune) (Command, Outcome) {
 	switch r {
+
 	// Operators, which now wait for a motion.
 	case 'd':
 		s.op = KindDelete
+		s.opCount, s.count = s.count, 0
 		return Command{}, OutcomePending
 	case 'c':
 		s.op = KindChange
+		s.opCount, s.count = s.count, 0
 		return Command{}, OutcomePending
 	case 'y':
 		s.op = KindYank
+		s.opCount, s.count = s.count, 0
 		return Command{}, OutcomePending
 
 	// Shorthands for an operator and a motion typed together.
 	case 'x':
-		return Command{Kind: KindDelete, Motion: MotionRight}, OutcomeExecute
+		return s.shorthand(Command{Kind: KindDelete, Motion: MotionRight})
 	case 'D':
-		return Command{Kind: KindDelete, Motion: MotionLineEnd}, OutcomeExecute
+		return s.shorthand(Command{Kind: KindDelete, Motion: MotionLineEnd})
 	case 'C':
 		s.mode = ModeInsert
-		return Command{Kind: KindChange, Motion: MotionLineEnd}, OutcomeExecute
+		return s.shorthand(Command{Kind: KindChange, Motion: MotionLineEnd})
 	case 'Y':
-		return Command{Kind: KindYank, Linewise: true}, OutcomeExecute
+		return s.shorthand(Command{Kind: KindYank, Linewise: true})
 
 	case 'i':
 		return s.insertAt(PlaceBefore)
@@ -262,16 +324,29 @@ func (s *State) feedVisual(r rune) (Command, Outcome) {
 // applyMotion turns a motion into a movement, or into the operator that was
 // waiting for it.
 func (s *State) applyMotion(m Motion) (Command, Outcome) {
-	if s.op == KindNone {
-		return Command{Kind: KindMove, Motion: m}, OutcomeExecute
-	}
+	return s.applyMotionTo(m, 0)
+}
 
+// applyMotionTo completes a motion, with the character a find motion was
+// given.
+func (s *State) applyMotionTo(m Motion, target rune) (Command, Outcome) {
+	count := s.resolveCount()
 	op := s.op
-	s.op = KindNone
+	s.clearPending()
+
+	if op == KindNone {
+		return Command{Kind: KindMove, Motion: m, Count: count, Target: target}, OutcomeExecute
+	}
 	if op == KindChange {
 		s.mode = ModeInsert
 	}
-	return Command{Kind: op, Motion: m, Linewise: spansLines(m)}, OutcomeExecute
+	return Command{
+		Kind:     op,
+		Motion:   m,
+		Linewise: spansLines(m),
+		Count:    count,
+		Target:   target,
+	}, OutcomeExecute
 }
 
 // spansLines reports whether a motion makes its operator act on whole lines.
@@ -319,6 +394,57 @@ func (s *State) abandon() (Command, Outcome) {
 func (s *State) clearPending() {
 	s.op = KindNone
 	s.gPrefix = false
+	s.count = 0
+	s.opCount = 0
+	s.findPending = MotionNone
+}
+
+// resolveCount is the multiplier for the command being completed, and always
+// at least one so the caller can multiply without checking for zero.
+//
+// Counts either side of an operator multiply, which is vim's rule: "2d3w" is
+// six words rather than three.
+func (s *State) resolveCount() int {
+	n := 1
+	if s.opCount > 0 {
+		n *= s.opCount
+	}
+	if s.count > 0 {
+		n *= s.count
+	}
+	return n
+}
+
+// findKeys are the motions that need a character before they mean anything.
+var findKeys = map[rune]Motion{
+	'f': MotionFindForward,
+	'F': MotionFindBackward,
+	't': MotionTillForward,
+	'T': MotionTillBackward,
+}
+
+// shorthand completes a key that carries its own operator and motion, so that
+// a count typed before it still applies: "3x" deletes three characters.
+func (s *State) shorthand(cmd Command) (Command, Outcome) {
+	cmd.Count = s.resolveCount()
+	s.clearPending()
+	return cmd, OutcomeExecute
+}
+
+// digit folds a keystroke into the count being typed.
+//
+// "0" is the start of the line and only a digit once something is already
+// being counted — otherwise the most-used motion in the file would be
+// unreachable.
+func (s *State) digit(r rune) bool {
+	if r < '0' || r > '9' {
+		return false
+	}
+	if r == '0' && s.count == 0 {
+		return false
+	}
+	s.count = s.count*10 + int(r-'0')
+	return true
 }
 
 func (s *State) reset() {

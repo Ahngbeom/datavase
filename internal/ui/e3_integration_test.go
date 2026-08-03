@@ -137,6 +137,24 @@ func TestVimOperators(t *testing.T) {
 			keys: "cwname", want: "SELECT name",
 		},
 		{
+			// Same text and caret as the dw case above, and deliberately so:
+			// c is the one operator that must not take the space. Merging two
+			// identifiers is silent in SQL — SELECT namefrom parses as an
+			// alias and nothing downstream ever complains.
+			name: "cw stops at the end of the word, where dw takes the space",
+			text: "SELECT id FROM t", caret: 7,
+			keys: "cwname", want: "SELECT name FROM t",
+		},
+		{
+			// The exception is only for a caret sitting on a word. From
+			// whitespace cw is ordinary again and changes the blanks alone;
+			// reaching into the word after them would delete text the caret
+			// was not even on.
+			name: "cw from whitespace changes the blanks, not the word after them",
+			text: "SELECT   id", caret: 6,
+			keys: "cwX", want: "SELECTXid",
+		},
+		{
 			name: "cc clears the line and keeps its indent",
 			text: "SELECT id\n  FROM t", caret: 13,
 			keys: "ccWHERE x", want: "SELECT id\n  WHERE x",
@@ -409,9 +427,7 @@ func TestDotReplaysTheTextTypedIntoAChange(t *testing.T) {
 	h := newVimHarness(t)
 	h.buffer("aaa bbb", 0)
 
-	// ciw rather than cw: this editor's cw takes the space after the word
-	// with it, which would merge the two and leave nothing to repeat onto.
-	h.typeInto("ciw")
+	h.typeInto("cw")
 	h.typeInto("x")
 	h.press(tcell.KeyEscape)
 

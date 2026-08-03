@@ -5,6 +5,17 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+### Fixed
+
+**`cw` stops at the end of the word.** It used to travel on to the start of the
+next one, so changing a word took the space after it and ran the two together.
+In SQL that join is silent — `SELECT namefrom t` reads as a column and an
+alias, so neither the editor nor the server ever reports the typo. `dw` and
+`yw` still take the space, and from whitespace `cw` still changes the blanks
+alone.
+
 ## v0.3.0 — 2026-08-03
 
 Nothing breaking. One thing you will notice immediately: the schema tree no

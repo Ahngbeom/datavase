@@ -91,6 +91,10 @@ func TestNormalModeSequences(t *testing.T) {
 		{"dw", Command{Kind: KindDelete, Motion: MotionWordForward}},
 		{"db", Command{Kind: KindDelete, Motion: MotionWordBackward}},
 		{"d$", Command{Kind: KindDelete, Motion: MotionLineEnd}},
+		// cw carries the plain word motion out of here. vim's exception —
+		// that it stops at the end of the word rather than at the start of
+		// the next one — holds only when the caret is on a word, which is a
+		// question about the text and so is settled where the text is.
 		{"cw", Command{Kind: KindChange, Motion: MotionWordForward}},
 		{"yw", Command{Kind: KindYank, Motion: MotionWordForward}},
 		// Motions that span lines make their operator linewise, which is why

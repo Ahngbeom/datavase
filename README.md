@@ -370,6 +370,15 @@ rather than being a dead end.
 instead: that choice travels with every statement, which is exactly what `USE`
 was reached for.
 
+**A statement wrapped in `ANALYZE` is judged as the statement it wraps.**
+`ANALYZE FORMAT=JSON DELETE FROM orders` — and MySQL's spelling of the same
+thing, `EXPLAIN ANALYZE DELETE …` — *runs* the delete and reports what actually
+happened, so the guard treats it exactly as it treats the bare `DELETE`,
+bounding clause and all.
+
+`EXPLAIN` on its own reports how a statement would run and executes nothing, so
+it stays free whatever it wraps.
+
 ### What a write reports
 
 A statement that changes rows has no result set, so the bar says what it did

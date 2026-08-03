@@ -347,3 +347,65 @@ func TestOnlyDefiniteWritesAreSentForACount(t *testing.T) {
 		})
 	}
 }
+
+// ANALYZE runs the statement it wraps — MariaDB's spelling of what MySQL calls
+// EXPLAIN ANALYZE — so calling it a read let a delete through the guard
+// untouched. Verified against a real server: three rows in, none out.
+func TestAWrapperThatRunsItsStatementIsClassifiedAsThatStatement(t *testing.T) {
+	for _, tt := range []struct {
+		sql  string
+		want StmtKind
+	}{
+		// The hole.
+		{"ANALYZE FORMAT=JSON DELETE FROM orders", StmtDelete},
+		{"ANALYZE DELETE FROM orders", StmtDelete},
+		{"ANALYZE FORMAT=JSON UPDATE t SET x = 1", StmtUpdate},
+		{"ANALYZE INSERT INTO t VALUES (1)", StmtInsert},
+		{"ANALYZE SELECT 1", StmtSelect},
+		{"analyze format=json delete from orders", StmtDelete},
+
+		// MySQL's spelling of the same thing.
+		{"EXPLAIN ANALYZE DELETE FROM orders", StmtDelete},
+		{"EXPLAIN ANALYZE SELECT 1", StmtSelect},
+
+		// EXPLAIN on its own plans without running, and has to stay cheap.
+		{"EXPLAIN SELECT 1", StmtRead},
+		{"EXPLAIN FORMAT=JSON SELECT 1", StmtRead},
+		{"EXPLAIN orders", StmtRead},
+		{"EXPLAIN FOR CONNECTION 12", StmtRead},
+
+		// Maintenance, which rewrites statistics rather than rows.
+		{"ANALYZE TABLE orders", StmtRead},
+		{"ANALYZE LOCAL TABLE orders", StmtRead},
+		{"ANALYZE NO_WRITE_TO_BINLOG TABLE orders", StmtRead},
+		{"CHECK TABLE orders", StmtRead},
+
+		// A wrapper around something the tokenizer does not recognise falls
+		// to the default meant for anything unrecognised.
+		{"ANALYZE FORMAT=JSON WOMBAT orders", StmtOther},
+		{"ANALYZE", StmtOther},
+		{"ANALYZE FORMAT=JSON", StmtOther},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			stmts := Split(tt.sql)
+			if len(stmts) != 1 {
+				t.Fatalf("Split(%q) produced %d statements", tt.sql, len(stmts))
+			}
+			if got := stmts[0].Kind(); got != tt.want {
+				t.Errorf("Kind(%q) = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}
+
+// The prefix must not hide the clause that bounds the delete, or a wrapped
+// statement would be refused where the bare one is merely confirmed.
+func TestAWrappedStatementKeepsItsBoundingClause(t *testing.T) {
+	stmts := Split("ANALYZE FORMAT=JSON DELETE FROM orders WHERE id = 1")
+	if len(stmts) != 1 {
+		t.Fatalf("Split produced %d statements", len(stmts))
+	}
+	if !stmts[0].HasTopLevelWhere() {
+		t.Error("the WHERE was lost behind the ANALYZE prefix")
+	}
+}

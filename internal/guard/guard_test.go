@@ -395,3 +395,52 @@ func TestDDLInsideATransactionSaysItWillCommitTheTransaction(t *testing.T) {
 		t.Errorf("reason = %q, want it to warn that the transaction will be committed", got.Reason)
 	}
 }
+
+// The classifier calling ANALYZE a read let this through untouched against
+// production. What matters is not the kind but the verdict, so this asks for
+// the verdict.
+func TestAWrapperThatRunsAWriteIsGuardedAsThatWrite(t *testing.T) {
+	prod := Policy{Env: config.EnvProd}
+
+	for _, tt := range []struct {
+		sql  string
+		want Verdict
+	}{
+		{"DELETE FROM orders", Deny},
+		{"ANALYZE FORMAT=JSON DELETE FROM orders", Deny},
+		{"ANALYZE DELETE FROM orders", Deny},
+		{"EXPLAIN ANALYZE DELETE FROM orders", Deny},
+		{"ANALYZE FORMAT=JSON UPDATE orders SET total = 0", Deny},
+		{"ANALYZE FORMAT=JSON TRUNCATE orders", Deny},
+
+		// Planning without running stays free.
+		{"EXPLAIN DELETE FROM orders", Allow},
+		{"EXPLAIN FORMAT=JSON SELECT 1", Allow},
+	} {
+		t.Run(tt.sql, func(t *testing.T) {
+			stmts := sqlparse.Split(tt.sql)
+			if len(stmts) != 1 {
+				t.Fatalf("Split(%q) produced %d statements", tt.sql, len(stmts))
+			}
+			if got := Evaluate(stmts[0], prod).Verdict; got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}
+
+// A bounded delete asks rather than refuses, and wrapping it must not change
+// which question is asked.
+func TestAWrappedBoundedDeleteAsksTheSameQuestion(t *testing.T) {
+	prod := Policy{Env: config.EnvProd, WritesEnabled: true}
+
+	bare := Evaluate(sqlparse.Split("DELETE FROM orders WHERE id = 1")[0], prod)
+	wrapped := Evaluate(sqlparse.Split("ANALYZE FORMAT=JSON DELETE FROM orders WHERE id = 1")[0], prod)
+
+	if bare.Verdict != wrapped.Verdict {
+		t.Errorf("the bare delete is %v and the wrapped one %v", bare.Verdict, wrapped.Verdict)
+	}
+	if bare.TypeToConfirm != wrapped.TypeToConfirm {
+		t.Errorf("the bare delete asks for %q and the wrapped one %q", bare.TypeToConfirm, wrapped.TypeToConfirm)
+	}
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
+	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/Ahngbeom/datavase/internal/worktree"
@@ -31,9 +32,23 @@ import (
 
 // App is the running interface for one datasource.
 type App struct {
-	app  *tview.Application
+	app *tview.Application
+	// sess is the open datasource, and conn is its connection — held apart
+	// only because conn is what almost everything wants. Switching replaces
+	// both and closes what it replaced, tunnel included.
+	sess *session.Session
 	conn *db.Conn
 	cfg  *config.Config
+
+	// connect opens another datasource. It is a field so that the interface
+	// does not have to know where a password comes from, and so a test can
+	// switch without a keychain.
+	connect func(context.Context, *config.DataSource) (*session.Session, error)
+
+	// spine is the environment colour down the left. Held because it is the
+	// one piece of the frame that has to be repainted when the datasource
+	// changes, and a stale one is worse than none.
+	spine *tview.Box
 
 	tree      *tview.TreeView
 	editor    *tview.TextArea
@@ -193,10 +208,19 @@ type Deps struct {
 	// Recent is the list of directories attached before. Nil costs the
 	// shortcut and nothing else.
 	Recent *recent.List
+	// Connect opens another datasource, for switching mid-session. Nil leaves
+	// the session on the datasource it started with, and the switch says so
+	// rather than failing silently.
+	Connect func(context.Context, *config.DataSource) (*session.Session, error)
 }
 
-// New builds the interface for an open connection.
-func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
+// New builds the interface for an open session.
+//
+// The session rather than the connection, because switching datasource has to
+// close what it left — and a tunnel closed by nobody outlives the thing it
+// was carrying.
+func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
+	conn := sess.Conn
 	ds := conn.DataSource()
 
 	keys := deps.Keys
@@ -206,7 +230,9 @@ func New(conn *db.Conn, cfg *config.Config, deps Deps) *App {
 
 	a := &App{
 		app:             tview.NewApplication(),
+		sess:            sess,
 		conn:            conn,
+		connect:         deps.Connect,
 		cfg:             cfg,
 		keys:            keys,
 		cache:           deps.Cache,
@@ -438,9 +464,11 @@ func (a *App) buildLayout() {
 		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.statusBar, 1, 0, false)
 
-	// The environment runs down the outside of everything.
+	// The environment runs down the outside of everything. Held, because
+	// switching datasource has to repaint it in the same step.
+	a.spine = newSpine(a.conn.DataSource().Env)
 	root := tview.NewFlex().
-		AddItem(newSpine(a.conn.DataSource().Env), 1, 0, false).
+		AddItem(a.spine, 1, 0, false).
 		AddItem(inner, 0, 1, true)
 
 	a.pages = tview.NewPages().AddPage(pageMain, root, true, true)
@@ -514,18 +542,19 @@ const (
 )
 
 const (
-	pageMain      = "main"
-	pageConfirm   = "confirm"
-	pageHelp      = "help"
-	pageComplete  = "complete"
-	pagePalette   = "palette"
-	pageHistory   = "history"
-	pageGoTo      = "goto"
-	pageUseSchema = "useschema"
-	pageFiles     = "files"
-	pageAttach    = "attach"
-	pageSearch    = "search"
-	pageCommand   = "command"
+	pageMain       = "main"
+	pageConfirm    = "confirm"
+	pageHelp       = "help"
+	pageComplete   = "complete"
+	pagePalette    = "palette"
+	pageHistory    = "history"
+	pageGoTo       = "goto"
+	pageUseSchema  = "useschema"
+	pageFiles      = "files"
+	pageAttach     = "attach"
+	pageSearch     = "search"
+	pageCommand    = "command"
+	pageDataSource = "datasource"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than
@@ -613,6 +642,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.inspect()
 	case keymap.ActionSortColumn:
 		a.sortColumn()
+	case keymap.ActionSwitchDataSource:
+		a.showDataSources()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:

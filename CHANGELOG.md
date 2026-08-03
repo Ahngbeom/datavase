@@ -9,6 +9,22 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**Switching datasource without restarting.** `⌘⇧D` (`Ctrl+Shift+D`, `F11`) or
+`switch datasource` in the palette. Comparing production against stage is
+routine and used to mean quitting.
+
+Everything that says where you are moves in one step: the environment spine and
+its colour, the guard policy, the schema tree, completion, the chosen schema and
+the results. **The unlock does not travel** — it is granted for one datasource,
+and an unlock earned on stage is not one on production.
+
+A running statement refuses the switch; an open transaction asks first, since
+switching closes the connection under it. A switch connects before it lets go,
+so a datasource that cannot be reached leaves the session exactly where it was.
+
+Passwords come from the keychain, so a datasource without `dv auth` cannot be
+switched to.
+
 **Sorting a result by a column.** `⌘⇧S` (`Ctrl+Shift+S`, `F12`, or `s` with the
 grid focused) orders by the column under the cursor; again reverses it, and a
 third press restores the order the server sent — the answer to any `ORDER BY`

@@ -297,6 +297,12 @@ func baseMap() *Map {
 		append(ctrlAndCmdRune('n', tcell.ModShift),
 			Binding{Key: tcell.KeyF7})...)
 
+	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
+	// last function key this map has left.
+	m.bind(ActionSwitchDataSource,
+		append(ctrlAndCmdRune('d', tcell.ModShift),
+			Binding{Key: tcell.KeyF11})...)
+
 	// Application.
 	m.bind(ActionHelp, plain(tcell.KeyF1)...)
 	m.bind(ActionQuit,

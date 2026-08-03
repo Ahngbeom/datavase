@@ -50,8 +50,13 @@ func envStyleFor(env config.Env) envStyle {
 }
 
 // newSpine builds the column. A Box fills its rect with its background, which
-// is the whole of what this has to do — and the environment cannot change
-// mid-session, so the colour is decided once.
+// is the whole of what this has to do.
+//
+// The colour is set again on every switch of datasource rather than decided
+// once. It used to be decided once, on the grounds that the environment could
+// not change mid-session; a spine still showing the colour of the datasource
+// you left is worse than no spine, because it is the one thing here that is
+// meant to be believed without reading.
 func newSpine(env config.Env) *tview.Box {
 	return tview.NewBox().SetBackgroundColor(envStyleFor(env).bg)
 }

@@ -15,6 +15,7 @@ Usable, and specific about its edges.
 Built: connect directly, over TLS or through an SSH bastion. Browse the
 schema, edit and run SQL with schema-aware completion, run a whole file a
 statement at a time, and wrap the work in a transaction you can take back.
+Switch datasource without restarting.
 Stream large results and cancel a runaway query — a write included. See what a
 write changed and what the server warned about, read a wide row down the page,
 sort a column, copy a value out of it. Search the text on screen and the query
@@ -24,10 +25,10 @@ CSV or JSON. And the production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **One datasource per session.** Which one is fixed at startup; changing it
-  means restarting.
+- **`EXPLAIN` output is a result grid like any other**, rather than a plan
+  you can read.
 
-Those are tracked in the issues, roughly in that order.
+That is tracked in the issues.
 
 ## Install
 
@@ -148,6 +149,7 @@ your hands reach for.
 | Show or hide the schema tree | `⌘B` | `Ctrl+B` |
 | Reload the schema tree | `⌘R` | `Ctrl+R` |
 | Choose the schema | `⌘⇧N` | `Ctrl+Shift+N` |
+| Switch datasource | `⌘⇧D` | `Ctrl+Shift+D` |
 | Complete the word at the cursor | `^Space` | `Ctrl+Space` |
 | Find in the editor or the results | `⌘F` | `Ctrl+F` |
 | Next / previous match | `⌘G` `⌘⇧G` | `Ctrl+G` `Ctrl+Shift+G` |
@@ -157,13 +159,14 @@ your hands reach for.
 | Save the open file | `⌘S` | `Ctrl+S` |
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
+| Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
 
 `F5` runs, `F2` saves, `F4` shows a definition, `F6` switches tab, `F7` chooses
-the schema, `F8` opens a file, `F9` searches the history and `F10` quits
-everywhere, as fallbacks. Two
+the schema, `F8` opens a file, `F9` searches the history, `F10` quits, `F11`
+switches datasource and `F12` sorts a column, everywhere, as fallbacks. Two
 combinations are impossible
 rather than merely awkward: `⌘⇥` is the macOS application switcher, and
 `Ctrl+I` is byte 0x09 — the same as `⇥`.
@@ -205,7 +208,7 @@ You can also just move the key. Listed bindings replace an action's defaults:
 ```yaml
 keymap:
   actions:
-    toggle-sidebar: ["f11"]
+    toggle-sidebar: ["alt+b"]
 ```
 
 ### Making your terminal deliver them
@@ -611,6 +614,28 @@ switches back to results.
 The lookup is deliberate rather than automatic — `SHOW CREATE` is a server
 round trip, and issuing one every time the tree selection moved would make
 browsing expensive.
+
+### Switching datasource
+
+`⌘⇧D` (`Ctrl+Shift+D`, or `F11`) opens the configured datasources; `switch
+datasource` in the command palette does the same. Comparing production against
+stage is routine, and it used to mean quitting.
+
+Everything that says where you are moves in one step: the environment spine and
+its colour, the guard policy, the schema tree, completion, the chosen schema and
+the results. **The production write unlock does not travel** — it is granted for
+one datasource, and an unlock earned on stage is not an unlock on production.
+
+Two things stop a switch. A statement still running refuses it outright, since
+two datasources each holding one would mean two results and two cancellations to
+reason about. An open transaction asks first, because switching closes the
+connection under it and rolls it back — the same question quitting asks.
+
+A switch connects before it lets go. If the new datasource cannot be reached the
+session stays exactly where it was, with the connection it already had.
+
+The password comes from the keychain, so a datasource you have not run
+`dv auth` for cannot be switched to.
 
 ### Switching schema
 

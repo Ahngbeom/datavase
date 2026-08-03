@@ -111,3 +111,32 @@ func TestThePaletteItselfIsReachableWithoutAChord(t *testing.T) {
 		}
 	}
 }
+
+// The ":" command line resolves palette command names, so a palette command
+// that borrows a vim command's name and means something else makes the line
+// lie about what it is about to do.
+//
+// "write" was the one that mattered: in vim it saves, and here it used to
+// unlock writes against production. A vim user types ":w" and then ":write"
+// without looking, which would have made the single most dangerous thing this
+// application can do the thing a reflex reaches.
+//
+// "quit" is deliberately not listed. It means what vim means by it, so the
+// line saying "quit" and quitting is agreement, not collision.
+func TestThePaletteDoesNotClaimVimsFileCommands(t *testing.T) {
+	// Spelled out rather than derived: this list is the claim being made, and
+	// a derived one would only restate whatever the palette already does.
+	taken := map[string]string{
+		"w": "saves the file", "write": "saves the file",
+		"wq": "saves and quits", "x": "saves and quits",
+		"e": "opens a file", "edit": "opens a file",
+		"r": "reads a file in", "read": "reads a file in",
+	}
+
+	for _, c := range paletteCommands() {
+		if means, clash := taken[c.name]; clash {
+			t.Errorf("the palette offers %q for %q, but to a vim user %q %s — a \":\" line cannot mean both",
+				c.name, c.summary, c.name, means)
+		}
+	}
+}

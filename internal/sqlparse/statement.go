@@ -146,11 +146,14 @@ func (s Statement) Kind() StmtKind {
 		return StmtOther
 	}
 
-	switch strings.ToUpper(first.Text) {
-	case "SELECT", "WITH", "TABLE", "VALUES":
-		return StmtSelect
-	case "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "ANALYZE", "CHECK":
+	switch word := strings.ToUpper(first.Text); word {
+	case "SHOW", "DESCRIBE", "DESC", "CHECK":
 		return StmtRead
+
+	// EXPLAIN and ANALYZE both wrap another statement, and one of them runs
+	// it. See wrappedKind.
+	case "EXPLAIN", "ANALYZE":
+		return s.wrappedKind(word)
 	case "USE", "SET", "LOCK", "UNLOCK":
 		return StmtSession
 	case "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT":
@@ -163,21 +166,103 @@ func (s Statement) Kind() StmtKind {
 		return kindIfSecondWordIs(s, "TRANSACTION", StmtTransaction)
 	case "RELEASE":
 		return kindIfSecondWordIs(s, "SAVEPOINT", StmtTransaction)
-	case "INSERT", "REPLACE":
-		return StmtInsert
-	case "UPDATE":
-		return StmtUpdate
-	case "DELETE":
-		return StmtDelete
-	case "TRUNCATE":
-		return StmtTruncate
-	case "DROP":
-		return StmtDrop
-	case "CREATE", "ALTER", "RENAME":
-		return StmtDDL
+
 	default:
+		// Every verb whose kind its first word settles. The same table
+		// answers for a wrapped statement, so a verb added here cannot be
+		// classified one way on its own and another behind an ANALYZE.
+		if kind, known := verbKinds[word]; known {
+			return kind
+		}
 		return StmtOther
 	}
+}
+
+// wrappedKind classifies a statement that begins EXPLAIN or ANALYZE.
+//
+// The two are not the same question. EXPLAIN reports how a statement *would*
+// run and executes nothing, so it is a read whatever it wraps. ANALYZE — and
+// MySQL's spelling of it, EXPLAIN ANALYZE — **runs the statement** and reports
+// what actually happened, so it is exactly as dangerous as what follows it.
+// "ANALYZE FORMAT=JSON DELETE FROM orders" empties the table.
+//
+// A running wrapper therefore takes the kind of the statement it wraps, and
+// the guard reasons about that: HasTopLevelWhere scans at parenthesis depth
+// zero, so a bounded delete stays bounded through the prefix.
+//
+// Anything wrapping a verb this package does not recognise is StmtOther, which
+// is the fail-closed default and the reason kindIfSecondWordIs exists for
+// START and RELEASE.
+func (s Statement) wrappedKind(verb string) StmtKind {
+	inner, ok := s.wrappedStatement(verb)
+	if !ok {
+		// EXPLAIN with nothing recognisable after it is the plain form:
+		// "EXPLAIN orders", "EXPLAIN FOR CONNECTION 12", or a plan of a
+		// statement whose verb is not one we classify.
+		if verb == "EXPLAIN" {
+			return StmtRead
+		}
+		return StmtOther
+	}
+	return inner
+}
+
+// analyzeTargets are the words that make ANALYZE a maintenance statement
+// rather than a wrapper. It rewrites a table's statistics, not its rows.
+var analyzeTargets = map[string]bool{
+	"TABLE": true, "LOCAL": true, "NO_WRITE_TO_BINLOG": true,
+}
+
+// wrappedStatement finds the kind of the statement a running wrapper carries,
+// reporting whether there was one.
+func (s Statement) wrappedStatement(verb string) (StmtKind, bool) {
+	runs := verb == "ANALYZE"
+
+	for _, tk := range s.words()[1:] {
+		word := strings.ToUpper(tk)
+
+		// EXPLAIN only runs its statement when ANALYZE says so.
+		if word == "ANALYZE" {
+			runs = true
+			continue
+		}
+		if runs && analyzeTargets[word] {
+			return StmtRead, true
+		}
+		if kind, known := verbKinds[word]; known {
+			if !runs {
+				return 0, false
+			}
+			return kind, true
+		}
+	}
+	return 0, false
+}
+
+// words returns the statement's word tokens as text, which is all the wrapper
+// scan needs: the prefixes it steps over — FORMAT, JSON, EXTENDED — carry no
+// parentheses, so nothing here has to track depth.
+func (s Statement) words() []string {
+	var out []string
+	for _, tk := range s.Tokens {
+		if tk.Kind == Word {
+			out = append(out, tk.Text)
+		}
+	}
+	return out
+}
+
+// verbKinds are the statement verbs a wrapper can be carrying. Only the ones
+// whose kind is decided by the verb alone: START and RELEASE need a second
+// word and are never wrapped.
+var verbKinds = map[string]StmtKind{
+	"SELECT": StmtSelect, "WITH": StmtSelect, "TABLE": StmtSelect, "VALUES": StmtSelect,
+	"INSERT": StmtInsert, "REPLACE": StmtInsert,
+	"UPDATE":   StmtUpdate,
+	"DELETE":   StmtDelete,
+	"TRUNCATE": StmtTruncate,
+	"DROP":     StmtDrop,
+	"CREATE":   StmtDDL, "ALTER": StmtDDL, "RENAME": StmtDDL,
 }
 
 // Verb is the statement's leading keyword, upper-cased, or "" if it has none.

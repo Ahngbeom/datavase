@@ -9,6 +9,18 @@ edited account — and the place anything that needs action is written down.
 
 ### Fixed
 
+**`ANALYZE` was classified as a read, and it runs the statement it wraps.**
+`ANALYZE FORMAT=JSON DELETE FROM orders` empties the table — MariaDB's spelling
+of what MySQL calls `EXPLAIN ANALYZE` — and the guard let it through against
+production with nothing asked.
+
+A wrapper that runs its statement is now judged as that statement, bounding
+clause included, so the wrapped delete asks exactly what the bare one asks. A
+wrapper around a verb the tokenizer does not recognise falls to the same
+fail-closed default as anything else unrecognised.
+
+`EXPLAIN` on its own executes nothing and stays free.
+
 **A bastion dropping mid-session used to be invisible.** `session.TunnelErr` was
 documented as how that becomes visible and had no caller but its own test, so
 what you saw was whatever the driver says about a socket that has gone —

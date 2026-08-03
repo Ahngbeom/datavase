@@ -79,6 +79,8 @@ const (
 	// ActionAnalyze runs the statement under the cursor and reports what it
 	// actually did, against what was expected.
 	ActionAnalyze
+	// ActionSessions lists what else is running on the server.
+	ActionSessions
 
 	// Application.
 	ActionHelp
@@ -128,6 +130,7 @@ var actionNames = map[Action]string{
 	ActionSwitchDataSource:  "switch-datasource",
 	ActionExplain:           "explain",
 	ActionAnalyze:           "analyze",
+	ActionSessions:          "sessions",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -175,6 +178,7 @@ var descriptions = map[Action]string{
 	ActionSwitchDataSource:  "switch to another datasource",
 	ActionExplain:           "explain the statement under the cursor",
 	ActionAnalyze:           "run it and report what it actually did",
+	ActionSessions:          "list what else is running on the server",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -200,7 +204,7 @@ var order = []Action{
 	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
-	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,
+	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions,
 	ActionHelp, ActionQuit,
 }
 

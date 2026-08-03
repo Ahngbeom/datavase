@@ -126,6 +126,9 @@ type App struct {
 	// when it is drawn.
 	planView *planPane
 
+	// sessionsView lists what else is running on the server.
+	sessionsView *tview.TextView
+
 	// completion is nil until the schema cache is available; the popup says
 	// so rather than appearing broken.
 	completion *complete.Engine
@@ -403,6 +406,7 @@ func (a *App) buildWidgets() {
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 	a.resultTabs.add(tabPlan, a.buildPlanTab())
+	a.resultTabs.add(tabSessions, a.buildSessionsTab())
 
 	a.topBar = newTopBar(a.currentTopBar)
 	a.statusBar = newStatusBar(a.currentStatus)
@@ -543,8 +547,9 @@ const (
 	tabResults = "results"
 	// Lower case like the others. A single shouted name in a strip of quiet
 	// ones reads as an error rather than as an acronym.
-	tabDDL  = "ddl"
-	tabPlan = "plan"
+	tabDDL      = "ddl"
+	tabPlan     = "plan"
+	tabSessions = "sessions"
 )
 
 const (
@@ -654,6 +659,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.explainStatement()
 	case keymap.ActionAnalyze:
 		a.analyzeStatement()
+	case keymap.ActionSessions:
+		a.showSessions()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:

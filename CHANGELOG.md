@@ -9,6 +9,19 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**See what else is running on the server.** `⌘⇧U` (`Ctrl+Shift+U`) or `sessions`
+in the palette lists the connections: who, from where, doing what, for how long.
+Working connections first and longest first, with anything past a few seconds in
+red; the ones merely holding a socket open follow.
+
+**A user without the `PROCESS` privilege is told so.** The server does not
+refuse the query — it answers with that user's own connections, so a list of one
+means either "nothing else is running" or "you cannot see it", and those are
+opposite answers.
+
+Reading is explicit rather than on a timer: a list that reloads under the cursor
+is how the wrong session gets acted on.
+
 **`⌘⇧E` runs the statement and reports what actually happened.** Where `⌘E`
 shows what the optimiser expected, this shows the estimate and the measurement
 together — `rows 20084 → 20000`, `filtered 33.2 → 0` — and calls out an

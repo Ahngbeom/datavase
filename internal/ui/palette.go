@@ -177,6 +177,12 @@ func paletteCommands() []command {
 			run:     (*App).analyzeStatement,
 		},
 		{
+			name:    "sessions",
+			summary: "list what else is running on the server",
+			covers:  keymap.ActionSessions,
+			run:     (*App).showSessions,
+		},
+		{
 			name:    "sort by column",
 			summary: "order the results by the selected column, and back again",
 			covers:  keymap.ActionSortColumn,

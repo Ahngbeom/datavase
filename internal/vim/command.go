@@ -87,6 +87,28 @@ const (
 //
 // It is a comparable value with no pointers, so tests can state the whole
 // expected command in one literal.
+// Object is a region an operator can act on without a motion reaching it:
+// the word under the caret, or whatever a pair of brackets or quotes
+// encloses.
+//
+// These are what a SQL editor is reached for most — ci( replaces an IN list,
+// ci' a string literal — because the interesting region is almost always
+// delimited rather than a number of words away.
+type Object int
+
+const (
+	// ObjectNone means the operator took a motion instead.
+	ObjectNone Object = iota
+	ObjectWord
+	ObjectParen
+	ObjectBracket
+	ObjectBrace
+	ObjectAngle
+	ObjectSingleQuote
+	ObjectDoubleQuote
+	ObjectBacktick
+)
+
 type Command struct {
 	Kind   Kind
 	Motion Motion
@@ -104,6 +126,10 @@ type Command struct {
 	Count int
 	// Target is the character a find motion was given.
 	Target rune
+	// Object is the region an operator applies to, and Around says whether
+	// its delimiters go with it: "i" is inside them, "a" takes them too.
+	Object Object
+	Around bool
 }
 
 // Outcome says what the state machine did with a key.

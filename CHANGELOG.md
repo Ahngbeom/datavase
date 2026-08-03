@@ -9,6 +9,18 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**vim: text objects.** `ci(` replaces an `IN (…)` list, `ci'` a string
+literal, `diw` the identifier under the cursor — the sequences a SQL editor is
+reached for most, because the region worth changing is almost always delimited
+rather than a number of words away. `i` takes what the delimiters hold, `a`
+takes the delimiters too.
+
+A pair is found by counting depth outwards, so a nested list reaches the one
+the cursor is actually inside. Quotes are paired from the start of the line
+instead, because both delimiters are the same character and searching outwards
+cannot tell an opening quote from a closing one — between two literals is
+outside both, and it says so rather than taking the operator sitting there.
+
 **vim: counts and the find motions.** `3j`, `2dw` and `3dd` — a count in front
 of any motion or operator, which is the first thing a vim user's hands reach
 for and which pressing `d` three times is not. And `f`, `t`, `F`, `T`: `f,`

@@ -297,6 +297,10 @@ func (a *App) vimTarget(cmd vim.Command, text string) (start, end int, linewise 
 	from, to := caret, caret
 
 	switch {
+	case cmd.Object != vim.ObjectNone:
+		if s, e, ok := objectSpan(text, caret, cmd.Object, cmd.Around); ok {
+			from, to = s, e
+		}
 	case cmd.Selection:
 		if a.editor.HasSelection() {
 			_, from, to = a.editor.GetSelection()

@@ -664,3 +664,89 @@ func TestEscapeClearsAHalfTypedCount(t *testing.T) {
 		t.Errorf("count = %d after Escape, want 1", cmd.Count)
 	}
 }
+
+// ci( replaces an IN list, ci' a string literal. These are the sequences a
+// SQL editor is reached for most, and none of them existed.
+func TestAnOperatorTakesATextObject(t *testing.T) {
+	tests := []struct {
+		keys       string
+		wantKind   Kind
+		wantObject Object
+		wantAround bool
+	}{
+		{"diw", KindDelete, ObjectWord, false},
+		{"daw", KindDelete, ObjectWord, true},
+		{"ci(", KindChange, ObjectParen, false},
+		{"ca(", KindChange, ObjectParen, true},
+		{"ci)", KindChange, ObjectParen, false},
+		{"yi'", KindYank, ObjectSingleQuote, false},
+		{`di"`, KindDelete, ObjectDoubleQuote, false},
+		{"di[", KindDelete, ObjectBracket, false},
+		{"di{", KindDelete, ObjectBrace, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.keys, func(t *testing.T) {
+			cmd, out := feed(t, New(), tt.keys)
+			if out != OutcomeExecute {
+				t.Fatalf("outcome = %v, want OutcomeExecute", out)
+			}
+			if cmd.Kind != tt.wantKind {
+				t.Errorf("kind = %v, want %v", cmd.Kind, tt.wantKind)
+			}
+			if cmd.Object != tt.wantObject {
+				t.Errorf("object = %v, want %v", cmd.Object, tt.wantObject)
+			}
+			if cmd.Around != tt.wantAround {
+				t.Errorf("around = %v, want %v", cmd.Around, tt.wantAround)
+			}
+		})
+	}
+}
+
+// "i" and "a" are insert and append with no operator waiting, and a text
+// object only in the middle of one. Getting this wrong would cost the two
+// most-used keys in the editor.
+func TestIAndAAreStillInsertAndAppendOnTheirOwn(t *testing.T) {
+	for _, tt := range []struct {
+		keys string
+		want Place
+	}{
+		{"i", PlaceBefore},
+		{"a", PlaceAfter},
+	} {
+		t.Run(tt.keys, func(t *testing.T) {
+			cmd, out := feed(t, New(), tt.keys)
+			if out != OutcomeExecute {
+				t.Fatalf("outcome = %v, want OutcomeExecute", out)
+			}
+			if cmd.Kind != KindInsert || cmd.At != tt.want {
+				t.Errorf("got kind=%v at=%v, want an insert at %v", cmd.Kind, cmd.At, tt.want)
+			}
+		})
+	}
+}
+
+// The half-typed sequence has to reach the status bar, or a waiting operator
+// is indistinguishable from a keyboard that stopped working.
+func TestAHalfTypedTextObjectShowsOnTheStatusBar(t *testing.T) {
+	s := New()
+	if _, out := feed(t, s, "di"); out != OutcomePending {
+		t.Fatalf("outcome after \"di\" = %v, want OutcomePending", out)
+	}
+	if got := s.Pending(); got != "di" {
+		t.Errorf("Pending() = %q, want %q", got, "di")
+	}
+}
+
+// A character that names no object abandons the sequence rather than doing
+// something else with it.
+func TestATextObjectNobodyKnowsAbandonsTheOperator(t *testing.T) {
+	s := New()
+	if _, out := feed(t, s, "diz"); out == OutcomeExecute {
+		t.Error("\"diz\" ran something; z names no text object")
+	}
+	if got := s.Pending(); got != "" {
+		t.Errorf("Pending() = %q after an unknown object, want empty", got)
+	}
+}

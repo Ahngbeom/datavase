@@ -348,3 +348,45 @@ func TestAnOperatorTakesAFindMotionInTheEditor(t *testing.T) {
 
 	h.wantEditor("SELECT  b FROM t")
 }
+
+// Replacing an IN list is the sequence a SQL editor is reached for most.
+func TestChangingInsideBracketsReplacesTheList(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("WHERE id IN (1, 2, 3)", 15)
+
+	h.typeInto("ci(")
+	h.typeInto("7")
+
+	h.wantEditor("WHERE id IN (7)")
+}
+
+// And a string literal is the other half of it.
+func TestChangingInsideQuotesReplacesTheLiteral(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("WHERE name = 'ada'", 15)
+
+	h.typeInto("ci'")
+	h.typeInto("bob")
+
+	h.wantEditor("WHERE name = 'bob'")
+}
+
+func TestDeletingAroundAWordTakesItsTrailingSpace(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT alpha beta FROM t", 7)
+
+	h.typeInto("daw")
+
+	h.wantEditor("SELECT beta FROM t")
+}
+
+// The caret is outside every bracket, and an operator that deleted something
+// arbitrary would be worse than one that did nothing.
+func TestATextObjectThatIsNotThereLeavesTheBufferAlone(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT 1", 3)
+
+	h.typeInto("di(")
+
+	h.wantEditor("SELECT 1")
+}

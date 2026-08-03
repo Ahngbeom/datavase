@@ -26,6 +26,11 @@ type State struct {
 	// findPending is the find motion waiting for its character, MotionNone
 	// when none is.
 	findPending Motion
+	// objectPending records that "i" or "a" has been typed after an operator
+	// and the object itself is still to come; objectAround is which of the
+	// two it was.
+	objectPending bool
+	objectAround  bool
 }
 
 // New returns a state in normal mode, which is where vim starts.
@@ -60,6 +65,13 @@ func (s *State) Pending() string {
 	}
 	if s.gPrefix {
 		b.WriteByte('g')
+	}
+	if s.objectPending {
+		if s.objectAround {
+			b.WriteByte('a')
+		} else {
+			b.WriteByte('i')
+		}
 	}
 	switch s.findPending {
 	case MotionFindForward:
@@ -160,6 +172,13 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 		return s.applyMotionTo(s.findPending, r)
 	}
 
+	// An operator waiting for its text object takes the next character as
+	// that object, before the motion table can claim it — "iw" ends in a "w",
+	// which is a word motion everywhere else.
+	if s.objectPending {
+		return s.applyObject(r)
+	}
+
 	// A digit continues a count, and has to be seen before the motion table:
 	// "0" is in there as the start of the line, which would otherwise swallow
 	// the second half of "10j".
@@ -211,6 +230,14 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 				s.mode = ModeInsert
 			}
 			return Command{Kind: op, Linewise: true, Count: count}, OutcomeExecute
+		}
+		// "i" and "a" name a text object only while an operator is waiting.
+		// On their own they are insert and append, which is why this lives
+		// here rather than in the normal-mode table.
+		if r == 'i' || r == 'a' {
+			s.objectPending = true
+			s.objectAround = r == 'a'
+			return Command{}, OutcomePending
 		}
 		return s.abandon()
 	}
@@ -397,6 +424,8 @@ func (s *State) clearPending() {
 	s.count = 0
 	s.opCount = 0
 	s.findPending = MotionNone
+	s.objectPending = false
+	s.objectAround = false
 }
 
 // resolveCount is the multiplier for the command being completed, and always
@@ -413,6 +442,35 @@ func (s *State) resolveCount() int {
 		n *= s.count
 	}
 	return n
+}
+
+// objectKeys names the text objects. Both halves of a pair select it, since
+// nobody remembers which one vim wanted.
+var objectKeys = map[rune]Object{
+	'w': ObjectWord,
+	'(': ObjectParen, ')': ObjectParen, 'b': ObjectParen,
+	'[': ObjectBracket, ']': ObjectBracket,
+	'{': ObjectBrace, '}': ObjectBrace, 'B': ObjectBrace,
+	'<': ObjectAngle, '>': ObjectAngle,
+	'\'': ObjectSingleQuote,
+	'"':  ObjectDoubleQuote,
+	'`':  ObjectBacktick,
+}
+
+// applyObject completes an operator with the text object just named.
+func (s *State) applyObject(r rune) (Command, Outcome) {
+	object, ok := objectKeys[r]
+	if !ok {
+		return s.abandon()
+	}
+
+	op, around := s.op, s.objectAround
+	count := s.resolveCount()
+	s.clearPending()
+	if op == KindChange {
+		s.mode = ModeInsert
+	}
+	return Command{Kind: op, Object: object, Around: around, Count: count}, OutcomeExecute
 }
 
 // findKeys are the motions that need a character before they mean anything.

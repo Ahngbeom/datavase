@@ -750,3 +750,56 @@ func TestATextObjectNobodyKnowsAbandonsTheOperator(t *testing.T) {
 		t.Errorf("Pending() = %q after an unknown object, want empty", got)
 	}
 }
+
+// "." repeats the last change, which is the identity of the editor. The state
+// machine says only that the key was pressed; what to replay belongs to
+// whoever ran the change, since a change that entered insert mode includes the
+// text that was typed and this package never sees it.
+func TestDotAsksForTheLastChangeToBeRepeated(t *testing.T) {
+	cmd, out := feed(t, New(), ".")
+
+	if out != OutcomeExecute {
+		t.Fatalf("outcome = %v, want OutcomeExecute", out)
+	}
+	if cmd.Kind != KindRepeat {
+		t.Errorf("kind = %v, want KindRepeat", cmd.Kind)
+	}
+}
+
+func TestACountOnDotReachesTheRepeat(t *testing.T) {
+	cmd, _ := feed(t, New(), "3.")
+
+	if cmd.Kind != KindRepeat || cmd.Count != 3 {
+		t.Errorf("got kind=%v count=%d, want a repeat of 3", cmd.Kind, cmd.Count)
+	}
+}
+
+// Which commands "." replays is vim's semantics rather than the interface's,
+// so the rule lives here: a change is anything that altered the buffer.
+func TestOnlyChangesAreWorthRepeating(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  Command
+		want bool
+	}{
+		{"a delete", Command{Kind: KindDelete}, true},
+		{"a change", Command{Kind: KindChange}, true},
+		{"a put", Command{Kind: KindPaste}, true},
+		{"an insert", Command{Kind: KindInsert}, true},
+		{"a move", Command{Kind: KindMove}, false},
+		{"a yank", Command{Kind: KindYank}, false},
+		{"an undo", Command{Kind: KindUndo}, false},
+		{"a search", Command{Kind: KindSearch}, false},
+		// Repeating the repeat would replay whatever it replayed, which is
+		// what vim does — but recording it would lose the original.
+		{"the repeat itself", Command{Kind: KindRepeat}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cmd.Changes(); got != tt.want {
+				t.Errorf("Changes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

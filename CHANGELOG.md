@@ -9,6 +9,15 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**vim: `.` repeats the last change** — including the text typed into it, so
+`ciw` a name, then `.` on the next one. Insert-mode keys go straight to the
+widget without the state machine seeing them, so the text is read back out of
+the buffer when Escape ends the insert rather than accumulated keystroke by
+keystroke: a backspace or a paste is recorded as what it left behind.
+
+A count on the `.` replaces the one the change carried, as vim's does — `3.`
+after a `dd` takes three lines.
+
 **vim: text objects.** `ci(` replaces an `IN (…)` list, `ci'` a string
 literal, `diw` the identifier under the cursor — the sequences a SQL editor is
 reached for most, because the region worth changing is almost always delimited

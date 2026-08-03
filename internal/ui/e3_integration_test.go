@@ -390,3 +390,70 @@ func TestATextObjectThatIsNotThereLeavesTheBufferAlone(t *testing.T) {
 
 	h.wantEditor("SELECT 1")
 }
+
+// "." is the identity of the editor: make a change once, then put the cursor
+// somewhere else and do it again without retyping it.
+func TestDotRepeatsADeleteSomewhereElse(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("alpha beta gamma", 0)
+
+	h.typeInto("dw")
+	h.typeInto(".")
+
+	h.wantEditor("gamma")
+}
+
+// The hard half: a change that opened insert mode has to replay the text that
+// was typed into it, which the state machine never sees.
+func TestDotReplaysTheTextTypedIntoAChange(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("aaa bbb", 0)
+
+	// ciw rather than cw: this editor's cw takes the space after the word
+	// with it, which would merge the two and leave nothing to repeat onto.
+	h.typeInto("ciw")
+	h.typeInto("x")
+	h.press(tcell.KeyEscape)
+
+	// Onto the second word, and again.
+	h.typeInto("w")
+	h.typeInto(".")
+
+	h.wantEditor("x x")
+}
+
+// A count on the "." replaces the one the change carried, as vim's does.
+func TestACountOnDotReplacesTheRecordedOne(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("one\ntwo\nthree\nfour\nfive\n", 0)
+
+	h.typeInto("dd")
+	h.typeInto("3.")
+
+	h.wantEditor("five\n")
+}
+
+// A motion is not a change, so it must not become the thing "." replays.
+func TestAMotionDoesNotBecomeTheRepeatedChange(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("alpha beta gamma", 0)
+
+	h.typeInto("dw")
+	h.typeInto("w")
+	h.typeInto(".")
+
+	// The second word is gone because "." repeated the delete, not the move.
+	h.wantEditor("beta ")
+}
+
+func TestDotWithNothingRecordedSaysSo(t *testing.T) {
+	h := newVimHarness(t)
+	h.buffer("SELECT 1", 0)
+
+	h.typeInto(".")
+
+	h.wantEditor("SELECT 1")
+	h.waitFor("the bar to say there is nothing to repeat", func(a *App) bool {
+		return a.status.message == "nothing to repeat"
+	})
+}

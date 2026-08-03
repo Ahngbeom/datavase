@@ -128,6 +128,9 @@ type App struct {
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
 
+	// lastChange is what "." repeats.
+	lastChange change
+
 	// batch is a "run everything" in flight, nil otherwise. Like running, it
 	// is touched only from the UI goroutine: each statement resumes the batch
 	// from the same callback that reports the last one finished.

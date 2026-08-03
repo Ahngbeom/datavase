@@ -185,6 +185,11 @@ func (s *State) feedRune(r rune) (Command, Outcome) {
 	if s.digit(r) {
 		return Command{}, OutcomePending
 	}
+	if r == '.' {
+		count := s.resolveCount()
+		s.clearPending()
+		return Command{Kind: KindRepeat, Count: count}, OutcomeExecute
+	}
 	if m, ok := findKeys[r]; ok {
 		s.findPending = m
 		return Command{}, OutcomePending

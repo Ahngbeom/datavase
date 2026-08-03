@@ -4,14 +4,18 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
+	"github.com/gdamore/tcell/v2"
 )
 
 // The question this exists for: something else is running, and this session
@@ -137,4 +141,103 @@ func newHarnessAs(t *testing.T, ds *config.DataSource, password string) *harness
 		t.Fatalf("db.Open(%s) error = %v", ds.User, err)
 	}
 	return harnessOver(t, &session.Session{Conn: conn}, ds)
+}
+
+// Stopping somebody else's statement, through the interface, end to end.
+func TestStoppingAnotherSessionsStatement(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	stopOther := runElsewhere(t, "SELECT SLEEP(25)")
+	defer stopOther()
+
+	h.waitForOtherSession(t, "SLEEP(25)")
+
+	h.do(keymap.ActionKillSession)
+	h.waitFor("the picker", func(a *App) bool {
+		front, _ := a.pages.GetFrontPage()
+		return front == pageKill
+	})
+
+	h.typeInto("SLEEP(25)")
+	h.press(tcell.KeyEnter)
+
+	// Off production this is a button rather than a typed word.
+	h.waitFor("the confirmation", func(a *App) bool {
+		front, _ := a.pages.GetFrontPage()
+		return front == pageConfirm
+	})
+	h.press(tcell.KeyRight)
+	h.press(tcell.KeyEnter)
+
+	if !h.waitForScreen("stopped the statement") {
+		t.Fatalf("the kill was not reported:\n%s", h.text())
+	}
+	// And it is gone from the server, not merely reported.
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		h.do(keymap.ActionSessions)
+		h.waitFor("the sessions tab", func(a *App) bool { return a.resultTabs.current() == tabSessions })
+		if !h.screenHas("SLEEP(25)") {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("the statement is still running:\n%s", h.text())
+}
+
+// This session's own connections are not offered at all. A row you can select
+// and cannot act on is worse than one that is not there — and killing the
+// control connection takes cancellation and every catalog read with it.
+func TestThePickerDoesNotOfferThisSessionsOwnConnections(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	stopOther := runElsewhere(t, "SELECT SLEEP(25)")
+	defer stopOther()
+
+	h.waitForOtherSession(t, "SLEEP(25)")
+
+	// The ids this session is holding, and the ids the picker offers.
+	var ours []uint64
+	h.inspect(func(a *App) bool {
+		listing, err := procs.List(context.Background(), a.conn)
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		for _, p := range listing.Processes {
+			if a.conn.Owns(p.ID) {
+				ours = append(ours, p.ID)
+			}
+		}
+		return true
+	})
+	if len(ours) == 0 {
+		t.Fatal("this session holds no connections; the test would prove nothing")
+	}
+
+	h.do(keymap.ActionKillSession)
+	h.waitFor("the picker", func(a *App) bool {
+		front, _ := a.pages.GetFrontPage()
+		return front == pageKill
+	})
+
+	screen := h.text()
+	for _, id := range ours {
+		if strings.Contains(screen, fmt.Sprintf("%d  ", id)) {
+			t.Errorf("connection %d is ours and was offered:\n%s", id, screen)
+		}
+	}
+}
+
+// waitForOtherSession blocks until a statement from somewhere else is visible.
+func (h *harness) waitForOtherSession(t *testing.T, contains string) {
+	t.Helper()
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		h.do(keymap.ActionSessions)
+		h.waitFor("the sessions tab", func(a *App) bool { return a.resultTabs.current() == tabSessions })
+		if h.screenHas(contains) {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("no other session is running %q:\n%s", contains, h.text())
 }

@@ -81,6 +81,8 @@ const (
 	ActionAnalyze
 	// ActionSessions lists what else is running on the server.
 	ActionSessions
+	// ActionKillSession stops another connection's statement.
+	ActionKillSession
 
 	// Application.
 	ActionHelp
@@ -131,6 +133,7 @@ var actionNames = map[Action]string{
 	ActionExplain:           "explain",
 	ActionAnalyze:           "analyze",
 	ActionSessions:          "sessions",
+	ActionKillSession:       "kill-session",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -179,6 +182,7 @@ var descriptions = map[Action]string{
 	ActionExplain:           "explain the statement under the cursor",
 	ActionAnalyze:           "run it and report what it actually did",
 	ActionSessions:          "list what else is running on the server",
+	ActionKillSession:       "stop another connection's statement",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -204,7 +208,7 @@ var order = []Action{
 	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
-	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions,
+	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession,
 	ActionHelp, ActionQuit,
 }
 

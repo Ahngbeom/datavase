@@ -9,6 +9,18 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**Stop another connection's statement.** `⌘⇧W` or `stop a statement` in the
+palette; `stop a connection` ends the connection and rolls back what it held.
+
+Against production both have to be typed — `KILL`, or `KILL CONNECTION` —
+because stopping somebody else's work is the operation that most wants a
+confirmation nobody can wave through. Elsewhere a button is enough.
+
+**This session's own connections are not offered**, and are refused if reached
+another way: killing the control connection takes cancellation and every
+catalog read with it. Only the connections currently held count, since the
+server reuses an id once a connection has gone.
+
 **See what else is running on the server.** `⌘⇧U` (`Ctrl+Shift+U`) or `sessions`
 in the palette lists the connections: who, from where, doing what, for how long.
 Working connections first and longest first, with anything past a few seconds in

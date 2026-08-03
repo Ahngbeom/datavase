@@ -54,6 +54,17 @@ type Conn struct {
 	txID   uint64
 	txBusy bool
 
+	// ownMu guards ownIDs, the server-side connection ids this session is
+	// currently holding.
+	//
+	// It exists so that killing a connection can refuse to aim at one of our
+	// own — killing the control connection takes cancellation and every
+	// catalog read down with it, permanently. Only live ids are kept: the
+	// server reuses an id once a connection has gone, and a stale one would
+	// make this refuse to kill a session that has nothing to do with us.
+	ownMu  sync.Mutex
+	ownIDs map[uint64]int
+
 	// schemaEverSwitched records that some query has issued USE.
 	//
 	// Until that happens no pooled connection can be pointing anywhere but
@@ -86,14 +97,22 @@ func Open(ctx context.Context, ds *config.DataSource, password, addr string) (*C
 		return nil, fmt.Errorf("opening the control connection to %s: %w", ds.Name, err)
 	}
 
-	var version string
-	if err := control.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version); err != nil {
+	var (
+		version   string
+		controlID uint64
+	)
+	if err := control.QueryRowContext(ctx, "SELECT VERSION(), CONNECTION_ID()").Scan(&version, &controlID); err != nil {
 		control.Close()
 		pool.Close()
 		return nil, fmt.Errorf("connecting to %s: %w", ds.Name, err)
 	}
 
-	return &Conn{ds: ds, pool: pool, control: control, version: version}, nil
+	c := &Conn{ds: ds, pool: pool, control: control, version: version}
+	// The control connection's id is held for the session's lifetime. Killing
+	// it would take cancellation and every catalog read with it, and there is
+	// no way back from that short of reconnecting.
+	c.hold(controlID)
+	return c, nil
 }
 
 // DataSource returns the datasource this connection serves.
@@ -119,6 +138,39 @@ func (c *Conn) WithControl(ctx context.Context, fn func(*sql.Conn) error) error 
 		return err
 	}
 	return fn(c.control)
+}
+
+// Owns reports whether a server-side connection id belongs to this session.
+func (c *Conn) Owns(id uint64) bool {
+	c.ownMu.Lock()
+	defer c.ownMu.Unlock()
+	return c.ownIDs[id] > 0
+}
+
+// hold records that we are using a connection id, and release stops.
+//
+// Counted rather than flagged: the pool can hand out a connection, close it,
+// and be given the same id again by the server while an older release is still
+// pending.
+func (c *Conn) hold(id uint64) {
+	c.ownMu.Lock()
+	defer c.ownMu.Unlock()
+
+	if c.ownIDs == nil {
+		c.ownIDs = make(map[uint64]int)
+	}
+	c.ownIDs[id]++
+}
+
+func (c *Conn) release(id uint64) {
+	c.ownMu.Lock()
+	defer c.ownMu.Unlock()
+
+	if c.ownIDs[id] <= 1 {
+		delete(c.ownIDs, id)
+		return
+	}
+	c.ownIDs[id]--
 }
 
 // Close releases both connections.
@@ -228,6 +280,7 @@ func (c *Conn) Begin(ctx context.Context) error {
 		conn.Close()
 		return errors.New("a transaction is already open")
 	}
+	c.hold(id)
 	c.tx, c.txID = conn, id
 	return nil
 }
@@ -255,6 +308,7 @@ func (c *Conn) endTransaction(ctx context.Context, statement string) error {
 		return errors.New("a statement is still running in this transaction")
 	}
 	conn := c.tx
+	c.release(c.txID)
 	c.tx, c.txID = nil, 0
 	c.txMu.Unlock()
 
@@ -287,7 +341,11 @@ func (c *Conn) acquire(ctx context.Context) (*sql.Conn, uint64, func(), error) {
 			conn.Close()
 			return nil, 0, nil, fmt.Errorf("reading the connection id: %w", err)
 		}
-		return conn, id, func() { conn.Close() }, nil
+		c.hold(id)
+		return conn, id, func() {
+			c.release(id)
+			conn.Close()
+		}, nil
 	}
 
 	if c.txBusy {

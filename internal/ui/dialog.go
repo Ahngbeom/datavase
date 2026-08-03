@@ -83,25 +83,40 @@ func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
 }
 
 func (a *App) confirmByTyping(stmt sqlparse.Statement, d guard.Decision) {
+	a.typeToConfirm(
+		fmt.Sprintf("%s\n\n%s", d.Reason, preview(stmt.SQL)),
+		d.TypeToConfirm, "Run",
+		func() { a.start(stmt, d) },
+		a.abandonBatch)
+}
+
+// typeToConfirm asks for a word to be spelled out before doing something.
+//
+// Requiring the hands to type it is what turns a reflex into a decision, and
+// it is the same demand wherever it appears — a production write, or stopping
+// somebody else's statement.
+func (a *App) typeToConfirm(message, phrase, verb string, confirm, cancel func()) {
 	form := tview.NewForm()
 	typed := ""
 
-	form.AddTextView("", fmt.Sprintf("%s\n\n%s", d.Reason, preview(stmt.SQL)), 60, 6, true, false).
-		AddInputField(fmt.Sprintf("Type %s to proceed", d.TypeToConfirm), "", 24,
+	form.AddTextView("", message, 60, 6, true, false).
+		AddInputField(fmt.Sprintf("Type %s to proceed", phrase), "", 24,
 			nil, func(text string) { typed = text }).
 		AddButton("Cancel", func() {
 			a.closeDialog()
-			a.abandonBatch()
+			if cancel != nil {
+				cancel()
+			}
 		}).
-		AddButton("Run", func() {
+		AddButton(verb, func() {
 			// Comparison is case-insensitive: the point is deliberate
 			// effort, not exact keystrokes.
-			if !strings.EqualFold(strings.TrimSpace(typed), d.TypeToConfirm) {
-				a.notice(fmt.Sprintf("type %s exactly to confirm", d.TypeToConfirm))
+			if !strings.EqualFold(strings.TrimSpace(typed), phrase) {
+				a.notice(fmt.Sprintf("type %s exactly to confirm", phrase))
 				return
 			}
 			a.closeDialog()
-			a.start(stmt, d)
+			confirm()
 		})
 
 	form.SetBorder(true).SetTitle(" confirm ").SetTitleAlign(tview.AlignLeft)
@@ -182,7 +197,7 @@ var helpGroups = []struct {
 	{
 		title: "Results",
 		actions: []keymap.Action{
-			keymap.ActionSortColumn, keymap.ActionSessions,
+			keymap.ActionSortColumn, keymap.ActionSessions, keymap.ActionKillSession,
 		},
 	},
 	{

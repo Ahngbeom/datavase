@@ -180,3 +180,55 @@ func TestOpenRefusesAnUnexpectedBastionKey(t *testing.T) {
 		t.Fatal("OpenWith() error = nil, want a host key mismatch")
 	}
 }
+
+// A bastion that goes away mid-session is the failure the driver cannot
+// describe: what it reports is a socket that has gone, which reads as the
+// database being in trouble. TunnelErr is documented as how that becomes
+// visible, so it has to actually become visible.
+func TestABastionThatGoesAwayIsVisibleThroughTunnelErr(t *testing.T) {
+	srv := testssh.Start(t)
+	ds, password := testmysql.DataSource(t)
+	ds.Tunnel = srv.Bastion(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	sess, err := OpenWith(ctx, ds, password, testOptions(t, srv))
+	if err != nil {
+		t.Fatalf("OpenWith() error = %v, want nil", err)
+	}
+	defer sess.Close()
+
+	// Working first, so that what follows is a session that broke rather than
+	// one that never worked.
+	if err := runOne(ctx, sess.Conn); err != nil {
+		t.Fatalf("a statement failed before the bastion went: %v", err)
+	}
+	if err := sess.TunnelErr(); err != nil {
+		t.Fatalf("TunnelErr() = %v while the bastion was up", err)
+	}
+
+	srv.Stop()
+
+	// Statements now fail, and the driver will try a fresh connection first —
+	// which is the attempt the tunnel records, because there is no longer a
+	// bastion to forward it.
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if runOne(ctx, sess.Conn) != nil && sess.TunnelErr() != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("the bastion is gone and TunnelErr() is still %v", sess.TunnelErr())
+}
+
+// runOne sends the smallest statement there is, and reports whether it landed.
+func runOne(ctx context.Context, conn *db.Conn) error {
+	stream := conn.Query(ctx, "SELECT 1", db.Options{})
+	defer stream.Close()
+
+	for range stream.Events {
+	}
+	return stream.Err()
+}

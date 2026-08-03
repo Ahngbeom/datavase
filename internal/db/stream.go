@@ -503,6 +503,19 @@ func IsInterrupted(err error) bool {
 	return isMySQLError(err, erQueryInterrupted)
 }
 
+// ReachedServer reports whether err is the server refusing, rather than the
+// connection to it failing.
+//
+// A numbered MySQL error is proof the statement got there: the server read it
+// and answered. Anything else — a socket that has gone, a driver's bad
+// connection — could have failed at any hop between here and the database, and
+// is the only case a caller may attribute to something underneath, such as a
+// bastion that has stopped forwarding.
+func ReachedServer(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me)
+}
+
 func isMySQLError(err error, number uint16) bool {
 	var me *mysql.MySQLError
 	if errors.As(err, &me) {

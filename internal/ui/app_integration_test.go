@@ -85,7 +85,17 @@ func newHarness(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	sess := &session.Session{Conn: conn}
+	return harnessOver(t, &session.Session{Conn: conn}, ds)
+}
+
+// harnessOver builds the interface over a session that is already open.
+//
+// Separated so a test can supply one that reaches its server through a real
+// bastion — which is the only way to exercise what the interface says when
+// that bastion goes away.
+func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
+	t.Helper()
+
 	t.Cleanup(func() { sess.Close() })
 
 	cfg := &config.Config{

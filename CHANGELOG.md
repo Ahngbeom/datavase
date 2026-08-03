@@ -5,6 +5,25 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+### Fixed
+
+**A bastion dropping mid-session used to be invisible.** `session.TunnelErr` was
+documented as how that becomes visible and had no caller but its own test, so
+what you saw was whatever the driver says about a socket that has gone —
+`invalid connection` — which reads as the database being in trouble.
+
+A failure that could have happened anywhere between here and the server now
+names the bastion when the tunnel has recorded a forwarding failure. A statement
+the server refused keeps its own message: a numbered MySQL error is proof it
+arrived and was answered, and `Tunnel.Err` never clears, so without that rule
+one transient forward failure would make every later typo read as a dead
+bastion for the rest of the session.
+
+The connection is not re-established on its own; switching datasource opens a
+fresh one.
+
 ## v0.4.0 — 2026-08-03
 
 Everything the roadmap called for is now built. Nothing here breaks a

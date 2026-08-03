@@ -70,6 +70,9 @@ const (
 	// ActionSortColumn orders the results by the selected column, and back
 	// again — the third press restores the order the server sent.
 	ActionSortColumn
+	// ActionSwitchDataSource moves the session to another configured
+	// datasource.
+	ActionSwitchDataSource
 
 	// Application.
 	ActionHelp
@@ -116,6 +119,7 @@ var actionNames = map[Action]string{
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
+	ActionSwitchDataSource:  "switch-datasource",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -160,6 +164,7 @@ var descriptions = map[Action]string{
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected table or result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
+	ActionSwitchDataSource:  "switch to another datasource",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -185,7 +190,7 @@ var order = []Action{
 	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
-	ActionRefreshSchema, ActionUseSchema,
+	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,
 	ActionHelp, ActionQuit,
 }
 

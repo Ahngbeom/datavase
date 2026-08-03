@@ -126,15 +126,32 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	if err != nil {
 		return err
 	}
-	defer sess.Close()
 
-	return ui.New(sess.Conn, cfg, ui.Deps{
+	// The interface owns the session from here: switching datasource closes
+	// the one it leaves, and a session closed twice or by nobody is how a
+	// tunnel outlives the thing it was carrying.
+	return ui.New(sess, cfg, ui.Deps{
 		Keys:     keys,
 		Cache:    cache,
 		History:  hist,
 		Worktree: wt,
 		Recent:   recents,
+		Connect:  connectTo,
 	}).Run()
+}
+
+// connectTo opens another datasource for a switch mid-session.
+//
+// The password comes from the keychain and nowhere else. A switch that could
+// prompt would mean a modal password field over a running interface, and a
+// datasource nobody has run "dv auth" for is one this session was never in a
+// position to reach.
+func connectTo(ctx context.Context, ds *config.DataSource) (*session.Session, error) {
+	password, err := secret.NewKeychain().Get(ds.Name)
+	if err != nil {
+		return nil, fmt.Errorf("no password stored for %q; run: dv auth %s", ds.Name, ds.Name)
+	}
+	return session.Open(ctx, ds, password)
 }
 
 // probe verifies reachability, raising the tunnel first when one is needed,

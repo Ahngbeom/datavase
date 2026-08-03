@@ -222,6 +222,12 @@ func paletteCommands() []command {
 			run:     (*App).saveFile,
 		},
 		{
+			name:    "switch datasource",
+			summary: "move this session to another configured datasource",
+			covers:  keymap.ActionSwitchDataSource,
+			run:     (*App).showDataSources,
+		},
+		{
 			name:    "use schema",
 			summary: "choose the schema unqualified names resolve against",
 			covers:  keymap.ActionUseSchema,

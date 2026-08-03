@@ -189,7 +189,7 @@ var helpGroups = []struct {
 		actions: []keymap.Action{
 			keymap.ActionNextPane, keymap.ActionPrevPane, keymap.ActionCycleTab,
 			keymap.ActionToggleSidebar, keymap.ActionUseSchema,
-			keymap.ActionRefreshSchema,
+			keymap.ActionSwitchDataSource, keymap.ActionRefreshSchema,
 		},
 	},
 	{

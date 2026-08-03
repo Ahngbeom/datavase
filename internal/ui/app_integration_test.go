@@ -18,6 +18,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/recent"
+	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
 )
@@ -84,7 +85,8 @@ func newHarness(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	sess := &session.Session{Conn: conn}
+	t.Cleanup(func() { sess.Close() })
 
 	cfg := &config.Config{
 		DataSources: []config.DataSource{*ds},
@@ -127,7 +129,7 @@ func newHarness(t *testing.T, env config.Env) *harness {
 		t.Fatalf("recent.Open() error = %v", err)
 	}
 
-	app := New(conn, cfg, Deps{Keys: keys, Cache: cache, History: hist, Recent: recents})
+	app := New(sess, cfg, Deps{Keys: keys, Cache: cache, History: hist, Recent: recents})
 	app.SetScreen(screen)
 
 	h := &harness{app: app, screen: screen, cache: cache, history: hist, t: t}

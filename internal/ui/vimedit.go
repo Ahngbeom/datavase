@@ -125,6 +125,25 @@ func vimMove(cmd vim.Command) func(text string, offset int) int {
 	}
 }
 
+// changeStopsAtWordEnd applies vim's one deliberate break of its own
+// operator-plus-motion rule: "cw" behaves like "ce".
+//
+// Changing a word must not take the space after it. Doing so joins two
+// identifiers, and in SQL that join is silent — "SELECT namefrom t" reads as a
+// column and an alias, so neither the editor nor the server ever reports the
+// typo. "dw" and "yw" keep the space; the exception is only for "c".
+//
+// It is only an exception when the caret is on a word. From whitespace "cw"
+// changes the run of blanks and nothing more, which is why this cannot live in
+// the state machine with the rest of the key semantics: the state machine is
+// given keys, and this needs the text under the caret.
+func changeStopsAtWordEnd(cmd vim.Command, text string, caret int) vim.Command {
+	if cmd.Kind == vim.KindChange && cmd.Motion == vim.MotionWordForward && isWordAt(text, caret) {
+		cmd.Motion = vim.MotionWordEnd
+	}
+	return cmd
+}
+
 // inclusiveMotion reports whether an operator's range takes in the character
 // the motion landed on.
 func inclusiveMotion(m vim.Motion) bool {
@@ -320,7 +339,7 @@ func (a *App) vimTarget(cmd vim.Command, text string) (start, end int, linewise 
 			_, from, to = a.editor.GetSelection()
 		}
 	case cmd.Motion != vim.MotionNone:
-		to = vimMove(cmd)(text, caret)
+		to = vimMove(changeStopsAtWordEnd(cmd, text, caret))(text, caret)
 	}
 	if from > to {
 		from, to = to, from

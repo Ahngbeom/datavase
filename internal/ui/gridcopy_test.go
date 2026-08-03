@@ -123,3 +123,19 @@ func TestWithNothingRunningTheKeyCopiesWhateverHasFocus(t *testing.T) {
 		})
 	}
 }
+
+// The plan pane joins the same precedence as the definition, and behind the
+// same rule: while a statement runs the key cancels it.
+func TestTheCopyKeyOnThePlanPane(t *testing.T) {
+	if got := (copyContext{onPlan: true}).resolve(); got != intentPlan {
+		t.Errorf("with the plan focused the key resolved to %v, want the plan", got)
+	}
+	if got := (copyContext{onPlan: true, running: true}).resolve(); got != intentCancel {
+		t.Errorf("the plan pane took the key from a running statement: %v", got)
+	}
+	// An editor selection does not reach past a focused plan, for the reason
+	// the definition does not either: the key copies whatever has focus.
+	if got := (copyContext{onPlan: true, hasSelection: true}).resolve(); got != intentPlan {
+		t.Errorf("a stale editor selection won over the focused plan: %v", got)
+	}
+}

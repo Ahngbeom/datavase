@@ -1,0 +1,24 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.013242474,
+    "filesort": {
+      "sort_key": "dv_x_authors.country",
+      "temporary_table": {
+        "nested_loop": [
+          {
+            "table": {
+              "table_name": "dv_x_authors",
+              "access_type": "ALL",
+              "loops": 1,
+              "rows": 3,
+              "cost": 0.0113438,
+              "filtered": 100
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+

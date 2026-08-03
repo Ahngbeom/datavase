@@ -15,7 +15,7 @@ Usable, and specific about its edges.
 Built: connect directly, over TLS or through an SSH bastion. Browse the
 schema, edit and run SQL with schema-aware completion, run a whole file a
 statement at a time, and wrap the work in a transaction you can take back.
-Switch datasource without restarting.
+Switch datasource without restarting. Read a query plan as a tree.
 Stream large results and cancel a runaway query — a write included. See what a
 write changed and what the server warned about, read a wide row down the page,
 sort a column, copy a value out of it. Search the text on screen and the query
@@ -25,10 +25,13 @@ CSV or JSON. And the production guard.
 
 Not built, and worth knowing before you lean on it:
 
-- **`EXPLAIN` output is a result grid like any other**, rather than a plan
-  you can read.
-
-That is tracked in the issues.
+- **`EXPLAIN ANALYZE` is not on a key.** It runs the statement rather than
+  planning it, so it belongs behind the guard rather than beside `⌘E`.
+- **No editing of data.** There is no editable grid and no generated `UPDATE`;
+  a write is a statement you wrote, which is what the guard is able to reason
+  about.
+- **MySQL and MariaDB only.** Nothing here is portable to PostgreSQL, and
+  pretending otherwise would mean a guard that understands neither well.
 
 ## Install
 
@@ -159,6 +162,7 @@ your hands reach for.
 | Save the open file | `⌘S` | `Ctrl+S` |
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
+| Explain the statement under the cursor | `⌘E` | `Ctrl+E` |
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
@@ -614,6 +618,45 @@ switches back to results.
 The lookup is deliberate rather than automatic — `SHOW CREATE` is a server
 round trip, and issuing one every time the tree selection moved would make
 browsing expensive.
+
+### Reading a plan
+
+`⌘E` (`Ctrl+E`), or `explain` in the command palette, asks the server how it
+would run the statement under the cursor and draws the answer as a tree in its
+own tab. **The buffer is not touched** — typing `EXPLAIN` in front of a
+statement and taking it out again is what this replaces, and that is exactly
+the edit that gets left behind and then run.
+
+```
+query_block  cost 0.018
+├─ read_sorted_file
+│  └─ filesort  ⚠ filesort
+│        sort_key: b.title
+│     └─ dv_books  ALL  rows 4  cost 0.012  ⚠ full scan
+│           possible_keys: author_id
+│           attached_condition: b.`year` > 2001
+└─ dv_authors  eq_ref  key PRIMARY  rows 1  cost 0.004
+      ref: dv_books.author_id
+```
+
+The three things a plan is usually read to find — a full scan, a filesort, a
+temporary table — are called out rather than left among thirty other fields. A
+warning has to be something you could act on, so a full scan of the server's own
+`<union1,2>` or `<derived2>` is not flagged: there is no index to add to a table
+the server just wrote.
+
+The tree is laid out for the width of the pane, and again when that width
+changes. Nothing reaches sideways; the reason `EXPLAIN` is hard to read in a
+grid is that it is a dozen narrow columns spread across the terminal.
+
+Nothing about the plan's shape is assumed. MySQL and MariaDB disagree about it
+and both change it between versions, so what is drawn is whatever the server
+sent: an object's scalar fields are one step's attributes and its nested
+objects are that step's children.
+
+`EXPLAIN` does not run the statement, which is why this needs no confirmation
+even against production. `EXPLAIN ANALYZE` does run it, and is deliberately not
+on this key.
 
 ### Switching datasource
 

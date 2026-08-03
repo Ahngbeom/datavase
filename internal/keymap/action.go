@@ -73,6 +73,9 @@ const (
 	// ActionSwitchDataSource moves the session to another configured
 	// datasource.
 	ActionSwitchDataSource
+	// ActionExplain asks the server how it would run the statement under the
+	// cursor, without running it.
+	ActionExplain
 
 	// Application.
 	ActionHelp
@@ -120,6 +123,7 @@ var actionNames = map[Action]string{
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
 	ActionSwitchDataSource:  "switch-datasource",
+	ActionExplain:           "explain",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -165,6 +169,7 @@ var descriptions = map[Action]string{
 	ActionInspect:           "show the selected table or result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
 	ActionSwitchDataSource:  "switch to another datasource",
+	ActionExplain:           "explain the statement under the cursor",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -179,7 +184,7 @@ var reserved = map[Action]bool{}
 
 // order fixes how actions appear on the help screen, grouped by purpose.
 var order = []Action{
-	ActionRun, ActionRunAll, ActionCancel,
+	ActionRun, ActionRunAll, ActionCancel, ActionExplain,
 	ActionWordLeft, ActionWordRight, ActionSelectWordLeft, ActionSelectWordRight,
 	ActionLineStart, ActionLineEnd, ActionSelectLineStart, ActionSelectLineEnd,
 	ActionDeleteWordLeft, ActionDeleteToLineStart,

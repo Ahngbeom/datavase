@@ -297,6 +297,12 @@ func baseMap() *Map {
 		append(ctrlAndCmdRune('n', tcell.ModShift),
 			Binding{Key: tcell.KeyF7})...)
 
+	// The plan. ⌘E for explain; DataGrip puts it on ⌘⇧E, which is one more
+	// finger for something asked as often as a statement is run. There is no
+	// function key left, and the palette carries it for a terminal that keeps
+	// ⌘ and Ctrl chords for itself.
+	m.bind(ActionExplain, ctrlAndCmdRune('e', 0)...)
+
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

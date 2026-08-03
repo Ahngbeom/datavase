@@ -177,6 +177,11 @@ func (a *App) gridKey(ev *tcell.EventKey) *tcell.EventKey {
 		a.searchAgain(false)
 	case 'N':
 		a.searchAgain(true)
+	case 's':
+		// The grid takes plain keys the editor cannot spare, which is how "/"
+		// and "n" already reach it. Sorting is worth one for the same reason:
+		// it is a thing done repeatedly while reading a result.
+		a.sortColumn()
 	default:
 		return ev
 	}
@@ -273,8 +278,11 @@ func (a *App) findInResults(pattern string, row, column int, backward, inclusive
 	for i := first; i < first+total; i++ {
 		at := ((from+step*i)%total + total) % total
 
+		// r walks the grid's order, not the buffer's, so a search after a
+		// sort finds the next match down the screen rather than the next one
+		// in a sequence nobody is looking at.
 		r, c := at/columns, at%columns
-		if match.Contains(result.Format(a.buf.Raw(r, c)), pattern) {
+		if match.Contains(result.Format(a.buf.Raw(a.content.bufferRow(r+1), c)), pattern) {
 			return r + 1, c, true
 		}
 	}

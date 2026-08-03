@@ -9,6 +9,20 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**Sorting a result by a column.** `⌘⇧S` (`Ctrl+Shift+S`, `F12`, or `s` with the
+grid focused) orders by the column under the cursor; again reverses it, and a
+third press restores the order the server sent — the answer to any `ORDER BY`
+the statement carried. An arrow in the header says which column and which way.
+
+The ordering follows the column's **declared type**. Values arrive as bytes, so
+`9` and `10` look alike whether the column is a `BIGINT` or a `VARCHAR`, and
+deciding from the bytes would sort a `VARCHAR` numerically and disagree with the
+server about its own column. An unknown type sorts as text.
+
+It sorts the rows this session is holding, and says so when those are not the
+result: a result cut at its row limit, or one still arriving, reports how many
+rows were sorted rather than claiming the column was.
+
 **A `:` command line.** `:w` saves, `:q` quits and asks first if there is
 unsaved work, `:q!` does not ask, `:wq` does both, and `:e path` opens a file
 from the attached worktree. Beyond those it runs the palette's commands by

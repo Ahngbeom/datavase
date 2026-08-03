@@ -80,10 +80,8 @@ func pad(s string, width int) string {
 // would be a place you have to remember to leave.
 func (a *App) showRow() {
 	row, _ := a.grid.GetSelection()
-	// Row zero is the header, and the buffer does not count it.
-	index := row - 1
 
-	detail := rowDetail(a.buf, index)
+	detail := rowDetail(a.buf, a.content.bufferRow(row))
 	if detail == "" {
 		a.notice("no row selected")
 		return
@@ -94,7 +92,9 @@ func (a *App) showRow() {
 		SetWrap(true).
 		SetText(detail)
 	view.SetBorder(true).
-		SetTitle(fmt.Sprintf(" row %d of %d ", index+1, a.buf.RowCount())).
+		// The grid's own row number, not the buffer's: this says where you are
+		// in what is on screen, and once a column is sorted those differ.
+		SetTitle(fmt.Sprintf(" row %d of %d ", row, a.buf.RowCount())).
 		SetTitleAlign(tview.AlignLeft)
 	view.SetBackgroundColor(tcell.ColorBlack)
 

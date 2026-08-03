@@ -165,6 +165,12 @@ func paletteCommands() []command {
 			run:     (*App).showHistory,
 		},
 		{
+			name:    "sort by column",
+			summary: "order the results by the selected column, and back again",
+			covers:  keymap.ActionSortColumn,
+			run:     (*App).sortColumn,
+		},
+		{
 			name:    "copy row",
 			summary: "put the selected result row on the clipboard, tab separated",
 			run:     (*App).copyRow,

@@ -67,6 +67,9 @@ const (
 	// ActionInspect shows whatever is selected in full: a table's definition,
 	// or a result row read down the page instead of across it.
 	ActionInspect
+	// ActionSortColumn orders the results by the selected column, and back
+	// again — the third press restores the order the server sent.
+	ActionSortColumn
 
 	// Application.
 	ActionHelp
@@ -112,6 +115,7 @@ var actionNames = map[Action]string{
 	ActionSaveFile:          "save-file",
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
+	ActionSortColumn:        "sort-column",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -155,6 +159,7 @@ var descriptions = map[Action]string{
 	ActionSaveFile:          "save the open file",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected table or result row in full",
+	ActionSortColumn:        "sort the results by the selected column",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -178,6 +183,7 @@ var order = []Action{
 	ActionSaveFile,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
 	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
+	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema,
 	ActionHelp, ActionQuit,

@@ -278,6 +278,13 @@ func baseMap() *Map {
 		Binding{Key: tcell.KeyRune, Rune: 'i', Mods: tcell.ModCtrl | tcell.ModShift},
 		Binding{Key: tcell.KeyF4})
 
+	// Sorting the results. ⌘S is already saving the file, so the sort takes
+	// the shifted one; the grid answers a plain "s" as well, alongside the
+	// "/" and "n" it already takes.
+	m.bind(ActionSortColumn,
+		append(ctrlAndCmdRune('s', tcell.ModShift),
+			Binding{Key: tcell.KeyF12})...)
+
 	// Panes.
 	m.bind(ActionNextPane, plain(tcell.KeyTab)...)
 	m.bind(ActionPrevPane, plain(tcell.KeyBacktab)...)

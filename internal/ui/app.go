@@ -122,6 +122,10 @@ type App struct {
 	ddlView *tview.TextView
 	ddlText string
 
+	// planView shows the query plan, laying it out at whatever width it has
+	// when it is drawn.
+	planView *planPane
+
 	// completion is nil until the schema cache is available; the popup says
 	// so rather than appearing broken.
 	completion *complete.Engine
@@ -398,6 +402,7 @@ func (a *App) buildWidgets() {
 	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
+	a.resultTabs.add(tabPlan, a.buildPlanTab())
 
 	a.topBar = newTopBar(a.currentTopBar)
 	a.statusBar = newStatusBar(a.currentStatus)
@@ -538,7 +543,8 @@ const (
 	tabResults = "results"
 	// Lower case like the others. A single shouted name in a strip of quiet
 	// ones reads as an error rather than as an acronym.
-	tabDDL = "ddl"
+	tabDDL  = "ddl"
+	tabPlan = "plan"
 )
 
 const (
@@ -644,6 +650,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.sortColumn()
 	case keymap.ActionSwitchDataSource:
 		a.showDataSources()
+	case keymap.ActionExplain:
+		a.explainStatement()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
@@ -878,6 +886,7 @@ func (a *App) copyOrCancel() {
 	intent := copyContext{
 		running:      a.running != nil,
 		onDDL:        a.app.GetFocus() == a.ddlView,
+		onPlan:       a.app.GetFocus() == a.planView,
 		onGrid:       a.app.GetFocus() == a.grid,
 		hasSelection: a.editor.HasSelection(),
 	}.resolve()
@@ -887,6 +896,10 @@ func (a *App) copyOrCancel() {
 		a.cancelRunning()
 	case intentDefinition:
 		if !a.copyDDL() {
+			a.notice("nothing to copy")
+		}
+	case intentPlan:
+		if !a.copyPlan() {
 			a.notice("nothing to copy")
 		}
 	case intentSelection:

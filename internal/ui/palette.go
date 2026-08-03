@@ -165,6 +165,12 @@ func paletteCommands() []command {
 			run:     (*App).showHistory,
 		},
 		{
+			name:    "explain",
+			summary: "show how the server would run the statement under the cursor",
+			covers:  keymap.ActionExplain,
+			run:     (*App).explainStatement,
+		},
+		{
 			name:    "sort by column",
 			summary: "order the results by the selected column, and back again",
 			covers:  keymap.ActionSortColumn,

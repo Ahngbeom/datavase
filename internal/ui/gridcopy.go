@@ -19,6 +19,7 @@ const (
 	intentNothing copyIntent = iota
 	intentCancel
 	intentDefinition
+	intentPlan
 	intentSelection
 	intentCell
 )
@@ -27,6 +28,7 @@ const (
 type copyContext struct {
 	running      bool
 	onDDL        bool
+	onPlan       bool
 	onGrid       bool
 	hasSelection bool
 }
@@ -49,6 +51,8 @@ func (c copyContext) resolve() copyIntent {
 	switch {
 	case c.onDDL:
 		return intentDefinition
+	case c.onPlan:
+		return intentPlan
 	case c.hasSelection:
 		return intentSelection
 	case c.onGrid:

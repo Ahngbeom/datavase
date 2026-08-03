@@ -1,0 +1,41 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.018438808,
+    "nested_loop": [
+      {
+        "read_sorted_file": {
+          "filesort": {
+            "sort_key": "b.title",
+            "table": {
+              "table_name": "b",
+              "access_type": "ALL",
+              "possible_keys": ["author_id"],
+              "loops": 1,
+              "rows": 4,
+              "cost": 0.0115068,
+              "filtered": 100,
+              "attached_condition": "b.`year` > 2001 and b.author_id is not null"
+            }
+          }
+        }
+      },
+      {
+        "table": {
+          "table_name": "a",
+          "access_type": "eq_ref",
+          "possible_keys": ["PRIMARY"],
+          "key": "PRIMARY",
+          "key_length": "4",
+          "used_key_parts": ["id"],
+          "ref": ["datavase_test.b.author_id"],
+          "loops": 4,
+          "rows": 1,
+          "cost": 0.00439696,
+          "filtered": 100
+        }
+      }
+    ]
+  }
+}
+

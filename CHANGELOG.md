@@ -9,6 +9,23 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**A query plan you can read.** `⌘E` (`Ctrl+E`) or `explain` in the palette asks
+the server how it would run the statement under the cursor and draws it as a
+tree in its own tab. The buffer is not touched.
+
+A full scan, a filesort and a temporary table are called out. A warning has to
+be something you could act on, so the server's own `<union1,2>` and `<derived2>`
+are not flagged for being scanned — there is no index to add to a table it has
+just written.
+
+The tree is laid out for the pane's width and again whenever that changes, so
+nothing reaches sideways. Nothing about the plan's shape is assumed: MySQL and
+MariaDB disagree about it and both change it between versions, so what is drawn
+is whatever the server sent.
+
+`EXPLAIN` does not run the statement, which is why it needs no confirmation
+against production. `EXPLAIN ANALYZE` does, and is deliberately not on this key.
+
 **Switching datasource without restarting.** `⌘⇧D` (`Ctrl+Shift+D`, `F11`) or
 `switch datasource` in the palette. Comparing production against stage is
 routine and used to mean quitting.

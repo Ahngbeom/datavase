@@ -62,6 +62,7 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlB: 'b',
 	tcell.KeyCtrlC: 'c',
 	tcell.KeyCtrlD: 'd',
+	tcell.KeyCtrlE: 'e',
 	tcell.KeyCtrlF: 'f',
 	tcell.KeyCtrlG: 'g',
 	tcell.KeyCtrlN: 'n',

@@ -7,6 +7,18 @@ edited account — and the place anything that needs action is written down.
 
 ## Unreleased
 
+### Changed
+
+**The production write unlock is now called `unlock writes`, not `write`**, and
+`readonly` is now `lock writes`. Nothing about what they do has changed, and
+the guard's refusal names the new one, so the only thing to relearn is what to
+type into the palette.
+
+The reason is the `:` command line being built next. It resolves the same
+command names, and to anyone with vim in their fingers `:write` saves a file.
+Leaving the unlock called `write` would have put the most dangerous thing here
+behind the most reflexive thing a vim user types.
+
 ### Fixed
 
 **`cw` stops at the end of the word.** It used to travel on to the start of the

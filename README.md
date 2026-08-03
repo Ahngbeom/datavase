@@ -284,8 +284,12 @@ a dialog people learn to dismiss.
 
 Writing to production is possible, and it is deliberately not a button on the
 refusal. Leave the dialog, open the command palette (`⌘⇧A`, `F3`) and run
-`write`; `readonly` locks it again, and so does closing the session. The
-status bar carries `writes on` for as long as it lasts.
+`unlock writes`; `lock writes` refuses them again, and so does closing the
+session. The status bar carries `writes on` for as long as it lasts.
+
+The name is deliberately not `write`. To anyone with vim in their fingers
+`:write` saves a file, and the unlock is the last thing that should sit where
+a reflex lands.
 
 What that unlocks is narrow, and the narrowness is the point:
 

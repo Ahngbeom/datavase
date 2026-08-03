@@ -22,9 +22,14 @@ const paletteNameColumn = 17
 // The two commands the guard's refusal has to be able to name. They are
 // constants so the message and the palette entry cannot drift apart — a test
 // checks the hint names a command the palette really offers.
+//
+// They say "writes" rather than "write" because a ":" command line resolves
+// these same names, and to a vim user ":write" saves the file. Leaving the
+// unlock called "write" would have put the most dangerous thing here behind
+// the most reflexive thing a vim user types.
 const (
-	cmdEnableWrites  = "write"
-	cmdDisableWrites = "readonly"
+	cmdEnableWrites  = "unlock writes"
+	cmdDisableWrites = "lock writes"
 )
 
 // command is one entry of the command palette.
@@ -85,12 +90,12 @@ func paletteCommands() []command {
 	cmds := []command{
 		{
 			name:    cmdEnableWrites,
-			summary: "unlock writes to this production datasource for the session",
+			summary: "allow writes to this production datasource for the session",
 			run:     (*App).enableWrites,
 		},
 		{
 			name:    cmdDisableWrites,
-			summary: "lock writes again",
+			summary: "refuse them again",
 			run:     (*App).disableWrites,
 		},
 		{

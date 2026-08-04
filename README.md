@@ -22,7 +22,8 @@ Built:
   in a transaction you can take back; cancel a runaway query, a write included.
 - **Read the answer**: stream large results, sort a column, take a wide row
   down the page, copy a value out, search what is on screen. See what a write
-  changed and what the server warned about, and read a query plan as a tree.
+  changed and what the server warned about, and read a query plan as a tree —
+  or run it and see what the plan got wrong.
 - **See what else is running** on the server, how long it has been running, and
   stop it — and what is holding the lock everything else is waiting on.
 - **Work in a directory of SQL**: open, run and save its files, with git
@@ -31,8 +32,10 @@ Built:
 
 Not built, and worth knowing before you lean on it:
 
-- **`EXPLAIN ANALYZE` is not on a key.** It runs the statement rather than
-  planning it, so it belongs behind the guard rather than beside `⌘E`.
+- **No reconnection.** A session whose transport has died says so and stays
+  dead; switching datasource opens a fresh one. Deciding on its own to
+  re-establish a connection to production, and to what state, is a larger
+  promise than this has earned.
 - **No editing of data.** There is no editable grid and no generated `UPDATE`;
   a write is a statement you wrote, which is what the guard is able to reason
   about.

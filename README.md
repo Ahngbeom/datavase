@@ -114,6 +114,10 @@ dv check prod-app     # verify reachability, then exit
 dv open local --dir ~/work/migrations   # with a worktree of SQL attached
 ```
 
+The first session opens on a short card: the few keys worth knowing, and what
+the guard will do to a statement that changes data on *this* datasource. Enter
+puts it away for good; `getting started` in the command palette brings it back.
+
 ### Keys
 
 **The editor is modal by default** — it starts in vim's normal mode, so press

@@ -147,6 +147,10 @@ type App struct {
 	// dialog before anything has been typed. Nil when the state directory
 	// could not be read.
 	recentDirs *recent.List
+	// introPath is where the first-run card records that it has been shown.
+	// Empty means there is nowhere to record it, which is also the session
+	// that never shows it.
+	introPath string
 	// search is the last pattern looked for and where, so that n and N have
 	// something to repeat once the prompt has closed.
 	search searchState
@@ -220,6 +224,10 @@ type Deps struct {
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
+	// IntroPath is where "the first-run card has been shown" is recorded.
+	// Empty means never show it, which is what a session with no usable state
+	// directory gets — and what every test that is not about the card gets.
+	IntroPath string
 }
 
 // New builds the interface for an open session.
@@ -247,6 +255,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		history:         deps.History,
 		wt:              deps.Worktree,
 		recentDirs:      deps.Recent,
+		introPath:       deps.IntroPath,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
 		selectionAnchor: noAnchor,
@@ -265,6 +274,9 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	// A worktree given on the command line is listed before the first draw, so
 	// the status bar names the branch rather than filling in a moment later.
 	a.rescan()
+	// Last, so the card is drawn over an interface that is already built: it
+	// names the datasource and the keys, and both have to be settled first.
+	a.showIntroOnce()
 
 	return a
 }
@@ -568,6 +580,7 @@ const (
 	pageCommand    = "command"
 	pageDataSource = "datasource"
 	pageKill       = "kill"
+	pageIntro      = "intro"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than

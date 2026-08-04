@@ -124,11 +124,30 @@ default is only survivable because of things that must stay true:
 - the status bar always shows the mode and any half-typed sequence
 - normal mode consumes **every** key — one leaking through gets typed
 - the empty-editor placeholder says how to start typing
-- the help screen carries the vim reference and the `preset: datagrip` escape
-  hatch
+- the help screen opens with the way out, above the vim reference rather than
+  at the foot of it
+- `dv init` asks which keyboard before writing a config, so nobody meets the
+  modal editor without having chosen it
 
 `a.keys` is consulted at event time, so swapping the map switches keyboards
 mid-session with no rebinding.
+
+### The first ten minutes
+
+Three things exist only for someone who has not used this before, and each is
+built so it cannot go stale:
+
+- **`internal/cli.Wizard`** (`dv init`) is the config package's only writer. It
+  probes before it writes, and its env and preset prose is checked against
+  `config`'s and `keymap`'s own values.
+- **`startHere`** (`internal/ui/dialog.go`) is the help screen's opening five,
+  rendered from the live key map. It deliberately repeats entries from
+  `helpGroups`, which keeps its own exactly-once rule.
+- **`internal/intro`** is one bit — whether the first-run card has been shown —
+  stored as a file's existence under `XDG_STATE_HOME`. Optional like the cache
+  and the history: a marker that cannot be written costs the card being shown
+  again, never the session. An empty `Deps.IntroPath` means never show it,
+  which is what every test that is not about the card gets.
 
 ## Conventions
 

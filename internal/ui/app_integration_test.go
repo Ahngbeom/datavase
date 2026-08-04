@@ -74,6 +74,15 @@ func (h *harness) waitForBackgroundRefresh(datasource string) {
 
 func newHarness(t *testing.T, env config.Env) *harness {
 	t.Helper()
+	return newHarnessWithIntro(t, env, "")
+}
+
+// newHarnessWithIntro is newHarness for the tests that need the first-run card.
+//
+// An empty marker path is what every other test gets, and is what keeps the
+// card out of their way: a session with nowhere to record it never shows it.
+func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harness {
+	t.Helper()
 
 	ds, password := testmysql.DataSource(t)
 	ds.Env = env
@@ -85,7 +94,7 @@ func newHarness(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessOver(t, &session.Session{Conn: conn}, ds)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -94,6 +103,11 @@ func newHarness(t *testing.T, env config.Env) *harness {
 // bastion — which is the only way to exercise what the interface says when
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
+	t.Helper()
+	return harnessWith(t, sess, ds, "")
+}
+
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -139,7 +153,9 @@ func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 		t.Fatalf("recent.Open() error = %v", err)
 	}
 
-	app := New(sess, cfg, Deps{Keys: keys, Cache: cache, History: hist, Recent: recents})
+	app := New(sess, cfg, Deps{
+		Keys: keys, Cache: cache, History: hist, Recent: recents, IntroPath: introMarker,
+	})
 	app.SetScreen(screen)
 
 	h := &harness{app: app, screen: screen, cache: cache, history: hist, t: t}

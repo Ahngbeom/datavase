@@ -83,6 +83,8 @@ const (
 	ActionSessions
 	// ActionKillSession stops another connection's statement.
 	ActionKillSession
+	// ActionLocks shows which connections are waiting on which.
+	ActionLocks
 
 	// Application.
 	ActionHelp
@@ -134,6 +136,7 @@ var actionNames = map[Action]string{
 	ActionAnalyze:           "analyze",
 	ActionSessions:          "sessions",
 	ActionKillSession:       "kill-session",
+	ActionLocks:             "locks",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -183,6 +186,7 @@ var descriptions = map[Action]string{
 	ActionAnalyze:           "run it and report what it actually did",
 	ActionSessions:          "list what else is running on the server",
 	ActionKillSession:       "stop another connection's statement",
+	ActionLocks:             "show which connections are waiting on which",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -208,7 +212,7 @@ var order = []Action{
 	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
-	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession,
+	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession, ActionLocks,
 	ActionHelp, ActionQuit,
 }
 

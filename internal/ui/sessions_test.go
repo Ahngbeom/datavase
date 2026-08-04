@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/procs"
@@ -68,5 +70,52 @@ func TestTheSessionsSummarySaysWhatCouldNotBeSeen(t *testing.T) {
 	partial.Complete = false
 	if got := sessionsSummary(partial); got == sessionsSummary(full) {
 		t.Error("a partial listing reads exactly like a complete one")
+	}
+}
+
+// An empty tree and a server that will not answer look identical on screen,
+// and only one of them means nothing is stuck.
+func TestALockTreeDistinguishesQuietFromSilent(t *testing.T) {
+	quiet := lockTreeText(procs.LockTree{Supported: true}, 80)
+	silent := lockTreeText(procs.LockTree{Supported: false}, 80)
+
+	if quiet == silent {
+		t.Fatalf("both read %q", quiet)
+	}
+	if !strings.Contains(quiet, "Nothing is waiting") {
+		t.Errorf("a quiet server reads %q", quiet)
+	}
+	if !strings.Contains(silent, "does not expose") {
+		t.Errorf("a silent server reads %q", silent)
+	}
+
+	if got := lockSummary(procs.LockTree{Supported: true}); got != "nothing is waiting on a lock" {
+		t.Errorf("the quiet summary reads %q", got)
+	}
+	if got := lockSummary(procs.LockTree{}); got == lockSummary(procs.LockTree{Supported: true}) {
+		t.Error("an unsupported server summarises exactly like a quiet one")
+	}
+}
+
+// The blocker at the bottom is what the tree exists to point at, and the
+// reason it is stuck — a transaction left open with nothing running — is the
+// one a list of statements cannot show.
+func TestALockTreeNamesTheIdleHolder(t *testing.T) {
+	tree := procs.LockTree{
+		Supported: true,
+		Roots: procs.Tree([]procs.Wait{
+			{
+				Waiter:  procs.Thread{ID: 20, User: "app", Host: "h", SQL: "UPDATE orders SET total = 0"},
+				Blocker: procs.Thread{ID: 10, User: "dba", Host: "h", Idle: true},
+				Waited:  42 * time.Second,
+			},
+		}),
+	}
+
+	out := lockTreeText(tree, 80)
+	for _, want := range []string{"idle in transaction", "waiting 42s", "UPDATE orders", "└─ "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the tree does not show %q:\n%s", want, out)
+		}
 	}
 }

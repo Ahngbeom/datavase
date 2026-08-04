@@ -9,6 +9,18 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**See what is holding a lock.** `⌘⇧L` or `locks` in the palette draws who is
+waiting on whom. The connection at the bottom waits on nothing and is the one to
+deal with.
+
+A blocker's current statement is usually not the one that took the lock — a
+transaction keeps what it took until it ends — so the common case is a
+connection holding a row and running nothing at all, which a list of statements
+cannot show.
+
+`Nothing is waiting on a lock` and `this server does not expose InnoDB lock
+waits` are different answers and are never printed for each other.
+
 **Stop another connection's statement.** `⌘⇧W` or `stop a statement` in the
 palette; `stop a connection` ends the connection and rolls back what it held.
 

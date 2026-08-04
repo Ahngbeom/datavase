@@ -125,3 +125,89 @@ func TestWorkingTellsAQueryFromAHeldSocket(t *testing.T) {
 		})
 	}
 }
+
+// The server gives a flat list of pairs, which is what a DBA then correlates by
+// hand. The thing worth finding is the connection at the bottom that waits on
+// nothing, because that is the one to deal with.
+func TestTreeFindsWhoIsAtTheBottom(t *testing.T) {
+	// 30 waits on 20, which waits on 10. 10 waits on nobody.
+	waits := []Wait{
+		{Waiter: Thread{ID: 30}, Blocker: Thread{ID: 20}, Waited: 2 * time.Second},
+		{Waiter: Thread{ID: 20}, Blocker: Thread{ID: 10}, Waited: 9 * time.Second},
+	}
+
+	roots := Tree(waits)
+	if len(roots) != 1 {
+		t.Fatalf("found %d roots, want the one nobody is blocking", len(roots))
+	}
+	if roots[0].Thread.ID != 10 {
+		t.Errorf("the root is %d, want 10", roots[0].Thread.ID)
+	}
+	if roots[0].Waited != 0 {
+		t.Errorf("the root reports waiting %v; it waits on nothing", roots[0].Waited)
+	}
+
+	if len(roots[0].Waiters) != 1 || roots[0].Waiters[0].Thread.ID != 20 {
+		t.Fatalf("20 is not under 10: %+v", roots[0].Waiters)
+	}
+	twenty := roots[0].Waiters[0]
+	if twenty.Waited != 9*time.Second {
+		t.Errorf("20 waited %v, want 9s", twenty.Waited)
+	}
+	if len(twenty.Waiters) != 1 || twenty.Waiters[0].Thread.ID != 30 {
+		t.Errorf("30 is not under 20: %+v", twenty.Waiters)
+	}
+}
+
+// A blocker holding several locks appears once per lock, and one edge is
+// enough — a thread listed three times under the same blocker reads as three
+// connections.
+func TestTreeDoesNotRepeatAPair(t *testing.T) {
+	waits := []Wait{
+		{Waiter: Thread{ID: 2}, Blocker: Thread{ID: 1}},
+		{Waiter: Thread{ID: 2}, Blocker: Thread{ID: 1}},
+		{Waiter: Thread{ID: 3}, Blocker: Thread{ID: 1}},
+	}
+
+	roots := Tree(waits)
+	if len(roots) != 1 {
+		t.Fatalf("found %d roots, want 1", len(roots))
+	}
+	if got := len(roots[0].Waiters); got != 2 {
+		t.Errorf("the blocker has %d waiters, want 2", got)
+	}
+}
+
+// A thread met first as a blocker carries no statement; met again as a waiter
+// it does. Keeping the emptier description would lose the statement that is
+// actually stuck.
+func TestTreeKeepsTheFullerDescriptionOfAThread(t *testing.T) {
+	waits := []Wait{
+		{Waiter: Thread{ID: 2}, Blocker: Thread{ID: 1, Idle: true}},
+		{Waiter: Thread{ID: 1, SQL: "UPDATE t SET n = 1"}, Blocker: Thread{ID: 9}},
+	}
+
+	roots := Tree(waits)
+	var one *Blocked
+	for _, r := range roots {
+		for _, w := range r.Waiters {
+			if w.Thread.ID == 1 {
+				one = w
+			}
+		}
+	}
+	if one == nil {
+		t.Fatalf("thread 1 is not in the tree: %+v", roots)
+	}
+	if one.Thread.SQL != "UPDATE t SET n = 1" {
+		t.Errorf("thread 1 reads %q, want the statement it is running", one.Thread.SQL)
+	}
+}
+
+// Nothing waiting is a tree with no roots, and it is not the same answer as a
+// server that will not say.
+func TestAnEmptyTreeIsNotAnUnsupportedOne(t *testing.T) {
+	if got := Tree(nil); len(got) != 0 {
+		t.Errorf("Tree(nil) = %v, want nothing", got)
+	}
+}

@@ -257,3 +257,114 @@ func waitForStatement(t *testing.T, ctx context.Context, conn *db.Conn, contains
 	t.Fatalf("no connection is running a statement containing %q", contains)
 	return 0
 }
+
+// A real lock wait: one transaction holds a row, another asks for it. The
+// listing has to name both sides and put the one waiting on nothing at the
+// bottom of the tree.
+func TestLockWaitsNamesBothSidesOfAWait(t *testing.T) {
+	watcher := open(t, "", "")
+	holder := open(t, "", "")
+	waiter := open(t, "", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	makeLockFixture(t, ctx, watcher)
+
+	// The holder takes the row and keeps its transaction open.
+	if err := holder.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	defer holder.Rollback(context.Background())
+	if err := exec(ctx, holder, "UPDATE dv_lockwait SET n = 99 WHERE id = 1"); err != nil {
+		t.Fatalf("taking the lock: %v", err)
+	}
+
+	// The waiter asks for the same row and blocks.
+	if err := waiter.Begin(ctx); err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	defer waiter.Rollback(context.Background())
+
+	blocked, stopBlocked := context.WithCancel(context.Background())
+	defer stopBlocked()
+	go func() {
+		stream := waiter.Query(blocked, "UPDATE dv_lockwait SET n = 77 WHERE id = 1", db.Options{Exec: true})
+		defer stream.Close()
+		for range stream.Events {
+		}
+	}()
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		tree, err := LockWaits(ctx, watcher)
+		if err != nil {
+			t.Fatalf("LockWaits() error = %v", err)
+		}
+		if !tree.Supported {
+			t.Skip("this server keeps its lock waits somewhere else")
+		}
+		if len(tree.Roots) == 0 {
+			time.Sleep(200 * time.Millisecond)
+			continue
+		}
+
+		root := tree.Roots[0]
+		if len(root.Waiters) == 0 {
+			t.Fatalf("the root has nobody waiting on it: %+v", root)
+		}
+		// The root holds and waits on nothing; the waiter is the one asking.
+		if root.Waited != 0 {
+			t.Errorf("the root reports waiting %v", root.Waited)
+		}
+		if got := root.Waiters[0].Thread.SQL; !strings.Contains(got, "n = 77") {
+			t.Errorf("the waiting statement reads %q, want the UPDATE that is blocked", got)
+		}
+		// The blocker's current statement is not the one that took the lock —
+		// which is the point. Here it is running nothing at all, the most
+		// common reason a table is stuck.
+		if !root.Thread.Idle {
+			t.Logf("the blocker is running %q rather than sitting idle", root.Thread.SQL)
+		}
+		return
+	}
+	t.Fatal("the lock wait never appeared")
+}
+
+// Nothing waiting and a server that will not say are different answers.
+func TestNoLockWaitsIsStillASupportedAnswer(t *testing.T) {
+	conn := open(t, "", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	tree, err := LockWaits(ctx, conn)
+	if err != nil {
+		t.Fatalf("LockWaits() error = %v", err)
+	}
+	if !tree.Supported {
+		t.Error("the test server has InnoDB lock waits and this says otherwise")
+	}
+}
+
+func makeLockFixture(t *testing.T, ctx context.Context, conn *db.Conn) {
+	t.Helper()
+
+	for _, stmt := range []string{
+		"CREATE TABLE IF NOT EXISTS dv_lockwait (id INT PRIMARY KEY, n INT) ENGINE=InnoDB",
+		"REPLACE INTO dv_lockwait VALUES (1, 1)",
+	} {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
+			t.Fatalf("%s: %v", stmt, err)
+		}
+	}
+}
+
+func exec(ctx context.Context, conn *db.Conn, sql string) error {
+	stream := conn.Query(ctx, sql, db.Options{Exec: true})
+	defer stream.Close()
+
+	for range stream.Events {
+	}
+	return stream.Err()
+}

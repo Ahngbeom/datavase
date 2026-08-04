@@ -197,7 +197,7 @@ var helpGroups = []struct {
 	{
 		title: "Results",
 		actions: []keymap.Action{
-			keymap.ActionSortColumn, keymap.ActionSessions, keymap.ActionKillSession,
+			keymap.ActionSortColumn, keymap.ActionSessions, keymap.ActionKillSession, keymap.ActionLocks,
 		},
 	},
 	{

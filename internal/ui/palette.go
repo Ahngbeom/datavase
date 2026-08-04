@@ -184,6 +184,12 @@ func paletteCommands() []command {
 			run:     (*App).showSessions,
 		},
 		{
+			name:    "locks",
+			summary: "show which connections are waiting on which",
+			covers:  keymap.ActionLocks,
+			run:     (*App).showLocks,
+		},
+		{
 			name:    "stop a statement",
 			summary: "stop the statement running on another connection",
 			covers:  keymap.ActionKillSession,

@@ -233,3 +233,206 @@ func Kill(ctx context.Context, conn *db.Conn, id uint64, stop Stop) error {
 		return nil
 	})
 }
+
+// Thread is a connection seen from a lock's point of view.
+type Thread struct {
+	ID   uint64
+	User string
+	Host string
+	// SQL is what the connection is running now, which for a blocker is
+	// usually not the statement that took the lock: a transaction holds what
+	// it took until it ends, whatever it does in between.
+	SQL string
+	// Idle says the connection holds its locks and is running nothing at all.
+	// It is the most common answer to "why is everything stuck", and the one
+	// a list of statements cannot give.
+	Idle bool
+}
+
+// Wait is one connection waiting on another.
+type Wait struct {
+	Waiter  Thread
+	Blocker Thread
+	Waited  time.Duration
+}
+
+// LockTree is who is waiting on whom, and whether the server would say.
+type LockTree struct {
+	// Roots are the connections blocking others without waiting themselves.
+	Roots []*Blocked
+	// Supported is false when this server keeps its lock waits somewhere this
+	// does not know to look. An empty tree and a server that will not say look
+	// identical, and only one of them means nothing is stuck.
+	Supported bool
+}
+
+// Blocked is one connection in the tree, with whatever is waiting on it.
+type Blocked struct {
+	Thread Thread
+	// Waited is how long this connection has been waiting for its own lock,
+	// and is zero at a root.
+	Waited  time.Duration
+	Waiters []*Blocked
+}
+
+// lockWaitQueries are the shapes a server keeps its InnoDB lock waits in.
+//
+// MariaDB has information_schema.INNODB_LOCK_WAITS; MySQL 8 moved to
+// performance_schema.data_lock_waits. Both join to information_schema.INNODB_TRX
+// for the transaction behind each side, so only the wait table differs.
+var lockWaitQueries = []struct {
+	table string
+	query string
+}{
+	{
+		table: "information_schema.INNODB_LOCK_WAITS",
+		query: lockWaitSQL("information_schema.INNODB_LOCK_WAITS", "requesting_trx_id", "blocking_trx_id"),
+	},
+	{
+		table: "performance_schema.data_lock_waits",
+		query: lockWaitSQL("performance_schema.data_lock_waits",
+			"REQUESTING_ENGINE_TRANSACTION_ID", "BLOCKING_ENGINE_TRANSACTION_ID"),
+	},
+}
+
+func lockWaitSQL(table, requesting, blocking string) string {
+	return fmt.Sprintf(`SELECT
+		r.trx_mysql_thread_id, rp.USER, rp.HOST, COALESCE(r.trx_query, ''),
+		b.trx_mysql_thread_id, bp.USER, bp.HOST, COALESCE(b.trx_query, ''),
+		TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW())
+	FROM %s w
+	JOIN information_schema.INNODB_TRX r ON r.trx_id = w.%s
+	JOIN information_schema.INNODB_TRX b ON b.trx_id = w.%s
+	LEFT JOIN information_schema.PROCESSLIST rp ON rp.ID = r.trx_mysql_thread_id
+	LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id`,
+		table, requesting, blocking)
+}
+
+// LockWaits reads who is waiting on whom.
+func LockWaits(ctx context.Context, conn *db.Conn) (LockTree, error) {
+	var out LockTree
+
+	err := conn.WithControl(ctx, func(c *sql.Conn) error {
+		for _, shape := range lockWaitQueries {
+			exists, err := tableExists(ctx, c, shape.table)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				continue
+			}
+
+			waits, err := readWaits(ctx, c, shape.query)
+			if err != nil {
+				return err
+			}
+			out = LockTree{Roots: Tree(waits), Supported: true}
+			return nil
+		}
+		return nil
+	})
+	return out, err
+}
+
+func tableExists(ctx context.Context, c *sql.Conn, qualified string) (bool, error) {
+	schema, name, _ := strings.Cut(qualified, ".")
+
+	var n int
+	err := c.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+		schema, name).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("looking for %s: %w", qualified, err)
+	}
+	return n > 0, nil
+}
+
+func readWaits(ctx context.Context, c *sql.Conn, query string) ([]Wait, error) {
+	rows, err := c.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("reading lock waits: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Wait
+	for rows.Next() {
+		var (
+			w                          Wait
+			rUser, rHost, bUser, bHost sql.NullString
+			waiterSQL, blockerSQL      string
+			seconds                    sql.NullInt64
+		)
+		if err := rows.Scan(
+			&w.Waiter.ID, &rUser, &rHost, &waiterSQL,
+			&w.Blocker.ID, &bUser, &bHost, &blockerSQL,
+			&seconds,
+		); err != nil {
+			return nil, fmt.Errorf("reading lock waits: %w", err)
+		}
+
+		w.Waiter.User, w.Waiter.Host, w.Waiter.SQL = rUser.String, rHost.String, waiterSQL
+		w.Blocker.User, w.Blocker.Host, w.Blocker.SQL = bUser.String, bHost.String, blockerSQL
+		// A blocker running nothing is a transaction left open, which is the
+		// most common reason a table is stuck and the one a list of running
+		// statements cannot show.
+		w.Blocker.Idle = blockerSQL == ""
+		w.Waiter.Idle = waiterSQL == ""
+		w.Waited = time.Duration(seconds.Int64) * time.Second
+
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+
+// Tree turns the pairs into who-waits-on-whom.
+//
+// A flat list of pairs is what the server gives and what a DBA then has to
+// correlate by hand — and the thing worth finding is the connection at the
+// bottom that waits on nothing, because that is the one to deal with.
+func Tree(waits []Wait) []*Blocked {
+	nodes := make(map[uint64]*Blocked, len(waits)*2)
+	waiting := make(map[uint64]bool, len(waits))
+
+	node := func(t Thread) *Blocked {
+		if existing, ok := nodes[t.ID]; ok {
+			// A thread seen first as a blocker has no statement recorded
+			// against it yet; the fuller of the two descriptions wins.
+			if existing.Thread.SQL == "" {
+				existing.Thread = t
+			}
+			return existing
+		}
+		created := &Blocked{Thread: t}
+		nodes[t.ID] = created
+		return created
+	}
+
+	for _, w := range waits {
+		waiter, blocker := node(w.Waiter), node(w.Blocker)
+		waiter.Waited = w.Waited
+		waiting[w.Waiter.ID] = true
+
+		// The same pair can appear once per lock held; one edge is enough.
+		if !alreadyWaiting(blocker, waiter.Thread.ID) {
+			blocker.Waiters = append(blocker.Waiters, waiter)
+		}
+	}
+
+	var roots []*Blocked
+	for id, n := range nodes {
+		if !waiting[id] {
+			roots = append(roots, n)
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool { return roots[i].Thread.ID < roots[j].Thread.ID })
+	return roots
+}
+
+func alreadyWaiting(b *Blocked, id uint64) bool {
+	for _, w := range b.Waiters {
+		if w.Thread.ID == id {
+			return true
+		}
+	}
+	return false
+}

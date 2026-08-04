@@ -665,6 +665,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.showSessions()
 	case keymap.ActionKillSession:
 		a.showKillSession(procs.StopStatement)
+	case keymap.ActionLocks:
+		a.showLocks()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:

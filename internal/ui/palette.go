@@ -33,10 +33,49 @@ const (
 	cmdDisableWrites = "lock writes"
 )
 
+// paletteCategories are the headings a browsed palette is grouped under, in
+// the order they appear.
+//
+// The order is what someone reaching for the palette most often wants first,
+// and it decides one thing besides reading: Enter on an unfiltered palette
+// runs the first command. That used to be "unlock writes" — the most dangerous
+// thing here, two keys away with nothing read. It is now "cancel", which does
+// nothing when nothing is running.
+var paletteCategories = []string{
+	catRunning,
+	catResults,
+	catFinding,
+	catSchema,
+	catFiles,
+	catEditing,
+	catWrites,
+	catServer,
+	catKeyboard,
+	catOther,
+}
+
+const (
+	catRunning  = "Running"
+	catResults  = "The result"
+	catFinding  = "Finding things"
+	catSchema   = "Schema and datasource"
+	catFiles    = "Files"
+	catEditing  = "Editing"
+	catWrites   = "Changing data"
+	catServer   = "The server"
+	catKeyboard = "Keyboard"
+	catOther    = "Other"
+)
+
 // command is one entry of the command palette.
 type command struct {
 	name    string
 	summary string
+
+	// category is the heading this command is browsed under. A palette that is
+	// only searchable is one you have to already know the name of something to
+	// use, which is the opposite of what it is for.
+	category string
 
 	// exact keeps the command off the ":" line's abbreviations, so only its
 	// whole name reaches it.
@@ -100,222 +139,259 @@ var paletteExempt = map[keymap.Action]bool{
 func paletteCommands() []command {
 	cmds := []command{
 		{
-			name:    cmdEnableWrites,
-			summary: "allow writes to this production datasource for the session",
-			exact:   true,
-			run:     (*App).enableWrites,
+			name:     cmdEnableWrites,
+			category: catWrites,
+			summary:  "allow writes to this production datasource for the session",
+			exact:    true,
+			run:      (*App).enableWrites,
 		},
 		{
-			name:    cmdDisableWrites,
-			summary: "refuse them again",
-			run:     (*App).disableWrites,
+			name:     cmdDisableWrites,
+			category: catWrites,
+			summary:  "refuse them again",
+			run:      (*App).disableWrites,
 		},
 		{
-			name:    "begin",
-			summary: "open a transaction — work stays undoable until you commit",
-			run:     func(a *App) { a.transactionControl("BEGIN") },
+			name:     "begin",
+			category: catWrites,
+			summary:  "open a transaction — work stays undoable until you commit",
+			run:      func(a *App) { a.transactionControl("BEGIN") },
 		},
 		{
-			name:    "commit",
-			summary: "keep the open transaction's work",
-			run:     func(a *App) { a.transactionControl("COMMIT") },
+			name:     "commit",
+			category: catWrites,
+			summary:  "keep the open transaction's work",
+			run:      func(a *App) { a.transactionControl("COMMIT") },
 		},
 		{
-			name:    "rollback",
-			summary: "discard the open transaction's work",
-			run:     func(a *App) { a.transactionControl("ROLLBACK") },
+			name:     "rollback",
+			category: catWrites,
+			summary:  "discard the open transaction's work",
+			run:      func(a *App) { a.transactionControl("ROLLBACK") },
 		},
 		{
-			name:    "export csv",
-			summary: "write the current result to a CSV file",
-			run:     func(a *App) { a.exportResult(formatCSV) },
+			name:     "export csv",
+			category: catResults,
+			summary:  "write the current result to a CSV file",
+			run:      func(a *App) { a.exportResult(formatCSV) },
 		},
 		{
-			name:    "export json",
-			summary: "write the current result to a JSON file",
-			run:     func(a *App) { a.exportResult(formatJSON) },
+			name:     "export json",
+			category: catResults,
+			summary:  "write the current result to a JSON file",
+			run:      func(a *App) { a.exportResult(formatJSON) },
 		},
 		{
-			name:    "cancel",
-			summary: "stop the running statement",
-			covers:  keymap.ActionCancel,
-			run:     (*App).cancelRunning,
+			name:     "cancel",
+			category: catRunning,
+			summary:  "stop the running statement",
+			covers:   keymap.ActionCancel,
+			run:      (*App).cancelRunning,
 		},
 		{
-			name:    "find in text",
-			summary: "search the editor, or the results when they have focus",
-			covers:  keymap.ActionFind,
-			run:     func(a *App) { a.showTextSearch(false) },
+			name:     "find in text",
+			category: catFinding,
+			summary:  "search the editor, or the results when they have focus",
+			covers:   keymap.ActionFind,
+			run:      func(a *App) { a.showTextSearch(false) },
 		},
 		{
-			name:    "find next",
-			summary: "go to the next match of the last search",
-			covers:  keymap.ActionFindNext,
-			run:     func(a *App) { a.searchAgain(false) },
+			name:     "find next",
+			category: catFinding,
+			summary:  "go to the next match of the last search",
+			covers:   keymap.ActionFindNext,
+			run:      func(a *App) { a.searchAgain(false) },
 		},
 		{
-			name:    "find previous",
-			summary: "go to the previous match of the last search",
-			covers:  keymap.ActionFindPrev,
-			run:     func(a *App) { a.searchAgain(true) },
+			name:     "find previous",
+			category: catFinding,
+			summary:  "go to the previous match of the last search",
+			covers:   keymap.ActionFindPrev,
+			run:      func(a *App) { a.searchAgain(true) },
 		},
 		{
-			name:    "history",
-			summary: "search previously run statements",
-			covers:  keymap.ActionSearchHistory,
-			run:     (*App).showHistory,
+			name:     "history",
+			category: catFinding,
+			summary:  "search previously run statements",
+			covers:   keymap.ActionSearchHistory,
+			run:      (*App).showHistory,
 		},
 		{
-			name:    "explain",
-			summary: "show how the server would run the statement under the cursor",
-			covers:  keymap.ActionExplain,
-			run:     (*App).explainStatement,
+			name:     "explain",
+			category: catRunning,
+			summary:  "show how the server would run the statement under the cursor",
+			covers:   keymap.ActionExplain,
+			run:      (*App).explainStatement,
 		},
 		{
-			name:    "analyze",
-			summary: "run the statement under the cursor and show what it actually did",
-			covers:  keymap.ActionAnalyze,
-			run:     (*App).analyzeStatement,
+			name:     "analyze",
+			category: catRunning,
+			summary:  "run the statement under the cursor and show what it actually did",
+			covers:   keymap.ActionAnalyze,
+			run:      (*App).analyzeStatement,
 		},
 		{
-			name:    "sessions",
-			summary: "list what else is running on the server",
-			covers:  keymap.ActionSessions,
-			run:     (*App).showSessions,
+			name:     "sessions",
+			category: catServer,
+			summary:  "list what else is running on the server",
+			covers:   keymap.ActionSessions,
+			run:      (*App).showSessions,
 		},
 		{
-			name:    "locks",
-			summary: "show which connections are waiting on which",
-			covers:  keymap.ActionLocks,
-			run:     (*App).showLocks,
+			name:     "locks",
+			category: catServer,
+			summary:  "show which connections are waiting on which",
+			covers:   keymap.ActionLocks,
+			run:      (*App).showLocks,
 		},
 		{
-			name:    "stop a statement",
-			summary: "stop the statement running on another connection",
-			covers:  keymap.ActionKillSession,
-			run:     func(a *App) { a.showKillSession(procs.StopStatement) },
+			name:     "stop a statement",
+			category: catServer,
+			summary:  "stop the statement running on another connection",
+			covers:   keymap.ActionKillSession,
+			run:      func(a *App) { a.showKillSession(procs.StopStatement) },
 		},
 		{
-			name:    "stop a connection",
-			summary: "end another connection, rolling back anything it held open",
-			exact:   true,
-			run:     func(a *App) { a.showKillSession(procs.StopConnection) },
+			name:     "stop a connection",
+			category: catServer,
+			summary:  "end another connection, rolling back anything it held open",
+			exact:    true,
+			run:      func(a *App) { a.showKillSession(procs.StopConnection) },
 		},
 		{
-			name:    "sort by column",
-			summary: "order the results by the selected column, and back again",
-			covers:  keymap.ActionSortColumn,
-			run:     (*App).sortColumn,
+			name:     "sort by column",
+			category: catResults,
+			summary:  "order the results by the selected column, and back again",
+			covers:   keymap.ActionSortColumn,
+			run:      (*App).sortColumn,
 		},
 		{
-			name:    "copy row",
-			summary: "put the selected result row on the clipboard, tab separated",
-			run:     (*App).copyRow,
+			name:     "copy row",
+			category: catResults,
+			summary:  "put the selected result row on the clipboard, tab separated",
+			run:      (*App).copyRow,
 		},
 		{
-			name:    "inspect",
-			summary: "show the selected table or result row in full",
-			covers:  keymap.ActionInspect,
-			run:     (*App).inspect,
+			name:     "inspect",
+			category: catResults,
+			summary:  "show the selected table or result row in full",
+			covers:   keymap.ActionInspect,
+			run:      (*App).inspect,
 		},
 		{
-			name:    "go to table",
-			summary: "find a table anywhere on the server by name",
-			covers:  keymap.ActionGoToTable,
-			run:     (*App).showGoToTable,
+			name:     "go to table",
+			category: catFinding,
+			summary:  "find a table anywhere on the server by name",
+			covers:   keymap.ActionGoToTable,
+			run:      (*App).showGoToTable,
 		},
 		{
-			name:    "schema tree",
-			summary: "show or hide the schema pane",
-			covers:  keymap.ActionToggleSidebar,
-			run:     (*App).toggleSidebar,
+			name:     "schema tree",
+			category: catSchema,
+			summary:  "show or hide the schema pane",
+			covers:   keymap.ActionToggleSidebar,
+			run:      (*App).toggleSidebar,
 		},
 		{
-			name:    "complete",
-			summary: "complete the word at the cursor",
-			covers:  keymap.ActionComplete,
-			run:     (*App).showCompletion,
+			name:     "complete",
+			category: catFinding,
+			summary:  "complete the word at the cursor",
+			covers:   keymap.ActionComplete,
+			run:      (*App).showCompletion,
 		},
 		{
-			name:    "attach directory",
-			summary: "point this session at a worktree of SQL files",
-			run:     (*App).showAttachDirectory,
+			name:     "attach directory",
+			category: catFiles,
+			summary:  "point this session at a worktree of SQL files",
+			run:      (*App).showAttachDirectory,
 		},
 		{
-			name:    "detach directory",
-			summary: "forget the attached worktree",
-			run:     (*App).detach,
+			name:     "detach directory",
+			category: catFiles,
+			summary:  "forget the attached worktree",
+			run:      (*App).detach,
 		},
 		{
-			name:    "open file",
-			summary: "open a SQL file from the attached worktree",
-			covers:  keymap.ActionFindFile,
-			run:     (*App).showFindFile,
+			name:     "open file",
+			category: catFiles,
+			summary:  "open a SQL file from the attached worktree",
+			covers:   keymap.ActionFindFile,
+			run:      (*App).showFindFile,
 		},
 		{
-			name:    "save file",
-			summary: "write the editor back to the file it came from",
-			covers:  keymap.ActionSaveFile,
-			run:     (*App).saveFile,
+			name:     "save file",
+			category: catFiles,
+			summary:  "write the editor back to the file it came from",
+			covers:   keymap.ActionSaveFile,
+			run:      (*App).saveFile,
 		},
 		{
-			name:    "switch datasource",
-			summary: "move this session to another configured datasource",
-			covers:  keymap.ActionSwitchDataSource,
-			run:     (*App).showDataSources,
+			name:     "switch datasource",
+			category: catSchema,
+			summary:  "move this session to another configured datasource",
+			covers:   keymap.ActionSwitchDataSource,
+			run:      (*App).showDataSources,
 		},
 		{
-			name:    "use schema",
-			summary: "choose the schema unqualified names resolve against",
-			covers:  keymap.ActionUseSchema,
-			run:     (*App).showUseSchema,
+			name:     "use schema",
+			category: catSchema,
+			summary:  "choose the schema unqualified names resolve against",
+			covers:   keymap.ActionUseSchema,
+			run:      (*App).showUseSchema,
 		},
 		{
-			name:    "refresh schema",
-			summary: "reload the schema tree and completion cache",
-			covers:  keymap.ActionRefreshSchema,
-			run:     (*App).loadSchemas,
+			name:     "refresh schema",
+			category: catSchema,
+			summary:  "reload the schema tree and completion cache",
+			covers:   keymap.ActionRefreshSchema,
+			run:      (*App).loadSchemas,
 		},
 
 		// Editing, for the keyboards where these arrive as ⌘ chords and never
 		// reach us. They go through the editor's own dispatcher, so the palette
 		// cannot drift from what the keys do.
 		{
-			name:    "select all",
-			summary: "select the whole editor buffer",
-			covers:  keymap.ActionSelectAll,
-			run:     func(a *App) { a.editorAction(keymap.ActionSelectAll) },
+			name:     "select all",
+			category: catEditing,
+			summary:  "select the whole editor buffer",
+			covers:   keymap.ActionSelectAll,
+			run:      func(a *App) { a.editorAction(keymap.ActionSelectAll) },
 		},
 		{
-			name:    "comment",
-			summary: "comment or uncomment the selected lines",
-			covers:  keymap.ActionToggleComment,
-			run:     func(a *App) { a.editorAction(keymap.ActionToggleComment) },
+			name:     "comment",
+			category: catEditing,
+			summary:  "comment or uncomment the selected lines",
+			covers:   keymap.ActionToggleComment,
+			run:      func(a *App) { a.editorAction(keymap.ActionToggleComment) },
 		},
 		{
-			name:    "duplicate line",
-			summary: "duplicate the current line",
-			covers:  keymap.ActionDuplicateLine,
-			run:     func(a *App) { a.editorAction(keymap.ActionDuplicateLine) },
+			name:     "duplicate line",
+			category: catEditing,
+			summary:  "duplicate the current line",
+			covers:   keymap.ActionDuplicateLine,
+			run:      func(a *App) { a.editorAction(keymap.ActionDuplicateLine) },
 		},
 		{
-			name:    "delete line",
-			summary: "delete the current line",
-			covers:  keymap.ActionDeleteLine,
-			run:     func(a *App) { a.editorAction(keymap.ActionDeleteLine) },
+			name:     "delete line",
+			category: catEditing,
+			summary:  "delete the current line",
+			covers:   keymap.ActionDeleteLine,
+			run:      func(a *App) { a.editorAction(keymap.ActionDeleteLine) },
 		},
 
 		{
-			name:    "help",
-			summary: "show the key reference",
-			covers:  keymap.ActionHelp,
-			run:     (*App).showHelp,
+			name:     "help",
+			category: catOther,
+			summary:  "show the key reference",
+			covers:   keymap.ActionHelp,
+			run:      (*App).showHelp,
 		},
 		{
-			name:    "quit",
-			summary: "leave datavase",
-			covers:  keymap.ActionQuit,
-			run:     (*App).quit,
+			name:     "quit",
+			category: catOther,
+			summary:  "leave datavase",
+			covers:   keymap.ActionQuit,
+			run:      (*App).quit,
 		},
 	}
 
@@ -324,9 +400,10 @@ func paletteCommands() []command {
 	for _, p := range keymap.Presets() {
 		preset := p
 		cmds = append(cmds, command{
-			name:    "keymap " + string(preset),
-			summary: "switch to the " + string(preset) + " keyboard for this session",
-			run:     func(a *App) { a.setPreset(preset) },
+			name:     "keymap " + string(preset),
+			summary:  "switch to the " + string(preset) + " keyboard for this session",
+			category: catKeyboard,
+			run:      func(a *App) { a.setPreset(preset) },
 		})
 	}
 	return cmds
@@ -360,39 +437,71 @@ func (a *App) setPreset(p keymap.Preset) {
 // find is one you will not find.
 func (a *App) showCommandPalette() {
 	box := a.newSearchBox("command: ", " commands ", pagePalette, func(term string) []searchItem {
-		cmds := paletteCommands()
-		rows := make([]ranked, 0, len(cmds))
-
-		for _, c := range cmds {
-			cmd := c
-			tier, score, ok := rankCommand(cmd, term)
-			if !ok {
-				continue
+		return paletteItems(term, func(cmd command) func() {
+			return func() {
+				a.closeSearchBox(pagePalette)
+				cmd.run(a)
 			}
-			rows = append(rows, ranked{
-				item: searchItem{
-					// Name and summary share one row so that every command fits
-					// on a modest terminal. A palette you have to scroll to find
-					// "quit" in is one where the keyboard was quicker.
-					primary: fmt.Sprintf("%-*s %s", paletteNameColumn, cmd.name, cmd.summary),
-					accept: func() {
-						a.closeSearchBox(pagePalette)
-						cmd.run(a)
-					},
-				},
-				tier:  tier,
-				score: score,
-			})
-		}
-		if len(rows) == 0 {
-			return []searchItem{message("no matching command", "press Escape to close")}
-		}
-		return sortRanked(rows)
+		})
 	})
 
 	// The height is a maximum — centred shrinks it to whatever the terminal
-	// has — so asking for room enough for every command costs nothing.
-	a.pages.AddPage(pagePalette, centred(box, 80, 40), true, true)
+	// has — so asking for room enough for every command costs nothing. The
+	// headings cost a row each, so this asks for more than the commands need.
+	a.pages.AddPage(pagePalette, centred(box, 80, 52), true, true)
+}
+
+// paletteItems builds the rows the palette shows for what has been typed.
+//
+// Nothing typed is browsing, and browsing is grouped: someone who does not
+// know what a command is called cannot type its name, and forty rows in one
+// undifferentiated run is a list you scroll past rather than read.
+//
+// Anything typed is searching, and searching is flat and ranked. A heading in
+// the middle of a relevance ordering means nothing, and Enter takes the best
+// match — which a heading sitting above it would not be.
+//
+// It takes what to do with a chosen command rather than reaching for the App,
+// so the grouping and the ranking can both be checked without a terminal.
+func paletteItems(term string, choose func(command) func()) []searchItem {
+	cmds := paletteCommands()
+
+	// Name and summary share one row so that every command fits on a modest
+	// terminal. A palette you have to scroll to find "quit" in is one where the
+	// keyboard was quicker.
+	row := func(cmd command) searchItem {
+		return searchItem{
+			primary: fmt.Sprintf("%-*s %s", paletteNameColumn, cmd.name, cmd.summary),
+			accept:  choose(cmd),
+		}
+	}
+
+	if strings.TrimSpace(term) == "" {
+		items := make([]searchItem, 0, len(cmds)+len(paletteCategories))
+		for _, category := range paletteCategories {
+			items = append(items, heading(category))
+			for _, cmd := range cmds {
+				if cmd.category == category {
+					items = append(items, row(cmd))
+				}
+			}
+		}
+		return items
+	}
+
+	rows := make([]ranked, 0, len(cmds))
+	for _, c := range cmds {
+		cmd := c
+		tier, score, ok := rankCommand(cmd, term)
+		if !ok {
+			continue
+		}
+		rows = append(rows, ranked{item: row(cmd), tier: tier, score: score})
+	}
+	if len(rows) == 0 {
+		return []searchItem{message("no matching command", "press Escape to close")}
+	}
+	return sortRanked(rows)
 }
 
 // Match tiers for the palette, highest first.
@@ -404,6 +513,14 @@ const (
 	// word. It never outranks a name: someone typing "quit" means the command
 	// called quit, not one that mentions quitting.
 	tierSummary = 0
+	// tierCategory is a hit on the heading the command is browsed under, so
+	// typing the name of a group narrows to that group — the search half of
+	// what the headings do for the browsing half.
+	//
+	// It ranks below both: the heading is the loosest thing a command has to be
+	// found by, and "the server" matching every session command must never
+	// bury a command actually called that.
+	tierCategory = -1
 )
 
 // rankCommand scores a command against what has been typed.
@@ -417,6 +534,9 @@ func rankCommand(c command, term string) (tier, score int, ok bool) {
 	}
 	if score, ok := match.Fuzzy(term, c.summary); ok {
 		return tierSummary, score, true
+	}
+	if score, ok := match.Fuzzy(term, c.category); ok {
+		return tierCategory, score, true
 	}
 	return 0, 0, false
 }

@@ -31,6 +31,34 @@ func TestEveryActionAppearsOnTheHelpScreen(t *testing.T) {
 	}
 }
 
+// "Start here" repeats keys that appear again further down, which is
+// deliberate: the reference has to be complete and the opening has to be
+// short. What it must not do is advertise an action that no longer exists.
+func TestStartHereOnlyNamesActionsTheReferenceAlsoCarries(t *testing.T) {
+	inGroups := make(map[keymap.Action]bool)
+	for _, group := range helpGroups {
+		for _, action := range group.actions {
+			inGroups[action] = true
+		}
+	}
+
+	for _, action := range startHere {
+		if !inGroups[action] {
+			t.Errorf("Start here offers %s, which the key reference does not list", action)
+		}
+	}
+}
+
+// Five is the whole point. A "start here" that grows into a second reference
+// is one nobody reads either.
+func TestStartHereStaysShort(t *testing.T) {
+	const most = 6
+
+	if len(startHere) > most {
+		t.Errorf("Start here lists %d keys, want at most %d", len(startHere), most)
+	}
+}
+
 // A palette command carries no key of its own, so the key reference is the
 // only place it can be discovered. One left off is one that only its author
 // knows exists — which is what happened to attaching a worktree.

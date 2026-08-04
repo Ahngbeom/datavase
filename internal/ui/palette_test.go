@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
@@ -110,6 +111,130 @@ func TestThePaletteItselfIsReachableWithoutAChord(t *testing.T) {
 			t.Errorf("%s preset: the palette is only reachable by a chord", preset)
 		}
 	}
+}
+
+// A command with no category is one that browsing cannot find: it would sit
+// under whichever heading happened to come last, which is worse than being
+// filed wrongly on purpose.
+func TestEveryCommandIsFiledUnderAnOfferedCategory(t *testing.T) {
+	offered := make(map[string]bool, len(paletteCategories))
+	for _, c := range paletteCategories {
+		offered[c] = true
+	}
+
+	for _, cmd := range paletteCommands() {
+		switch {
+		case cmd.category == "":
+			t.Errorf("%q has no category", cmd.name)
+		case !offered[cmd.category]:
+			t.Errorf("%q is filed under %q, which paletteCategories does not list", cmd.name, cmd.category)
+		}
+	}
+}
+
+// A category listed and never used is a heading that renders empty, or worse,
+// a note that has quietly stopped being true.
+func TestEveryCategoryHasCommandsInIt(t *testing.T) {
+	used := make(map[string]bool)
+	for _, cmd := range paletteCommands() {
+		used[cmd.category] = true
+	}
+
+	for _, c := range paletteCategories {
+		if !used[c] {
+			t.Errorf("paletteCategories lists %q and nothing is filed under it", c)
+		}
+	}
+}
+
+// noop stands in for what the App would do with a chosen command, so the rows
+// can be built without a terminal.
+func noop(command) func() { return func() {} }
+
+// headings are the rows that name a group rather than offering a command.
+func headings(items []searchItem) []string {
+	var out []string
+	for _, it := range items {
+		if it.accept == nil {
+			out = append(out, it.primary)
+		}
+	}
+	return out
+}
+
+// Browsing is the case the categories exist for: someone who does not know
+// what the command is called cannot type its name, and forty rows in one run
+// is a list you scroll past rather than read.
+func TestBrowsingThePaletteGroupsTheCommandsUnderHeadings(t *testing.T) {
+	items := paletteItems("", noop)
+
+	got := headings(items)
+	if len(got) != len(paletteCategories) {
+		t.Fatalf("got %d headings, want %d: %v", len(got), len(paletteCategories), got)
+	}
+	for i, want := range paletteCategories {
+		if got[i] != want {
+			t.Errorf("heading %d = %q, want %q", i, got[i], want)
+		}
+	}
+
+	// Every command still reachable, exactly once: a grouping that drops one is
+	// worse than no grouping, because the command looks as though it went away.
+	seen := make(map[string]int)
+	for _, it := range items {
+		if it.accept != nil {
+			seen[it.primary]++
+		}
+	}
+	for _, cmd := range paletteCommands() {
+		count := 0
+		for row, n := range seen {
+			if strings.HasPrefix(row, cmd.name+" ") || row == cmd.name {
+				count += n
+			}
+		}
+		if count != 1 {
+			t.Errorf("%q appears %d times while browsing, want 1", cmd.name, count)
+		}
+	}
+}
+
+// Once something is typed the list is ranked by how well it matches, and a
+// heading in the middle of that ordering means nothing. Enter also takes the
+// best match, so a heading there would be a row that runs nothing.
+func TestTypingDropsTheHeadings(t *testing.T) {
+	items := paletteItems("quit", noop)
+
+	if got := headings(items); len(got) != 0 {
+		t.Errorf("typing left %d headings in the list: %v", len(got), got)
+	}
+	if len(items) == 0 || items[0].accept == nil {
+		t.Fatal("the first row of a filtered palette does not run anything")
+	}
+	if !strings.HasPrefix(items[0].primary, "quit") {
+		t.Errorf("first row = %q, want the command that was typed", items[0].primary)
+	}
+}
+
+// Enter on an opened palette runs the first row that does anything. What that
+// row is has to stay something a stray keypress can survive.
+//
+// It used to be "unlock writes" — the palette's first entry and the single
+// most dangerous thing here — reached by opening the palette and pressing
+// Enter, which is two keys and no reading.
+func TestEnterOnAnUnfilteredPaletteCannotUnlockWrites(t *testing.T) {
+	items := paletteItems("", noop)
+
+	for _, it := range items {
+		if it.accept == nil {
+			continue
+		}
+		if strings.HasPrefix(it.primary, cmdEnableWrites) {
+			t.Errorf("the first command Enter reaches is %q", cmdEnableWrites)
+		}
+		return
+	}
+	t.Fatal("the palette offers nothing to run")
 }
 
 // The ":" command line resolves palette command names, so a palette command

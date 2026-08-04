@@ -20,11 +20,67 @@ type searchItem struct {
 	// accept runs when the row is chosen. A nil accept makes the row a
 	// message rather than a choice.
 	accept func()
+	// group marks a row that names the rows beneath it, so the list can draw
+	// it as a heading rather than as a command with no description — which is
+	// exactly what one looked like.
+	group bool
 }
 
 // message builds a non-selectable row, for "nothing found" and errors.
 func message(text, detail string) searchItem {
 	return searchItem{primary: text, secondary: detail}
+}
+
+// heading builds a row that names a group of the rows beneath it.
+//
+// It carries no detail, which matters: a secondary line on any row makes the
+// list reserve one on every row, halving how many choices fit.
+func heading(title string) searchItem {
+	return searchItem{primary: title, group: true}
+}
+
+// firstChoice is the index of the first row that does anything, or -1.
+//
+// Enter and Tab used to take row zero outright. That was true while every row
+// was a choice, and stopped being true the moment a list could open with a
+// heading — Enter would then be a key that does nothing, on the one dialog
+// whose whole purpose is to run something.
+func firstChoice(items []searchItem) int {
+	for i, it := range items {
+		if it.accept != nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// nextChoice is where Down goes from index: the next row that is a choice,
+// wrapping to the first as this list always has.
+//
+// Headings and "nothing found" are stepped over rather than landed on. A
+// highlighted row that Enter does nothing to is the same dead end Enter itself
+// used to be, and tview draws that highlight whether or not the list has focus.
+func nextChoice(items []searchItem, from int) int {
+	for i := from + 1; i < len(items); i++ {
+		if items[i].accept != nil {
+			return i
+		}
+	}
+	return firstChoice(items)
+}
+
+// prevChoice is where Up goes from index, or -1 when there is nothing above.
+//
+// It does not wrap: stepping above the first entry hands typing back, which is
+// what this list has always done and is far less disorienting in a search than
+// jumping to the bottom.
+func prevChoice(items []searchItem, from int) int {
+	for i := from - 1; i >= 0; i-- {
+		if items[i].accept != nil {
+			return i
+		}
+	}
+	return -1
 }
 
 // ranked pairs a row with what decides where it sorts.
@@ -99,11 +155,28 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 		list.Clear()
 		for _, it := range items {
 			item := it
-			list.AddItem(result.EscapeTags(item.primary), result.EscapeTags(item.secondary), 0, func() {
+
+			// tag escapes before it wraps, so a heading is coloured without any
+			// row's text ever being read as markup. Table names and server
+			// messages reach this list, and one containing "[" would otherwise
+			// be swallowed as a colour tag.
+			main := result.EscapeTags(item.primary)
+			if item.group {
+				main = tag(colourNotice, item.primary)
+			}
+
+			list.AddItem(main, result.EscapeTags(item.secondary), 0, func() {
 				if item.accept != nil {
 					item.accept()
 				}
 			})
+		}
+
+		// Clearing puts the highlight back on row zero, which is a heading in a
+		// grouped list. tview draws the highlight whether or not the list has
+		// focus, so leaving it there points at a row that does nothing.
+		if i := firstChoice(items); i > 0 {
+			list.SetCurrentItem(i)
 		}
 	}
 	reload("")
@@ -126,8 +199,8 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 		switch ev.Key() {
 		case tcell.KeyTab:
 			// Nothing is highlighted while the field has focus, so Tab takes
-			// the first row — the same one Enter would.
-			if complete(0) {
+			// the first row that is a choice — the same one Enter would.
+			if complete(firstChoice(items)) {
 				return nil
 			}
 			fallthrough
@@ -140,9 +213,10 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 
 		case tcell.KeyEnter:
 			// Enter from the field takes the first result: the list is
-			// ordered by relevance, so that is the obvious choice.
-			if len(items) > 0 && items[0].accept != nil {
-				items[0].accept()
+			// ordered by relevance, so that is the obvious choice. Headings
+			// and "nothing found" are skipped rather than pressed.
+			if i := firstChoice(items); i >= 0 {
+				items[i].accept()
 			}
 			return nil
 
@@ -164,13 +238,18 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 			if complete(list.GetCurrentItem()) {
 				return nil
 			}
-		case tcell.KeyUp:
-			// Stepping above the first entry returns to typing rather than
-			// wrapping to the bottom, which is disorienting in a search.
-			if list.GetCurrentItem() == 0 {
-				a.app.SetFocus(input)
-				return nil
+		case tcell.KeyDown:
+			if i := nextChoice(items, list.GetCurrentItem()); i >= 0 {
+				list.SetCurrentItem(i)
 			}
+			return nil
+		case tcell.KeyUp:
+			if i := prevChoice(items, list.GetCurrentItem()); i >= 0 {
+				list.SetCurrentItem(i)
+			} else {
+				a.app.SetFocus(input)
+			}
+			return nil
 		}
 		return ev
 	})

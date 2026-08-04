@@ -451,6 +451,52 @@ func (a *App) showCommandPalette() {
 	a.pages.AddPage(pagePalette, centred(box, 80, 52), true, true)
 }
 
+// catUnfiled heads the commands whose category paletteCategories does not
+// list. It is deliberately not one of them: nothing is ever meant to be here,
+// and a test keeps it empty.
+const catUnfiled = "Not filed"
+
+// groupForBrowsing lays the commands out under their headings, in category
+// order, with anything left over under a heading of its own at the end.
+//
+// The leftovers matter. Emitting only what matches a listed category meant a
+// command filed under a heading nobody added was still searchable and
+// invisible to anyone browsing — which reads as a command that was removed,
+// in the one dialog people open because they cannot remember a name. It is
+// the same rule the truncated-listing notice sets: say what would otherwise go
+// missing rather than let the list look complete.
+//
+// It takes how to render a command so a test can choose a form it can count
+// exactly, rather than matching prefixes of the padded row the palette draws.
+func groupForBrowsing(cmds []command, row func(command) searchItem) []searchItem {
+	items := make([]searchItem, 0, len(cmds)+len(paletteCategories))
+	filed := make([]bool, len(cmds))
+
+	for _, category := range paletteCategories {
+		items = append(items, heading(category))
+		for i, cmd := range cmds {
+			if cmd.category == category {
+				items = append(items, row(cmd))
+				filed[i] = true
+			}
+		}
+	}
+
+	var stray []searchItem
+	for i, cmd := range cmds {
+		if !filed[i] {
+			stray = append(stray, row(cmd))
+		}
+	}
+	if len(stray) == 0 {
+		return items
+	}
+	// Its own heading rather than folded into a real group, which would file it
+	// somewhere nobody chose and hide that anything was wrong.
+	items = append(items, heading(catUnfiled))
+	return append(items, stray...)
+}
+
 // paletteItems builds the rows the palette shows for what has been typed.
 //
 // Nothing typed is browsing, and browsing is grouped: someone who does not
@@ -477,16 +523,7 @@ func paletteItems(term string, choose func(command) func()) []searchItem {
 	}
 
 	if strings.TrimSpace(term) == "" {
-		items := make([]searchItem, 0, len(cmds)+len(paletteCategories))
-		for _, category := range paletteCategories {
-			items = append(items, heading(category))
-			for _, cmd := range cmds {
-				if cmd.category == category {
-					items = append(items, row(cmd))
-				}
-			}
-		}
-		return items
+		return groupForBrowsing(cmds, row)
 	}
 
 	rows := make([]ranked, 0, len(cmds))

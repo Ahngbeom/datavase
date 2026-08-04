@@ -162,11 +162,33 @@ func headings(items []searchItem) []string {
 	return out
 }
 
+// byName renders a command as nothing but its name.
+//
+// The rows the palette really draws pad the name and append the summary, and
+// counting those meant matching a prefix — which works only while no command's
+// name is a prefix of another's, and would start miscounting the day one is.
+// Choosing the rendering is what makes the count exact.
+func byName(cmd command) searchItem {
+	return searchItem{primary: cmd.name, accept: func() {}}
+}
+
+// commandRows counts the rows that are choices, by name.
+func commandRows(items []searchItem) map[string]int {
+	seen := make(map[string]int)
+	for _, it := range items {
+		if it.accept != nil {
+			seen[it.primary]++
+		}
+	}
+	return seen
+}
+
 // Browsing is the case the categories exist for: someone who does not know
 // what the command is called cannot type its name, and forty rows in one run
 // is a list you scroll past rather than read.
 func TestBrowsingThePaletteGroupsTheCommandsUnderHeadings(t *testing.T) {
-	items := paletteItems("", noop)
+	cmds := paletteCommands()
+	items := groupForBrowsing(cmds, byName)
 
 	got := headings(items)
 	if len(got) != len(paletteCategories) {
@@ -180,21 +202,57 @@ func TestBrowsingThePaletteGroupsTheCommandsUnderHeadings(t *testing.T) {
 
 	// Every command still reachable, exactly once: a grouping that drops one is
 	// worse than no grouping, because the command looks as though it went away.
-	seen := make(map[string]int)
-	for _, it := range items {
-		if it.accept != nil {
-			seen[it.primary]++
+	seen := commandRows(items)
+	for _, cmd := range cmds {
+		if seen[cmd.name] != 1 {
+			t.Errorf("%q appears %d times while browsing, want 1", cmd.name, seen[cmd.name])
 		}
 	}
-	for _, cmd := range paletteCommands() {
-		count := 0
-		for row, n := range seen {
-			if strings.HasPrefix(row, cmd.name+" ") || row == cmd.name {
-				count += n
-			}
-		}
-		if count != 1 {
-			t.Errorf("%q appears %d times while browsing, want 1", cmd.name, count)
+	if len(seen) != len(cmds) {
+		t.Errorf("browsing shows %d commands, want %d", len(seen), len(cmds))
+	}
+}
+
+// A command filed under a heading this list does not have used to appear under
+// none of them: still searchable, invisible to anyone browsing. That reads as a
+// command that was removed, and the palette is where you look when you cannot
+// remember the name — so it is the worst place to drop something quietly.
+//
+// The test above stops it reaching a release. This is what happens in the
+// meantime, and it follows the rule the truncated-listing notice already sets:
+// say what would otherwise go missing rather than let the list look complete.
+func TestACommandFiledUnderAnUnlistedCategoryStillAppears(t *testing.T) {
+	cmds := []command{
+		{name: "filed", summary: "under a heading that exists", category: paletteCategories[0]},
+		{name: "misfiled", summary: "under one that does not", category: "Nowhere"},
+	}
+
+	items := groupForBrowsing(cmds, byName)
+
+	seen := commandRows(items)
+	if seen["misfiled"] != 1 {
+		t.Errorf("the misfiled command appears %d times, want 1", seen["misfiled"])
+	}
+	if seen["filed"] != 1 {
+		t.Errorf("the filed command appears %d times, want 1", seen["filed"])
+	}
+
+	// Under a heading of its own, at the end: silently folding it into one of
+	// the real groups would file it somewhere nobody chose.
+	got := headings(items)
+	if len(got) == 0 || got[len(got)-1] != catUnfiled {
+		t.Errorf("headings = %v, want %q last", got, catUnfiled)
+	}
+}
+
+// And no such heading when everything is filed, or every browse would carry an
+// empty group that means nothing.
+func TestNoUnfiledHeadingWhenEverythingIsFiled(t *testing.T) {
+	items := groupForBrowsing(paletteCommands(), byName)
+
+	for _, h := range headings(items) {
+		if h == catUnfiled {
+			t.Errorf("the palette shows a %q heading with nothing misfiled", catUnfiled)
 		}
 	}
 }

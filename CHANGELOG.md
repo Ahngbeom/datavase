@@ -5,7 +5,19 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.5.0 — 2026-08-04
+
+**Upgrade for the guard fix.** Every release up to `v0.4.0` classified `ANALYZE`
+as a read, and `ANALYZE FORMAT=JSON DELETE FROM orders` runs the delete. Against
+a production datasource it went through with nothing asked. Nobody but you can
+reach it — this is the guard being wrong about your own statement rather than a
+hole anyone else can use — but it is the guard being wrong about exactly the
+kind of statement it exists for. It is under **Fixed**.
+
+Nothing here breaks a configuration file. Four new keys are bound — `⌘⇧E`,
+`⌘⇧U`, `⌘⇧W` and `⌘⇧L` — so a configuration that rebinds another action onto
+one of them takes the key from the new one; `dv keys` shows what your map
+actually resolves to.
 
 ### Added
 

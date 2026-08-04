@@ -92,13 +92,24 @@ func (w *Wizard) Run(ctx context.Context) error {
 	return err
 }
 
+// errConfigExists is what both refusals say.
+//
+// One message for the check before the questions and the refusal at the write,
+// because to the person reading it they are the same fact.
+func errConfigExists(path string) error {
+	return fmt.Errorf("%s already exists; edit it rather than starting over", path)
+}
+
 func (w *Wizard) run(ctx context.Context) error {
-	// Checked before the first question rather than before the write: someone
-	// whose config already exists should not answer eight things to be told so.
-	// Anything other than "not there" is treated as "there", because writing
-	// over a file we could not read is the one mistake with nothing to undo it.
+	// A courtesy rather than the guarantee: nobody should answer eight
+	// questions to be told the file was already there. It cannot be the
+	// guarantee, because the questions take as long as they take and the file
+	// is written afterwards — writeConfig is what actually refuses.
+	//
+	// Anything other than "not there" is treated as "there": a path we cannot
+	// even stat is not one to start writing to.
 	if _, err := os.Stat(w.Path); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s already exists; edit it rather than starting over", w.Path)
+		return errConfigExists(w.Path)
 	}
 
 	fmt.Fprintf(w.Out, "Setting up datavase. The value in brackets is what Enter takes.\n\n")
@@ -303,9 +314,31 @@ func writeConfig(path string, ds config.DataSource, preset keymap.Preset) error 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("creating the configuration directory: %w", err)
 	}
+
+	// O_EXCL rather than os.WriteFile, which creates or truncates and never
+	// says which. The wizard checked for this file before its first question
+	// and writes it after the last one, and anything that appeared in between —
+	// another terminal, a dotfile sync landing — would be destroyed silently.
+	// Only the kernel can make "create it, but not over anyone" one decision.
+	//
 	// Owner only: it holds no password, but it names a host and an account
 	// inside someone's network.
-	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errConfigExists(path)
+		}
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(b.String()); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	// Closed explicitly as well as deferred: a write that only failed on close
+	// would otherwise be reported as a success, and this is the file the next
+	// run depends on.
+	if err := file.Close(); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil

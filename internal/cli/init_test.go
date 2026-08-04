@@ -308,8 +308,15 @@ func TestTheWizardWillNotOverwriteAnExistingConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run() = nil, want a refusal")
 	}
-	if !strings.Contains(err.Error(), path) {
-		t.Errorf("error = %q, want it to name %q", err, path)
+	if want := errConfigExists(path).Error(); err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+
+	// And it says so before asking anything. Refusing at the write alone would
+	// be correct and would still make someone answer eight questions to find
+	// out, which is why the check before the first one is worth its own line.
+	if len(s.asked) != 0 {
+		t.Errorf("the wizard asked %v before refusing", s.asked)
 	}
 
 	kept, readErr := os.ReadFile(path)
@@ -347,6 +354,56 @@ func TestEveryEnvIsOfferedAndDescribed(t *testing.T) {
 		if !offered[env] {
 			t.Errorf("env %q is valid configuration but the wizard never offers it", env)
 		}
+	}
+}
+
+// The wizard asks first and writes last, and the gap between the two is as
+// long as someone takes to answer eight questions. A configuration that
+// appears in that gap — another terminal, a dotfile sync finishing — is one it
+// must not destroy.
+//
+// The check before the first question is a courtesy, so that nobody answers
+// everything to be told the file was already there. The promise is kept at the
+// write, which is the only moment that can keep it.
+func TestAConfigThatAppearsWhileTheWizardIsAskingIsNotOverwritten(t *testing.T) {
+	s := &script{answers: answers(), password: "secret"}
+	w, path := newWizard(t, s)
+
+	// The last thing before the file is written, standing in for anything that
+	// could have created it while the questions were being answered.
+	s.probe = func(*config.DataSource, string) (string, error) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("MkdirAll() error = %v", err)
+		}
+		if err := os.WriteFile(path, []byte(testYAML), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		return "11.4.2-MariaDB", nil
+	}
+
+	err := w.Run(context.Background())
+	if err == nil {
+		t.Fatal("Run() = nil, want a refusal")
+	}
+	// The same words as the check before the questions. To whoever reads it
+	// these are one fact, and a raw "writing …: file exists" would be the
+	// filesystem's account of it rather than an answer.
+	if want := errConfigExists(path).Error(); err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+
+	kept, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("ReadFile() error = %v", readErr)
+	}
+	if string(kept) != testYAML {
+		t.Error("the configuration that appeared mid-run was overwritten")
+	}
+
+	// A password stored for a datasource that is not in the file is an orphan
+	// in the keychain, and nothing later will go looking for it.
+	if _, err := w.Secrets.Get("local"); err == nil {
+		t.Error("a password was stored for a datasource that was never written")
 	}
 }
 

@@ -24,7 +24,7 @@ Built:
   down the page, copy a value out, search what is on screen. See what a write
   changed and what the server warned about, and read a query plan as a tree.
 - **See what else is running** on the server, how long it has been running, and
-  stop it.
+  stop it — and what is holding the lock everything else is waiting on.
 - **Work in a directory of SQL**: open, run and save its files, with git
   telling you which have changed.
 - **The production guard**, which is the reason for the rest.
@@ -173,6 +173,7 @@ your hands reach for.
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | List what else is running | `⌘⇧U` | `Ctrl+Shift+U` |
 | Stop another connection's statement | `⌘⇧W` | `Ctrl+Shift+W` |
+| Show which connections are waiting on which | `⌘⇧L` | `Ctrl+Shift+L` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
@@ -748,6 +749,28 @@ and killing a pooled one loses whatever it was running for you. Only the
 connections currently held count as ours — the server reuses an id once a
 connection has gone, and treating a stale one as ours would refuse to stop a
 session that has nothing to do with you.
+
+#### What is holding this lock
+
+`⌘⇧L`, or `locks` in the palette, draws who is waiting on whom:
+
+```
+18589  dba@10.0.0.4  holding, idle in transaction
+└─ 18590  app@10.0.0.9  waiting 42s
+      UPDATE orders SET total = 0 WHERE id = 8891
+```
+
+The connection at the bottom of the tree waits on nothing, and is the one to
+deal with. **A blocker's current statement is usually not the one that took the
+lock** — a transaction keeps what it took until it ends, whatever it does
+after — so the common case is the one above: it holds the row and is running
+nothing at all. A list of running statements cannot show that, which is why
+this is a tree rather than a filter.
+
+`Nothing is waiting on a lock` and `this server does not expose InnoDB lock
+waits` are different answers and are never printed for each other. MariaDB
+keeps them in `information_schema.INNODB_LOCK_WAITS` and MySQL 8 in
+`performance_schema.data_lock_waits`; a server with neither says so.
 
 ### Switching datasource
 

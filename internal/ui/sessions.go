@@ -315,3 +315,108 @@ func (a *App) kill(p procs.Process, stop procs.Stop) {
 		})
 	}()
 }
+
+// lockTreeText draws who is waiting on whom.
+//
+// A server that keeps its lock waits somewhere this does not look says so.
+// An empty tree and a server that will not answer look identical on screen,
+// and only one of them means nothing is stuck.
+func lockTreeText(tree procs.LockTree, width int) string {
+	if !tree.Supported {
+		return "This server does not expose InnoDB lock waits where this looks" +
+			" (information_schema.INNODB_LOCK_WAITS, performance_schema.data_lock_waits)."
+	}
+	if len(tree.Roots) == 0 {
+		return "Nothing is waiting on a lock."
+	}
+
+	var b strings.Builder
+	for i, root := range tree.Roots {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		writeBlocked(&b, root, "", "", width)
+	}
+	return b.String()
+}
+
+func writeBlocked(b *strings.Builder, n *procs.Blocked, prefix, childPrefix string, width int) {
+	head := fmt.Sprintf("%d  %s@%s", n.Thread.ID, n.Thread.User, n.Thread.Host)
+	switch {
+	case n.Waited > 0:
+		head += fmt.Sprintf("  [red]waiting %s[-]", n.Waited.Truncate(time.Second))
+	case n.Thread.Idle:
+		// The most common answer to "why is everything stuck", and the one a
+		// list of running statements cannot give: it holds the lock and is
+		// running nothing.
+		head += "  [red]holding, idle in transaction[-]"
+	default:
+		head += "  [red]holding[-]"
+	}
+
+	fmt.Fprintf(b, "%s%s\n", prefix, result.EscapeTags(head))
+
+	// A blocker's current statement is usually not the one that took the lock:
+	// a transaction keeps what it took until it ends, whatever it does after.
+	if n.Thread.SQL != "" {
+		for _, line := range wrapPlain(result.EscapeTags(collapse(n.Thread.SQL)), width-len(childPrefix)-4) {
+			fmt.Fprintf(b, "%s    %s\n", childPrefix, line)
+		}
+	}
+
+	for i, w := range n.Waiters {
+		elbow, spine := "├─ ", "│  "
+		if i == len(n.Waiters)-1 {
+			elbow, spine = "└─ ", "   "
+		}
+		writeBlocked(b, w, childPrefix+elbow, childPrefix+spine, width)
+	}
+}
+
+// showLocks reads the lock waits and shows them.
+func (a *App) showLocks() {
+	a.notice("reading the lock waits…")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), sessionsTimeout)
+		defer cancel()
+
+		tree, err := procs.LockWaits(ctx, a.conn)
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				a.notice(fmt.Sprintf("reading the lock waits: %v", err))
+				return
+			}
+
+			a.sessionsView.SetText(lockTreeText(tree, a.paneWidth(a.sessionsView))).ScrollToBeginning()
+			a.resultTabs.show(tabSessions)
+			a.notice(lockSummary(tree))
+		})
+	}()
+}
+
+// lockSummary says what was found, keeping "nothing is waiting" and "this
+// server will not say" apart.
+func lockSummary(tree procs.LockTree) string {
+	if !tree.Supported {
+		return "this server does not expose InnoDB lock waits"
+	}
+	if len(tree.Roots) == 0 {
+		return "nothing is waiting on a lock"
+	}
+
+	var waiting int
+	for _, root := range tree.Roots {
+		waiting += countWaiters(root)
+	}
+	return fmt.Sprintf("%s blocked by %s",
+		plural(waiting, "connection"), plural(len(tree.Roots), "connection"))
+}
+
+func countWaiters(n *procs.Blocked) int {
+	total := len(n.Waiters)
+	for _, w := range n.Waiters {
+		total += countWaiters(w)
+	}
+	return total
+}

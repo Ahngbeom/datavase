@@ -322,6 +322,9 @@ func baseMap() *Map {
 	// person's session, and a neighbouring key is a mis-hit away.
 	m.bind(ActionKillSession, ctrlAndCmdRune('w', tcell.ModShift)...)
 
+	// Who is waiting on whom.
+	m.bind(ActionLocks, ctrlAndCmdRune('l', tcell.ModShift)...)
+
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

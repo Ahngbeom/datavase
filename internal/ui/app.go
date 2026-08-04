@@ -20,6 +20,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/guard"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
@@ -566,6 +567,7 @@ const (
 	pageSearch     = "search"
 	pageCommand    = "command"
 	pageDataSource = "datasource"
+	pageKill       = "kill"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than
@@ -661,6 +663,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.analyzeStatement()
 	case keymap.ActionSessions:
 		a.showSessions()
+	case keymap.ActionKillSession:
+		a.showKillSession(procs.StopStatement)
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:

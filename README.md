@@ -23,7 +23,8 @@ Built:
 - **Read the answer**: stream large results, sort a column, take a wide row
   down the page, copy a value out, search what is on screen. See what a write
   changed and what the server warned about, and read a query plan as a tree.
-- **See what else is running** on the server, and how long it has been running.
+- **See what else is running** on the server, how long it has been running, and
+  stop it.
 - **Work in a directory of SQL**: open, run and save its files, with git
   telling you which have changed.
 - **The production guard**, which is the reason for the rest.
@@ -171,6 +172,7 @@ your hands reach for.
 | Explain the statement under the cursor | `⌘E` | `Ctrl+E` |
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | List what else is running | `⌘⇧U` | `Ctrl+Shift+U` |
+| Stop another connection's statement | `⌘⇧W` | `Ctrl+Shift+W` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Quit | `⌘Q` | `Ctrl+Q` |
@@ -723,6 +725,29 @@ refuse the query — it answers with that user's own connections and nothing
 else, so a list of one means either "nothing else is running" or "you cannot
 see it". Those are opposite answers to the question that was asked, and the
 status bar says which one you are looking at.
+
+#### Stopping one
+
+`⌘⇧W`, or `stop a statement` in the palette, offers the connections and stops
+the statement on the one you choose. The client gets an error and its session
+survives, which is what "make this stop" almost always means.
+
+`stop a connection` ends the connection itself, and with it any transaction it
+was holding — the server rolls that back. It answers only to its whole name in
+the `:` line, like the write unlock.
+
+**Against production both have to be typed**: `KILL` for a statement,
+`KILL CONNECTION` for a connection. Elsewhere a button is enough, because the
+client reruns its query and demanding a word every time is how a demand stops
+being read. Stopping somebody else's work is the operation that most wants a
+confirmation nobody can wave through.
+
+**This session's own connections are not offered.** Killing the control
+connection would take cancellation and every catalog read with it, permanently,
+and killing a pooled one loses whatever it was running for you. Only the
+connections currently held count as ours — the server reuses an id once a
+connection has gone, and treating a stale one as ours would refuse to stop a
+session that has nothing to do with you.
 
 ### Switching datasource
 

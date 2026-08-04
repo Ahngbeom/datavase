@@ -4,6 +4,7 @@ package procs
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -151,4 +152,108 @@ func grantLimitedUser(t *testing.T) {
 			t.Skipf("cannot create the limited user (%v); this server does not let the test user grant", err)
 		}
 	}
+}
+
+// Stopping someone else's statement, which is the operation this exists for.
+func TestKillStopsAnotherConnectionsStatement(t *testing.T) {
+	watcher := open(t, "", "")
+	victim := open(t, "", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	running, stopRunning := context.WithCancel(context.Background())
+	defer stopRunning()
+
+	failed := make(chan error, 1)
+	go func() {
+		stream := victim.Query(running, "SELECT SLEEP(25)", db.Options{})
+		defer stream.Close()
+		for range stream.Events {
+		}
+		failed <- stream.Err()
+	}()
+
+	id := waitForStatement(t, ctx, watcher, "SLEEP(25)")
+	if err := Kill(ctx, watcher, id, StopStatement); err != nil {
+		t.Fatalf("Kill() error = %v", err)
+	}
+
+	select {
+	case err := <-failed:
+		if err == nil {
+			t.Error("the statement finished on its own rather than being stopped")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the statement was not stopped")
+	}
+
+	// The connection survives a statement-level kill, which is the whole
+	// difference between the two.
+	if err := runOne(ctx, victim); err != nil {
+		t.Errorf("the connection did not survive having its statement stopped: %v", err)
+	}
+}
+
+// Killing our own connection would take cancellation and every catalog read
+// with it. It is refused rather than attempted.
+func TestKillRefusesThisSessionsOwnConnections(t *testing.T) {
+	conn := open(t, "", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	listing, err := List(ctx, conn)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	var ours uint64
+	for _, p := range listing.Processes {
+		if conn.Owns(p.ID) {
+			ours = p.ID
+			break
+		}
+	}
+	if ours == 0 {
+		t.Fatal("none of the listed connections is ours; the test would prove nothing")
+	}
+
+	if err := Kill(ctx, conn, ours, StopConnection); !errors.Is(err, ErrOwnConnection) {
+		t.Errorf("Kill(own connection) = %v, want ErrOwnConnection", err)
+	}
+	// And it still works, which is what the refusal was protecting.
+	if err := runOne(ctx, conn); err != nil {
+		t.Errorf("our own connection stopped working: %v", err)
+	}
+}
+
+// runOne sends the smallest statement there is, and reports whether it landed.
+func runOne(ctx context.Context, conn *db.Conn) error {
+	stream := conn.Query(ctx, "SELECT 1", db.Options{})
+	defer stream.Close()
+
+	for range stream.Events {
+	}
+	return stream.Err()
+}
+
+// waitForStatement finds the connection running a statement, or fails.
+func waitForStatement(t *testing.T, ctx context.Context, conn *db.Conn, contains string) uint64 {
+	t.Helper()
+
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+		listing, err := List(ctx, conn)
+		if err != nil {
+			t.Fatalf("List() error = %v", err)
+		}
+		for _, p := range listing.Processes {
+			if p.Working() && strings.Contains(p.SQL, contains) && !conn.Owns(p.ID) {
+				return p.ID
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("no connection is running a statement containing %q", contains)
+	return 0
 }

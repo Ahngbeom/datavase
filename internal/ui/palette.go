@@ -11,6 +11,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/export"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/match"
+	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/vim"
 )
@@ -181,6 +182,18 @@ func paletteCommands() []command {
 			summary: "list what else is running on the server",
 			covers:  keymap.ActionSessions,
 			run:     (*App).showSessions,
+		},
+		{
+			name:    "stop a statement",
+			summary: "stop the statement running on another connection",
+			covers:  keymap.ActionKillSession,
+			run:     func(a *App) { a.showKillSession(procs.StopStatement) },
+		},
+		{
+			name:    "stop a connection",
+			summary: "end another connection, rolling back anything it held open",
+			exact:   true,
+			run:     func(a *App) { a.showKillSession(procs.StopConnection) },
 		},
 		{
 			name:    "sort by column",

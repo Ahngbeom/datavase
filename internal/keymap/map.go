@@ -317,6 +317,11 @@ func baseMap() *Map {
 	// — the function keys were always the convenience, not the guarantee.
 	m.bind(ActionSessions, ctrlAndCmdRune('u', tcell.ModShift)...)
 
+	// Stopping somebody else's statement. Deliberately not next to ⌘⇧U on the
+	// keyboard: this is the one operation here that reaches into another
+	// person's session, and a neighbouring key is a mis-hit away.
+	m.bind(ActionKillSession, ctrlAndCmdRune('w', tcell.ModShift)...)
+
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

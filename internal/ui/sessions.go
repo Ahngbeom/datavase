@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/match"
 	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/rivo/tview"
@@ -29,8 +31,18 @@ func (a *App) buildSessionsTab() tview.Primitive {
 // Reading is explicit rather than on a timer. A list that reloads under the
 // cursor is how the wrong session gets acted on, and the moment this matters
 // is the moment someone is about to act on a row.
-func (a *App) showSessions() {
-	a.notice("reading the process list…")
+func (a *App) showSessions() { a.refreshSessions("") }
+
+// refreshSessions reads the list again, keeping a message that matters more
+// than the summary would.
+//
+// Refreshing after a kill is the obvious kindness and it takes away the one
+// thing the user wanted confirmed: they stopped somebody's statement, and the
+// status bar answers "3 connections · 1 working".
+func (a *App) refreshSessions(keep string) {
+	if keep == "" {
+		a.notice("reading the process list…")
+	}
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), sessionsTimeout)
@@ -45,6 +57,10 @@ func (a *App) showSessions() {
 
 			a.sessionsView.SetText(sessionsText(listing, a.paneWidth(a.sessionsView))).ScrollToBeginning()
 			a.resultTabs.show(tabSessions)
+			if keep != "" {
+				a.notice(keep)
+				return
+			}
 			a.notice(sessionsSummary(listing))
 		})
 	}()
@@ -168,4 +184,134 @@ func (a *App) paneWidth(v *tview.TextView) int {
 		return 20
 	}
 	return width
+}
+
+// killPhrase is the word that has to be typed before a kill goes through, or
+// "" when buttons are enough.
+//
+// Stopping somebody else's work is the operation that most wants a
+// confirmation nobody can wave through, and against production it costs the
+// same deliberateness an unbounded DELETE does. Elsewhere the mistake is
+// recoverable — the client reruns its query — and demanding a word for every
+// one of them is how a demand stops being read.
+func killPhrase(env config.Env, stop procs.Stop) string {
+	if env != config.EnvProd {
+		return ""
+	}
+	if stop == procs.StopConnection {
+		// The connection goes and any transaction it held is rolled back, so
+		// this is somebody's work rather than somebody's wait.
+		return "KILL CONNECTION"
+	}
+	return "KILL"
+}
+
+// showKillSession offers the connections that can be stopped.
+//
+// A picker rather than a selection in the sessions tab, which is how every
+// other choice here is made — and it sidesteps the failure a live list has:
+// the list cannot reload under the cursor, because it is built when it opens
+// and thrown away when it closes.
+func (a *App) showKillSession(stop procs.Stop) {
+	a.notice("reading the process list…")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), sessionsTimeout)
+		defer cancel()
+
+		listing, err := procs.List(ctx, a.conn)
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				a.notice(fmt.Sprintf("reading the process list: %v", err))
+				return
+			}
+			a.offerKill(listing, stop)
+		})
+	}()
+}
+
+func (a *App) offerKill(listing procs.Listing, stop procs.Stop) {
+	killable := make([]procs.Process, 0, len(listing.Processes))
+	for _, p := range listing.Processes {
+		// Our own are not offered at all. procs.Kill refuses them too, but a
+		// row you can select and cannot act on is worse than one that is not
+		// there.
+		if !a.conn.Owns(p.ID) {
+			killable = append(killable, p)
+		}
+	}
+
+	if len(killable) == 0 {
+		a.notice(sessionsSummary(listing) + " — nothing here but this session")
+		return
+	}
+
+	title := fmt.Sprintf(" stop a %s ", stop)
+	box := a.newSearchBox("connection: ", title, pageKill, func(term string) []searchItem {
+		return killChoices(killable, term, func(p procs.Process) {
+			a.closeSearchBox(pageKill)
+			a.confirmKill(p, stop)
+		})
+	})
+	a.pages.AddPage(pageKill, centred(box, 84, 22), true, true)
+}
+
+// killChoices filters the connections, keeping the order they arrived in so
+// that the longest-running is offered first.
+func killChoices(ps []procs.Process, term string, choose func(procs.Process)) []searchItem {
+	rows := make([]ranked, 0, len(ps))
+	for _, p := range ps {
+		proc := p
+
+		// The id, the user and the statement are all things someone might
+		// have in hand when they come here.
+		haystack := fmt.Sprintf("%d %s %s %s", proc.ID, proc.User, proc.DB, collapse(proc.SQL))
+		score, ok := match.Fuzzy(term, haystack)
+		if !ok {
+			continue
+		}
+
+		rows = append(rows, ranked{
+			item: searchItem{
+				primary:   fmt.Sprintf("%d  %s@%s  %s", proc.ID, proc.User, proc.Host, proc.Elapsed),
+				secondary: collapse(proc.SQL),
+				accept:    func() { choose(proc) },
+			},
+			score: score,
+		})
+	}
+
+	items := sortRanked(rows)
+	if len(items) == 0 {
+		return []searchItem{message("no matching connection", "type an id, a user or part of a statement")}
+	}
+	return items
+}
+
+// confirmKill asks before stopping somebody else's work.
+func (a *App) confirmKill(p procs.Process, stop procs.Stop) {
+	what := fmt.Sprintf("Stop the %s on connection %d?\n\n%s@%s\n\n%s",
+		stop, p.ID, p.User, p.Host, preview(p.SQL))
+
+	if phrase := killPhrase(a.conn.DataSource().Env, stop); phrase != "" {
+		a.typeToConfirm(what, phrase, "Stop", func() { a.kill(p, stop) }, nil)
+		return
+	}
+	a.confirmDiscard(what, "Stop", func() { a.kill(p, stop) })
+}
+
+func (a *App) kill(p procs.Process, stop procs.Stop) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), sessionsTimeout)
+		defer cancel()
+
+		err := procs.Kill(ctx, a.conn, p.ID, stop)
+		a.app.QueueUpdateDraw(func() {
+			if err != nil {
+				a.notice(fmt.Sprintf("%v", err))
+				return
+			}
+			a.refreshSessions(fmt.Sprintf("stopped the %s on connection %d", stop, p.ID))
+		})
+	}()
 }

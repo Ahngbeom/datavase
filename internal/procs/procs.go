@@ -10,6 +10,7 @@ package procs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -180,4 +181,55 @@ func grantsProcess(line string) bool {
 		}
 	}
 	return false
+}
+
+// Stop says how far a kill goes.
+type Stop int
+
+const (
+	// StopStatement ends the statement in flight and leaves the connection
+	// open, which is what "make this stop" almost always means: the client
+	// gets an error and its session survives.
+	StopStatement Stop = iota
+	// StopConnection ends the connection itself, and with it any transaction
+	// it was holding — which the server rolls back.
+	StopConnection
+)
+
+func (s Stop) String() string {
+	if s == StopConnection {
+		return "connection"
+	}
+	return "statement"
+}
+
+// ErrOwnConnection is returned rather than killing one of this session's own
+// connections.
+//
+// Killing the control connection takes cancellation and every catalog read
+// with it, permanently; killing a pooled one loses whatever it was running for
+// us. Neither is something to discover by having done it.
+var ErrOwnConnection = errors.New("that connection belongs to this session")
+
+// Kill stops a connection's statement, or the connection itself.
+//
+// It goes over the control connection, which is where KILL has always been
+// sent from: a kill that had to wait behind a result streaming into the grid
+// would be useless exactly when it was needed.
+func Kill(ctx context.Context, conn *db.Conn, id uint64, stop Stop) error {
+	if conn.Owns(id) {
+		return ErrOwnConnection
+	}
+
+	statement := fmt.Sprintf("KILL QUERY %d", id)
+	if stop == StopConnection {
+		statement = fmt.Sprintf("KILL %d", id)
+	}
+
+	return conn.WithControl(ctx, func(c *sql.Conn) error {
+		if _, err := c.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("stopping the %s on connection %d: %w", stop, id, err)
+		}
+		return nil
+	})
 }

@@ -33,6 +33,10 @@ func TestTheWrittenConfigOpensASession(t *testing.T) {
 			want.User,
 			want.Database,
 		},
+		// The env has no default, so it is answered here like anything else.
+		// testmysql labels its datasource dev, and the wizard is told the same
+		// thing rather than left to guess it.
+		choices:  []int{envChoiceDev},
 		password: password,
 	}
 

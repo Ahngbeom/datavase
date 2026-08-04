@@ -52,8 +52,12 @@ func run() int {
 
 	// `dv init` is dispatched here rather than by cli.App for the same reason
 	// `dv version` is: App holds a *config.Config, and the whole point of this
-	// command is that there is not one yet.
-	if args := flag.Args(); len(args) > 0 && args[0] == "init" {
+	// command is that there is not one yet. The parsing lives in cli so that
+	// it is checkable without a terminal.
+	if wanted, code := cli.HandleInit(os.Stderr, flag.Args()); wanted {
+		if code != 0 {
+			return code
+		}
 		return runWizard(path)
 	}
 
@@ -248,6 +252,13 @@ func runWizard(path string) int {
 // stdin is shared by every question. A fresh reader per prompt would discard
 // whatever the last one had already buffered, which on a fast paste is the
 // next answer.
+//
+// readPassword reads the descriptor directly rather than through this, and the
+// two only coexist because of what a terminal in its ordinary line-editing mode
+// does: a read returns at most one line, so this never buffers past the answer
+// it was asked for, and there is nothing left in it for term.ReadPassword to
+// lose. Anything else is not a terminal, and readPassword refuses those
+// outright rather than reading a password from a pipe.
 var stdin = bufio.NewReader(os.Stdin)
 
 // ask reads one line, taking def when the answer is empty.
@@ -285,8 +296,16 @@ func choose(prompt string, options []string, def int) (int, error) {
 		fmt.Fprintf(os.Stderr, "  %s %d) %s\n", marker, i+1, option)
 	}
 
+	// A negative default is a question with no answer to fall back on: nothing
+	// is marked, nothing is offered in brackets, and Enter on its own asks
+	// again rather than resolving to something nobody picked.
+	fallback := ""
+	if def >= 0 {
+		fallback = strconv.Itoa(def + 1)
+	}
+
 	for {
-		answer, err := ask("choice", strconv.Itoa(def+1))
+		answer, err := ask("choice", fallback)
 		if err != nil {
 			return 0, err
 		}

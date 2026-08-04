@@ -34,6 +34,9 @@ type Wizard struct {
 	// Ask reads one line, returning def when the answer is empty.
 	Ask func(prompt, def string) (string, error)
 	// Choose picks one of options, returning def when the answer is empty.
+	//
+	// A def of noDefault means there is nothing to take: the question has to be
+	// answered, and an empty answer is asked again rather than resolved.
 	Choose func(prompt string, options []string, def int) (int, error)
 	// ReadPassword reads without echoing.
 	ReadPassword func(prompt string) (string, error)
@@ -45,8 +48,11 @@ type Wizard struct {
 	Probe func(ctx context.Context, ds *config.DataSource, password string) (string, error)
 }
 
-// envChoices are the env answers, safest first: the default has to be the one
-// that guards most, because it is what an unanswered question becomes.
+// noDefault is the Choose default for a question that has to be answered.
+const noDefault = -1
+
+// envChoices are the env answers, in the order they are offered. There is no
+// safest-first here and no default at all — see askEnv for why.
 var envChoices = []config.Env{config.EnvDev, config.EnvStage, config.EnvProd}
 
 // Indices into envChoices, so a test can name an answer rather than count.
@@ -90,6 +96,25 @@ func (w *Wizard) Run(ctx context.Context) error {
 		return errors.New("setup was interrupted; nothing was written")
 	}
 	return err
+}
+
+// HandleInit reports whether args ask for the wizard, and with what exit code.
+//
+// A free function for the same reason HandleVersion is: `dv init` is dispatched
+// before the configuration is read, since the whole point of it is that there
+// is not one yet, and that puts it beyond App — and beyond App's tests with it.
+// The one command a new user types should not be the one nothing checks.
+func HandleInit(w io.Writer, args []string) (wanted bool, code int) {
+	if len(args) == 0 || args[0] != "init" {
+		return false, exitOK
+	}
+	// Ignoring the extras would run the wizard for someone who asked for
+	// something else and give them no sign that they had not.
+	if len(args) > 1 {
+		fmt.Fprint(w, "usage: dv init\n")
+		return true, exitUsage
+	}
+	return true, exitOK
 }
 
 // errConfigExists is what both refusals say.
@@ -237,18 +262,31 @@ func (w *Wizard) askRequired(prompt, def string) (string, error) {
 	}
 }
 
+// askEnv has no default, deliberately.
+//
+// It is the only answer the wizard cannot work out for itself and the only one
+// that decides whether the guard does anything: a default here is a guess that
+// Enter accepts, and the guess that is wrong on a production database leaves it
+// unguarded. App.open already refuses the same guess for the same reason — it
+// will not pick among several datasources rather than risk opening production
+// when dev was meant.
+//
+// The other questions keep their defaults. A wrong host or port is wrong in a
+// way that stops the connection; this one is wrong in a way that works.
 func (w *Wizard) askEnv() (config.Env, error) {
 	options := make([]string, len(envChoices))
 	for i, env := range envChoices {
 		options[i] = fmt.Sprintf("%-6s %s", env, envDescriptions[env])
 	}
 
-	choice, err := w.Choose("what kind of database is this?", options, envChoiceDev)
+	choice, err := w.Choose("what kind of database is this?", options, noDefault)
 	if err != nil {
 		return "", err
 	}
+	// Choose either answers or fails. Falling back to one of them here would
+	// put back the default this question does not have.
 	if choice < 0 || choice >= len(envChoices) {
-		choice = envChoiceDev
+		return "", fmt.Errorf("no environment was chosen")
 	}
 	return envChoices[choice], nil
 }

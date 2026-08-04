@@ -27,6 +27,9 @@ type script struct {
 	// asked records every prompt, so a test can prove the wizard came back to
 	// a question rather than accepting the answer that failed.
 	asked []string
+	// offered records the default each Choose was willing to take, so a test
+	// can prove a question has none.
+	offered []int
 }
 
 func (s *script) ask(prompt, def string) (string, error) {
@@ -44,7 +47,15 @@ func (s *script) ask(prompt, def string) (string, error) {
 
 func (s *script) choose(prompt string, _ []string, def int) (int, error) {
 	s.asked = append(s.asked, prompt)
+	s.offered = append(s.offered, def)
+
 	if len(s.choices) == 0 {
+		// A real prompt keeps asking until the answer is valid, so a question
+		// with no default and nobody left to answer it is the end of the input
+		// rather than a silent fallback to something nobody chose.
+		if def < 0 {
+			return 0, io.EOF
+		}
 		return def, nil
 	}
 	choice := s.choices[0]
@@ -85,11 +96,18 @@ func answers() []string {
 	return []string{"local", "127.0.0.1", "13306", "root", "app_db"}
 }
 
+// choices is one complete pass of the numbered questions: the env, which has
+// no default and so has to be answered. The keyboard question has one, which
+// an unanswered script takes.
+func choices() []int {
+	return []int{envChoiceDev}
+}
+
 // The wizard is the config package's first writer, and Parse rejects unknown
 // keys. A file it cannot read back is a machine that cannot be set up at all,
 // with the failure landing on the next run rather than on this one.
 func TestTheWizardWritesAConfigItCanReadBack(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, path := newWizard(t, s)
 
 	if err := w.Run(context.Background()); err != nil {
@@ -125,7 +143,7 @@ func TestTheWizardWritesAConfigItCanReadBack(t *testing.T) {
 // The file holds no password, so it is not a secret — but it names a host and
 // an account inside someone's network, which is nobody else's business.
 func TestTheWrittenConfigIsReadableOnlyByItsOwner(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, path := newWizard(t, s)
 
 	if err := w.Run(context.Background()); err != nil {
@@ -144,7 +162,7 @@ func TestTheWrittenConfigIsReadableOnlyByItsOwner(t *testing.T) {
 // Without this the wizard leaves the user one step short: the next thing they
 // type is `dv`, and it would answer "no password stored".
 func TestTheWizardStoresThePasswordUnderTheDataSourceName(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, _ := newWizard(t, s)
 
 	if err := w.Run(context.Background()); err != nil {
@@ -171,7 +189,7 @@ func TestTheChosenKeyboardReachesTheKeyMap(t *testing.T) {
 	}
 	want := presets[1]
 
-	s := &script{answers: answers(), choices: []int{0, 1}, password: "secret"}
+	s := &script{answers: answers(), choices: []int{envChoiceDev, 1}, password: "secret"}
 	w, path := newWizard(t, s)
 
 	if err := w.Run(context.Background()); err != nil {
@@ -218,6 +236,7 @@ func TestAnUnreachableServerIsAskedAgainRatherThanWritten(t *testing.T) {
 	s := &script{
 		// Two passes: the first host is wrong, the second is not.
 		answers:  append([]string{"local", "10.0.0.1", "13306", "root", "app_db"}, "127.0.0.1", "13306", "root", "app_db"),
+		choices:  choices(),
 		password: "secret",
 	}
 	s.probe = func(ds *config.DataSource, _ string) (string, error) {
@@ -249,7 +268,7 @@ func TestAnUnreachableServerIsAskedAgainRatherThanWritten(t *testing.T) {
 // looking at the host when the account was the problem.
 func TestAnUnreachableServerSaysWhy(t *testing.T) {
 	out := &bytes.Buffer{}
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	s.probe = func(*config.DataSource, string) (string, error) {
 		return "", errors.New("Access denied for user 'root'")
 	}
@@ -294,7 +313,7 @@ func TestTheWizardStopsWhenTheInputEnds(t *testing.T) {
 // in that file and nowhere else. Refusing and naming the path is the whole of
 // what this needs to do.
 func TestTheWizardWillNotOverwriteAnExistingConfig(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, path := newWizard(t, s)
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -325,6 +344,65 @@ func TestTheWizardWillNotOverwriteAnExistingConfig(t *testing.T) {
 	}
 	if string(kept) != testYAML {
 		t.Error("the existing config was overwritten")
+	}
+}
+
+// The wizard cannot work out which kind of database this is, and it is the one
+// answer that decides whether the guard does anything at all. A default here is
+// a guess that Enter accepts, and the guess that is wrong on a production
+// database is the one that leaves it unguarded.
+func TestTheEnvQuestionOffersNoDefault(t *testing.T) {
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
+	w, _ := newWizard(t, s)
+
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(s.offered) < 2 {
+		t.Fatalf("the wizard asked %d numbered questions, want the env and the keyboard", len(s.offered))
+	}
+	if s.offered[0] >= 0 {
+		t.Errorf("the env question offers default %d, want none", s.offered[0])
+	}
+	// The keyboard keeps its default: it is a preference, and being wrong about
+	// it costs keystrokes rather than a guard.
+	if s.offered[1] < 0 {
+		t.Error("the keyboard question offers no default, want the configured one")
+	}
+}
+
+// Having no default means the question has to be answered — not that something
+// is picked when nobody does.
+func TestAnUnansweredEnvStopsTheWizard(t *testing.T) {
+	s := &script{answers: answers(), password: "secret"}
+	w, path := newWizard(t, s)
+
+	if err := w.Run(context.Background()); err == nil {
+		t.Fatal("Run() = nil, want the wizard to stop rather than choose an env")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("a config was written with an env nobody chose: %v", err)
+	}
+}
+
+// Choose is a field, so an implementation that answers out of range is
+// somebody else's bug — but it must not become an env nobody chose. Refusing is
+// the only outcome that cannot be mistaken for a choice.
+//
+// The keyboard question resolves the same answer to its default instead, and
+// that asymmetry is the point: being wrong about a preference costs keystrokes,
+// and being wrong about this costs the guard.
+func TestAnOutOfRangeChoiceIsNotResolvedIntoAnEnv(t *testing.T) {
+	s := &script{answers: answers(), password: "secret"}
+	w, path := newWizard(t, s)
+	w.Choose = func(string, []string, int) (int, error) { return len(envChoices), nil }
+
+	if err := w.Run(context.Background()); err == nil {
+		t.Fatal("Run() = nil, want a refusal rather than an env nobody chose")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("a config was written from an out-of-range choice: %v", err)
 	}
 }
 
@@ -366,7 +444,7 @@ func TestEveryEnvIsOfferedAndDescribed(t *testing.T) {
 // everything to be told the file was already there. The promise is kept at the
 // write, which is the only moment that can keep it.
 func TestAConfigThatAppearsWhileTheWizardIsAskingIsNotOverwritten(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, path := newWizard(t, s)
 
 	// The last thing before the file is written, standing in for anything that
@@ -410,7 +488,7 @@ func TestAConfigThatAppearsWhileTheWizardIsAskingIsNotOverwritten(t *testing.T) 
 // The file is the one place the env answer is explained after the fact. A
 // value with no comment is one nobody can re-decide six months later.
 func TestTheWrittenConfigExplainsWhatEnvDoes(t *testing.T) {
-	s := &script{answers: answers(), password: "secret"}
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
 	w, path := newWizard(t, s)
 
 	if err := w.Run(context.Background()); err != nil {
@@ -425,5 +503,42 @@ func TestTheWrittenConfigExplainsWhatEnvDoes(t *testing.T) {
 		if !strings.Contains(string(written), want) {
 			t.Errorf("the written config does not mention %q:\n%s", want, written)
 		}
+	}
+}
+
+// `dv init` is dispatched before the configuration is read, which puts it out
+// of App's reach — and out of its tests' reach with it. HandleVersion is a free
+// function for the same reason, and this follows it so that the one command a
+// new user types is not the one nothing checks.
+func TestHandleInitRecognisesTheCommand(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		wanted  bool
+		code    int
+		usageIn bool
+	}{
+		{name: "no arguments", args: nil},
+		{name: "another command", args: []string{"ls"}},
+		{name: "init", args: []string{"init"}, wanted: true},
+		// Silently ignoring the extras would run the wizard for someone who
+		// asked for something else and got no sign that they had not.
+		{name: "init with an extra", args: []string{"init", "local"}, wanted: true, code: exitUsage, usageIn: true},
+		{name: "init with several extras", args: []string{"init", "-c", "x"}, wanted: true, code: exitUsage, usageIn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+
+			wanted, code := HandleInit(&out, tc.args)
+			if wanted != tc.wanted {
+				t.Errorf("wanted = %v, want %v", wanted, tc.wanted)
+			}
+			if code != tc.code {
+				t.Errorf("code = %d, want %d", code, tc.code)
+			}
+			if got := strings.Contains(out.String(), "usage: dv init"); got != tc.usageIn {
+				t.Errorf("usage printed = %v, want %v (output %q)", got, tc.usageIn, out.String())
+			}
+		})
 	}
 }

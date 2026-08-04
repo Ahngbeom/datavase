@@ -18,6 +18,12 @@ wrong account is reported in the server's own words and asked again, with the
 previous answer as the default. Nothing reaches disk until something answered,
 so there is no wrong value to find and hand-edit later.
 
+**`env` is the one question with no default.** Every other answer is offered
+with something Enter will take; this one has to be chosen. It is the only thing
+the wizard cannot work out for itself and the only one that decides whether the
+guard does anything, and the guess that is wrong on a production database is
+the guess that leaves it unguarded.
+
 **It asks which keyboard you want.** The editor is still modal by default, but
 that default is now a choice someone made rather than one they discover by
 typing and watching nothing happen. The answer is written to `config.yaml`

@@ -75,6 +75,10 @@ anything, stores the password in the keychain, and asks which keyboard you
 want. Running `dv` with no configuration does the same thing, so there is
 nothing to read first.
 
+Every question but one comes with a default that Enter takes. `env` does not:
+it is the only answer that decides what the guard does, so it has to be chosen
+rather than accepted.
+
 It refuses to touch a `config.yaml` that already exists — a second datasource
 is added by editing the file.
 

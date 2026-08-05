@@ -462,7 +462,7 @@ func (a *App) buildWidgets() {
 	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
 
-	a.schemaTabs = newTabbed()
+	a.schemaTabs = newTabbed().watch(a.schemaDetail)
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
 
@@ -486,6 +486,29 @@ func (a *App) editorDetail() string {
 		return a.openFile.rel + " *"
 	}
 	return a.openFile.rel
+}
+
+// schemaDetail is the trailing note on the schema pane's header, read at draw
+// time like the other two regions'.
+func (a *App) schemaDetail() string {
+	return schemaPaneDetail(a.schemaTabs.current(), a.currentSchema())
+}
+
+// schemaPaneDetail explains the marker beside a schema in the tree.
+//
+// The dot is the only thing on screen that says which schema an unqualified
+// statement will reach, and a dot explains nothing. The schema picker spells
+// the same marker out on the row beside it; the tree, where it matters most,
+// left the reader to work it out.
+//
+// Nothing is said when no schema is current, because then nothing is marked
+// and a legend for an absent marker is one more thing to work out rather than
+// one fewer. Nothing is said on the tables tab either, which draws no markers.
+func schemaPaneDetail(tab, currentSchema string) string {
+	if tab != tabTree || currentSchema == "" {
+		return ""
+	}
+	return currentSchemaMarker + " current schema"
 }
 
 // resultDetail says what the empty results tab would otherwise not say.

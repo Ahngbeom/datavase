@@ -92,9 +92,7 @@ func (a *App) showRow() {
 		SetWrap(true).
 		SetText(detail)
 	view.SetBorder(true).
-		// The grid's own row number, not the buffer's: this says where you are
-		// in what is on screen, and once a column is sorted those differ.
-		SetTitle(fmt.Sprintf(" row %d of %d ", row, a.buf.RowCount())).
+		SetTitle(rowViewTitle(row, a.buf.RowCount())).
 		SetTitleAlign(tview.AlignLeft)
 	view.SetBackgroundColor(tcell.ColorBlack)
 
@@ -118,6 +116,20 @@ func (a *App) showRow() {
 	})
 
 	a.openDialog(centredText(view, detail, 90, 30))
+}
+
+// rowViewTitle says where you are and how to move.
+//
+// The number is the grid's own row, not the buffer's: it says where you are in
+// what is on screen, and once a column is sorted those differ.
+//
+// The keys are in the title because this view steps between rows without
+// closing — comparing two rows is most of what it is opened for — and nothing
+// else on screen said so. The key reference puts its own controls in its title
+// bar for exactly this reason; this one carried a number and nothing else, so
+// the stepping was a feature you had to already know about to find.
+func rowViewTitle(row, total int) string {
+	return fmt.Sprintf(" row %d of %d — j/k step · Esc close ", row, total)
 }
 
 // stepRow moves the grid's selection and redraws the open row view, so the

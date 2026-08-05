@@ -36,6 +36,34 @@ added by editing the file.
 Nothing changes for an existing configuration: `dv` finds it and opens it
 exactly as before.
 
+**The command palette is grouped when you browse it.** Opened with nothing
+typed it now reads under headings — *Running*, *The result*, *Finding things*
+and so on — instead of forty commands in one undifferentiated run. Type and it
+goes back to a flat list ranked by what matches, so nothing about searching
+changes.
+
+The heading names are searchable too: `server` narrows to the connection
+commands, `keyboard` to the presets, without either word appearing in a command
+name.
+
+**The key reference opens with the five keys worth knowing first**, and on the
+modal keyboard the way out of it is in that same opening block. It used to be
+at the foot of the vim reference — so the answer to "I cannot type into this"
+sat behind the whole of what the reader was trying to leave.
+
+### Fixed
+
+**Enter on a freshly opened palette runs the first command again.** With the
+headings in place the first row is a heading, and Enter took row zero outright
+— on the one dialog whose entire purpose is to run something. The arrows step
+over headings for the same reason: a highlighted row that Enter does nothing to
+is the same dead end.
+
+**And it is no longer `unlock writes`.** That command was the palette's first
+entry, so opening the palette and pressing Enter — two keys, nothing read —
+unlocked writes against production. The first command is now `cancel`, which
+does nothing when nothing is running.
+
 ## v0.5.0 — 2026-08-04
 
 **Upgrade for the guard fix.** Every release up to `v0.4.0` classified `ANALYZE`

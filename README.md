@@ -139,9 +139,10 @@ dv open local --dir ~/work/migrations   # with a worktree of SQL attached
 ### Keys
 
 **The editor is modal by default** — it starts in vim's normal mode, so press
-`i` before you type. The status bar always says which mode you are in, and
-`F1` lists the vim keys and how to leave them. To use an ordinary typing
-editor instead, see [Changing the keys](#changing-the-keys).
+`i` before you type. The status bar always says which mode you are in, and `F1`
+opens with the five keys worth knowing first, the way out of the modal editor
+among them. To use an ordinary typing editor instead, see
+[Changing the keys](#changing-the-keys).
 
 `:` opens a command line — on the modal keyboard, since that is where the key
 is free. `:w` saves, `:q` quits — asking first if there is unsaved work — `:q!`
@@ -231,6 +232,12 @@ So nothing is only reachable by a chord. **`F3` opens the command palette, and
 every command is in there by name** — including `schema tree`, `go to table`,
 `comment`, `duplicate line` and the rest. A test refuses to let an action exist
 that has neither a plain key nor a palette entry.
+
+Opened with nothing typed, the palette is grouped under headings — *Running*,
+*The result*, *Finding things* and so on — so a command can be found without
+already knowing what it is called. Type and it becomes a flat list ranked by
+what matches, the heading names included: `server` narrows to the connection
+commands, `keyboard` to the presets.
 
 Two things are outside that promise, deliberately:
 

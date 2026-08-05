@@ -153,6 +153,24 @@ func centred(p tview.Primitive, width, height int) tview.Primitive {
 	return newFitted(p, width, height)
 }
 
+// startHere is the whole of what someone needs on the first screenful.
+//
+// The reference below is complete, which is what makes it useless as an
+// opening: seven groups and forty commands answer "which key does X" and never
+// answer "what do I do now". These five do, and each appears again in its own
+// group further down — the repetition is the point, not an oversight.
+//
+// The palette is here because it is the one key that finds everything else,
+// and quit because a beginner's first question about an unfamiliar full-screen
+// program is how to get out of it.
+var startHere = []keymap.Action{
+	keymap.ActionRun,
+	keymap.ActionToggleSidebar,
+	keymap.ActionCommandPalette,
+	keymap.ActionHelp,
+	keymap.ActionQuit,
+}
+
 // helpGroups organise the key reference. Actions appear in this order.
 var helpGroups = []struct {
 	title   string
@@ -222,19 +240,29 @@ var helpGroups = []struct {
 func (a *App) helpText() string {
 	var b strings.Builder
 
+	line := func(action keymap.Action) {
+		labels := make([]string, 0, 3)
+		for _, binding := range a.keys.DisplayBindings(action) {
+			labels = append(labels, binding.Label(onMac))
+		}
+		fmt.Fprintf(&b, "  %s  %s\n",
+			keymap.PadLabel(strings.Join(labels, "  "), helpKeyColumn),
+			action.Describe())
+	}
+
 	b.WriteString("[aqua]datavase[-]\n")
+
+	b.WriteString("\n[yellow]Start here[-]\n")
+	for _, action := range startHere {
+		line(action)
+	}
+	b.WriteString(a.modalEscapeHatch())
 
 	for _, group := range helpGroups {
 		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", group.title)
 
 		for _, action := range group.actions {
-			labels := make([]string, 0, 3)
-			for _, binding := range a.keys.DisplayBindings(action) {
-				labels = append(labels, binding.Label(onMac))
-			}
-			fmt.Fprintf(&b, "  %s  %s\n",
-				keymap.PadLabel(strings.Join(labels, "  "), helpKeyColumn),
-				action.Describe())
+			line(action)
 		}
 	}
 
@@ -294,10 +322,25 @@ func (a *App) vimHelp() string {
 		}
 	}
 
-	b.WriteString("\n[gray]Not what you wanted? Put `keymap: {preset: datagrip}` in\n" +
-		"~/.config/datavase/config.yaml, or run `keymap datagrip` from the\n" +
-		"command palette to switch for this session.[-]\n")
+	b.WriteString("\n[gray]To keep this keyboard, put `keymap: {preset: vim}` in\n" +
+		"~/.config/datavase/config.yaml.[-]\n")
 	return b.String()
+}
+
+// modalEscapeHatch is the way out of a modal editor nobody asked for.
+//
+// It sits under "Start here" rather than at the foot of the vim reference,
+// which is where it used to be. Someone who cannot type into the editor opens
+// the help and reads the top of it; putting the answer past forty keys and a
+// full vim table meant scrolling through the thing they were trying to leave
+// to find out that they could.
+func (a *App) modalEscapeHatch() string {
+	if !a.keys.Modal() {
+		return ""
+	}
+	return fmt.Sprintf("\n[gray]Typing does nothing? This editor is modal — press i first.\n"+
+		"For an ordinary editor: %s, then \"keymap datagrip\".[-]\n",
+		result.EscapeTags(a.keyLabel(keymap.ActionCommandPalette)))
 }
 
 // helpKeyColumn is the width of the key column on the help screen.

@@ -7,12 +7,12 @@ edited account — and the place anything that needs action is written down.
 
 ## v0.6.2 — 2026-08-05
 
-**Nothing to do before upgrading.** The binaries are identical in behaviour to
-`v0.6.1`; this adds something alongside them.
+**Nothing to do before upgrading.** The binaries do the same thing as
+`v0.6.1`'s; this adds something alongside them.
 
 ### Added
 
-**Every released file is signed by the workflow that built it.** To check one:
+**Every released archive and package is signed by the workflow that built it.** To check one:
 
 ```sh
 gh attestation verify dv_v0.6.2_darwin_arm64.tar.gz --repo Ahngbeom/datavase

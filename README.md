@@ -64,20 +64,6 @@ Check it with `dv version`, then run `dv init`.
 Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
 no companion tools. It is one binary.
 
-### Checking where a download came from
-
-Every released file is signed by the workflow that built it. To check one:
-
-```sh
-gh attestation verify dv_v0.6.2_darwin_arm64.tar.gz --repo Ahngbeom/datavase
-```
-
-That answers a different question from the checksum the install script
-already verifies. A checksum says the file arrived intact; this says it was
-built by this repository's release workflow and not swapped for something
-else — which the checksum cannot tell you, because it is downloaded from the
-same place as the file it describes.
-
 Upgrading an existing setup: [CHANGELOG.md](CHANGELOG.md) says what changed
 and whether anything needs doing to your configuration first.
 
@@ -109,6 +95,20 @@ xattr -dr com.apple.quarantine ./dv
 ```
 
 </details>
+
+### Checking where a download came from
+
+Every released archive and package is signed by the workflow that built it. To check one:
+
+```sh
+gh attestation verify <the archive you downloaded> --repo Ahngbeom/datavase
+```
+
+That answers a different question from the checksum the install script
+already verifies. A checksum says the file arrived intact; this says it was
+built by this repository's release workflow and not swapped for something
+else — which the checksum cannot tell you, because it is downloaded from the
+same place as the file it describes.
 
 ## Set up
 

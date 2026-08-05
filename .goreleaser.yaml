@@ -187,7 +187,7 @@ release:
     xattr -dr com.apple.quarantine ./dv
     ```
 
-    Every file above is signed by the workflow that built it. To check one:
+    Every archive and package above is signed by the workflow that built it. To check one:
 
     ```sh
     gh attestation verify dv_{{ .Tag }}_darwin_arm64.tar.gz --repo Ahngbeom/datavase

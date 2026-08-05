@@ -163,9 +163,19 @@ func (w *Wizard) run(ctx context.Context) error {
 		return err
 	}
 	// After the file, so a keychain that refuses leaves a config behind to fix
-	// with `dv auth` rather than nothing at all.
+	// rather than nothing at all.
 	if err := w.Secrets.Set(ds.Name, password); err != nil {
-		return fmt.Errorf("storing the password: %w", err)
+		// Not an error return: the connection was proved and the file is
+		// written, so the only thing missing is somewhere to keep the password
+		// — and on a headless Linux box there is no keychain to keep it in and
+		// never will be. Failing here would throw away a working setup and
+		// point at `dv auth`, which needs the same keychain that just refused.
+		fmt.Fprintf(w.Out,
+			"\nWrote %s, but could not store the password: %v\n\n"+
+				"This machine has no usable keychain. Pass the password in the\n"+
+				"environment instead:\n\n    export %s=...\n\nThen run: dv\n",
+			w.Path, err, secret.EnvVarName(ds.Name))
+		return nil
 	}
 
 	fmt.Fprintf(w.Out, "\nWrote %s and stored the password.\n\nRun: dv\n", w.Path)

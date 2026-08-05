@@ -88,7 +88,7 @@ func run() int {
 
 	app := &cli.App{
 		Config:       cfg,
-		Secrets:      secret.NewKeychain(),
+		Secrets:      secrets(),
 		Out:          os.Stdout,
 		Err:          os.Stderr,
 		ReadPassword: readPassword,
@@ -178,16 +178,27 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	}).Run()
 }
 
+// secrets is where every password is read and written.
+//
+// One function rather than three constructions, so the environment layer
+// cannot end up on the interface's reads but not the wizard's writes — which
+// would show up as a datasource that works until you switch to it.
+func secrets() secret.Store { return secret.WithEnv(secret.NewKeychain()) }
+
 // connectTo opens another datasource for a switch mid-session.
 //
-// The password comes from the keychain and nowhere else. A switch that could
-// prompt would mean a modal password field over a running interface, and a
-// datasource nobody has run "dv auth" for is one this session was never in a
-// position to reach.
+// The password comes from the keychain or the environment and nowhere else. A
+// switch that could prompt would mean a modal password field over a running
+// interface, and a datasource nobody has run "dv auth" for is one this session
+// was never in a position to reach.
 func connectTo(ctx context.Context, ds *config.DataSource) (*session.Session, error) {
-	password, err := secret.NewKeychain().Get(ds.Name)
+	password, err := secrets().Get(ds.Name)
 	if err != nil {
-		return nil, fmt.Errorf("no password stored for %q; run: dv auth %s", ds.Name, ds.Name)
+		// Both ways out, because the first one does not exist on a machine with
+		// no keychain — which is exactly the machine this is most likely to
+		// fail on.
+		return nil, fmt.Errorf("no password for %q; run: dv auth %s — or set %s",
+			ds.Name, ds.Name, secret.EnvVarName(ds.Name))
 	}
 	return session.Open(ctx, ds, password)
 }
@@ -242,7 +253,7 @@ func runWizard(path string) int {
 		Ask:          ask,
 		Choose:       choose,
 		ReadPassword: readPassword,
-		Secrets:      secret.NewKeychain(),
+		Secrets:      secrets(),
 		// The timeout bounds one attempt, not the wizard: a deadline over the
 		// whole thing would expire while someone was still typing.
 		Probe: func(ctx context.Context, ds *config.DataSource, password string) (string, error) {

@@ -5,6 +5,24 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.6.2 — 2026-08-05
+
+**Nothing to do before upgrading.** The binaries are identical in behaviour to
+`v0.6.1`; this adds something alongside them.
+
+### Added
+
+**Every released file is signed by the workflow that built it.** To check one:
+
+```sh
+gh attestation verify dv_v0.6.2_darwin_arm64.tar.gz --repo Ahngbeom/datavase
+```
+
+The install script already verifies each download against `checksums.txt`,
+which says the file arrived intact. It cannot say more than that, because it
+is fetched from the same release as the file it describes. This answers the
+other question: that the file was built here.
+
 ## v0.6.1 — 2026-08-05
 
 **Nothing to do before upgrading, and no reason to unless you use Homebrew.**

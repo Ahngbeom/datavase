@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write # goreleaser creates the GitHub release and uploads archives
+  id-token: write # the attestation is signed against this run's OIDC identity
+  attestations: write # and stored on the repository
 
 jobs:
   goreleaser:
@@ -57,3 +59,30 @@ jobs:
           # "skip the cask" rather than failing a release that has already
           # uploaded its archives.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      # After goreleaser, because dist/checksums.txt is written by it and the
+      # release is already published by the time it exists — attesting is
+      # necessarily the last thing that happens.
+      #
+      # subject-checksums takes the whole file, so one call covers every file
+      # checksums.txt lists rather than needing a subject per archive and
+      # package. checksums.txt does not list itself, so it is the one asset
+      # with no attestation.
+      #
+      # This is deliberately allowed to fail the run. The cask is skipped
+      # quietly when its token is missing because the release is still whole
+      # without it; a missing attestation is not like that. Nobody goes looking
+      # for a signature that was never there, so the run has to be the thing
+      # that says so.
+      #
+      # By the time this step runs, goreleaser has already published the
+      # release whose footer claims every archive and package is signed, so
+      # a failure here leaves that claim false for whatever is missing.
+      # Re-running the workflow does not fix it: goreleaser refuses to
+      # publish to a release that already exists and fails before reaching
+      # this step. Recovery is to delete the GitHub release and re-run the
+      # workflow, or to attest the existing checksums.txt out of band.
+      - name: Attest what this run built
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: ./dist/checksums.txt

@@ -55,6 +55,11 @@ type status struct {
 	limitInjected int
 	truncated     bool
 	message       string
+	// opening is the greeting's clauses, most important first. They are held
+	// apart rather than joined because the bar can drop a field whole and can
+	// only cut a sentence in half, and a list of independent hints loses far
+	// less to a dropped clause than to a chopped one.
+	opening []string
 }
 
 // field is one item of the bar, with whether it may be dropped when the line
@@ -115,7 +120,23 @@ func (s status) renderWidth(width int) string {
 
 // truncateMarkup shortens a tagged string to a visible width, leaving colour
 // tags intact so the line does not lose its colours partway through.
+//
+// A cut line ends in an ellipsis, paid for out of the width rather than hung
+// off the end of a terminal that had no room for it. Without one the bar
+// simply stopped mid-word, which reads as a sentence that ended rather than
+// one that was cut — and this application abbreviates a file name in the
+// region header with an ellipsis two rows above, so the two sat on the same
+// screen disagreeing about what a cut looks like.
 func truncateMarkup(s string, width int) string {
+	const ellipsis = "…"
+
+	// One cell has to be left for the ellipsis. On a terminal with only that
+	// one cell, saying "there was more" is the whole of what can be said.
+	room := width - 1
+	if room < 0 {
+		room = 0
+	}
+
 	var (
 		b       strings.Builder
 		inTag   bool
@@ -125,8 +146,8 @@ func truncateMarkup(s string, width int) string {
 	for i := 0; i < len(runes); i++ {
 		switch {
 		case runes[i] == '[' && i+1 < len(runes) && runes[i+1] == '[':
-			if visible >= width {
-				return b.String() + "[-]"
+			if visible >= room {
+				return b.String() + ellipsis + "[-]"
 			}
 			b.WriteString("[[")
 			visible++
@@ -140,8 +161,8 @@ func truncateMarkup(s string, width int) string {
 		case inTag:
 			b.WriteRune(runes[i])
 		default:
-			if visible >= width {
-				return b.String() + "[-]"
+			if visible >= room {
+				return b.String() + ellipsis + "[-]"
 			}
 			b.WriteRune(runes[i])
 			visible++
@@ -254,8 +275,20 @@ func (s status) fields() []field {
 		// so truncation takes it and leaves the warnings above intact.
 		out = add(out, result.EscapeTags(oneLine(s.message)), false, 0)
 	}
+
+	// The greeting, on the other hand, is a list. Each clause is a field of
+	// its own, ranked so the least useful one goes first, which is what keeps
+	// a narrow terminal from cutting a hint in half and leaving "for the s".
+	for i, clause := range s.opening {
+		out = add(out, result.EscapeTags(oneLine(clause)), true, openingRank+i)
+	}
 	return out
 }
+
+// openingRank is where the greeting's clauses sit in the shedding order.
+// Above the row count and the elapsed time, because a greeting has already
+// been read by the time either of those exists.
+const openingRank = 40
 
 // visibleCost is how many cells a field occupies, ignoring colour tags.
 func visibleCost(s string) int {

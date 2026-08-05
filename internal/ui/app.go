@@ -263,7 +263,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
 	}
-	a.status.message = a.openingMessage(conn.ServerVersion())
+	a.status.opening = a.openingClauses(conn.ServerVersion())
 
 	// Before any widget is built: tview copies its palette into each one as it
 	// is created, so a default claimed afterwards would reach nothing.
@@ -300,22 +300,64 @@ func (a *App) captureScreen() {
 // Finding out that Ctrl+Enter does nothing by pressing it and watching
 // nothing happen is the worst way to learn it; the status bar is already
 // there and costs nothing to read.
-func (a *App) openingMessage(serverVersion string) string {
+func (a *App) openingClauses(serverVersion string) []string {
+	return openingClauses(opening{
+		serverVersion: serverVersion,
+		helpKey:       a.helpKeyLabel(),
+		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
+		modal:         a.keys.Modal(),
+		advice:        keymap.TerminalAdviceShort(os.Getenv("TERM"), a.keys),
+	})
+}
+
+// opening is what the first line of a session has to say.
+type opening struct {
+	serverVersion string
+	helpKey       string
+	sidebarKey    string
+	modal         bool
+	// advice is what this terminal cannot deliver, or empty when it can
+	// deliver everything.
+	advice string
+}
+
+// openingClauses is the greeting, most actionable first.
+//
+// They are separate clauses rather than one sentence because the bar can drop
+// a field whole and can only cut a sentence in half. As one string the last
+// clause was chopped mid-word on an eighty-column terminal — which is where a
+// default one starts — and the reader was left with "for the s".
+//
+// The order decides what survives. What the terminal cannot deliver comes
+// first because it is the only place anyone is told that the key this
+// interface keeps naming will do nothing when they press it. The server
+// version brings up the rear: it is a greeting rather than an instruction, and
+// knowing which MariaDB answered has never stood between anyone and their
+// first query.
+func openingClauses(o opening) []string {
+	var out []string
+
+	if o.advice != "" {
+		out = append(out, o.advice)
+	}
+	// A modal editor that nobody was told about is one where the first
+	// keystroke does nothing, which reads as a broken application rather than
+	// as a mode.
+	if o.modal {
+		out = append(out, "vim keys: i to type, Esc for normal")
+	}
+	if o.helpKey != "" {
+		out = append(out, o.helpKey+" for keys")
+	}
 	// The schema tree is not on screen, so this is where anyone learns it
 	// exists at all.
-	msg := fmt.Sprintf("server %s · %s for keys · %s for the schema tree",
-		serverVersion, a.helpKeyLabel(), a.keyLabel(keymap.ActionToggleSidebar))
-
-	// A modal editor that nobody was told about is one where the first
-	// keystroke does nothing, which reads as a broken application rather
-	// than as a mode.
-	if a.keys.Modal() {
-		msg += " · vim keys: i to type, Esc for normal"
+	if o.sidebarKey != "" {
+		out = append(out, o.sidebarKey+" for the schema tree")
 	}
-	if advice := keymap.TerminalAdvice(os.Getenv("TERM"), a.keys); advice != "" {
-		msg += " · " + advice
+	if o.serverVersion != "" {
+		out = append(out, "server "+o.serverVersion)
 	}
-	return msg
+	return out
 }
 
 // helpKeyLabel names the key that opens the key reference. It is looked up
@@ -1085,6 +1127,10 @@ func (a *App) cancelRunning() {
 // value itself on the next draw, so setting the field is the whole job.
 func (a *App) notice(msg string) {
 	a.status.message = msg
+	// The greeting is what the bar says until something happens; once
+	// something has, keeping it would leave the opening advice competing for
+	// room with the answer the user was waiting for.
+	a.status.opening = nil
 }
 
 func (a *App) refreshStatus() {

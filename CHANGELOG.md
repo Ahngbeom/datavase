@@ -5,6 +5,92 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+**Nothing here needs doing before you upgrade.** No configuration file changes,
+no keys moved, and no statement is judged differently — this is a pass over
+what the interface says and how it is drawn.
+
+### Fixed
+
+**A result scrolled sideways said nothing about it, and took the row's identity
+with it.** A `SELECT` wider than the terminal scrolls, and the columns that go
+off the left are the ones that identify the row: a screenful beginning at
+`total_cents` is indistinguishable from one whose query never selected an id.
+Every other way a result on screen is not the whole answer already said so on
+the bar — an injected `LIMIT`, a cut stream, a sort over rows that are still
+arriving — and this one was silent.
+
+The bar now carries the count, and the first column stays put while the rest
+scroll past it. A column wider than the pane still cannot be scrolled past;
+that is unchanged, and it is the layout rather than the report.
+
+**The process list was folded to sixteen columns whatever the terminal's
+width.** It was laid out when the text was composed, which is while the tab is
+still hidden — a hidden tab has no width to give, so the answer was the floor.
+An eighty-column terminal showed a statement as a stack of four-word lines, and
+it stayed that shape after the window was resized. It is laid out when it is
+drawn now, as the plan pane and both bars already were.
+
+**Switching to the vim keyboard left the editor promising that typing would
+work.** The empty-editor placeholder says to press `i` first, which is the only
+thing on screen that explains why an ordinary letter does nothing. It was
+written once when the interface opened, so arriving at the modal keyboard the
+advertised way — the command palette, `keymap vim` — landed you in an editor
+still describing the other one.
+
+**A status line too long for the terminal stopped mid-word.** It now ends in an
+ellipsis, which is what the same interface does one row above when it shortens
+a file name.
+
+The greeting was one sentence, so the bar could only halve it; it is a list of
+clauses now, dropped whole and ordered by what you can act on. The clause about
+what your terminal cannot deliver was the longest thing on the line and so the
+first to go — on exactly the terminals that need it. It is shorter, and says
+what to press instead of why; `dv keys` and the key reference still explain the
+whole of it.
+
+**Every finder opened by reporting a search nobody had run.** `go to table`
+began with "no matching tables" sitting above "type part of a name" — a result
+and an invitation contradicting each other on the screen you meet first — and
+the datasource, file, connection, command and history pickers each had their
+own wording of the same thing.
+
+An empty place now says what it is and what would fill it; a search that found
+nothing says so and repeats what it looked for, so a typo is visible in the
+answer as well as in the field you have already stopped looking at.
+
+**The result pane asked for a statement while one was running.** The bar said
+"running… ^C cancels" and the pane two rows above said "run a statement to see
+rows here". It also said it straight after a write, when the row count had just
+been reported — an empty grid after an `UPDATE` reading as a write that went
+nowhere. It says which of the three it is now.
+
+**Two things worked and could not be found.** The row view steps between rows
+with `j` and `k` without closing, which is most of what it is opened for, and
+its title said only which row you were on. And the dot beside a schema in the
+tree is the only thing that says which one an unqualified statement will reach.
+Both are named on screen now, in the space each pane already had.
+
+**The hairlines between regions met without joining, and a dialog was as tall
+as it was allowed rather than as tall as its contents.** The rule under the top
+bar ran straight through the column the schema pane's rule starts in, and the
+row view drew three columns of detail in a box of thirty rows. Neither changed
+what anything did; both read as something having failed to render.
+
+### Changed
+
+**The interface draws four colours and the environment's three, and no others.**
+Two were nobody's choice: the empty editor's placeholder and every finder's
+second line came out in the terminal library's green, the colour every other
+program uses for success. And the key reference and the palette drew their
+section headings in the colour reserved for a state you could forget you are
+in — an injected `LIMIT`, a truncated result, unlocked writes — which left
+that cue sharing its meaning with the word "Editing".
+
+Headings carry weight instead of colour, so they survive a monochrome terminal
+as well. Nothing about the environment spine or the guard's own colours moved.
+
 ## v0.6.2 — 2026-08-05
 
 **Nothing to do before upgrading.** The binaries do the same thing as

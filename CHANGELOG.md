@@ -5,6 +5,25 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.6.1 — 2026-08-05
+
+**Nothing to do before upgrading, and no reason to unless you use Homebrew.**
+The binaries in `v0.6.0` are unaffected — this fixes how one of them is
+published, not what it does.
+
+### Fixed
+
+**`brew install Ahngbeom/tap/dv` installs something.** `v0.6.0` published
+every archive, every Linux package and the checksums, and then failed before
+writing the Homebrew cask, so the tap had nothing in it and the command the
+release notes advertised did not work.
+
+The tap token was written in a template form goreleaser accepts everywhere
+except that one field, where it compares the string against a fixed shape
+instead of rendering it. Neither `goreleaser check` nor a snapshot build sees
+that, because the comparison happens as the cask is pushed — the last thing a
+release does, after everything else is already uploaded.
+
 ## v0.6.0 — 2026-08-05
 
 **Nothing here needs doing before you upgrade.** No configuration file

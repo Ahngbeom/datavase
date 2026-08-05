@@ -121,6 +121,20 @@ dv auth prod-app          # prompts, echo off
 dv auth -rm prod-app      # remove
 ```
 
+**On a machine with no keychain** — a headless Linux server runs no D-Bus
+Secret Service, so there is nothing for `dv auth` to write to — pass the
+password in the environment instead:
+
+```sh
+export DATAVASE_PASSWORD_PROD_APP=...
+```
+
+The variable is `DATAVASE_PASSWORD_` followed by the datasource name, upper
+cased, with anything that cannot appear in a variable name turned into `_`.
+It is also how you supply a password in CI or a container. When it is set it
+takes precedence over the keychain, so the same command does the same thing on
+every machine.
+
 Unknown keys are rejected rather than ignored, so a typo like `hots:` fails
 immediately instead of surfacing later as a confusing error.
 

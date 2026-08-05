@@ -323,7 +323,11 @@ func killChoices(ps []procs.Process, term string, choose func(procs.Process)) []
 
 	items := sortRanked(rows)
 	if len(items) == 0 {
-		return []searchItem{message("no matching connection", "type an id, a user or part of a statement")}
+		if term == "" {
+			return []searchItem{nothingHere("nothing else is connected",
+				"only this session is on the server")}
+		}
+		return []searchItem{noMatch("connection", term)}
 	}
 	return items
 }

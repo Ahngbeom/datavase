@@ -28,7 +28,11 @@ func (a *App) showGoToTable() {
 			return []searchItem{message("search failed", err.Error())}
 		}
 		if len(tables) == 0 {
-			return []searchItem{message("no matching tables", "type part of a name")}
+			if term == "" {
+				return []searchItem{nothingHere("no tables in the schema cache yet",
+					"it fills in the background; "+a.keyLabel(keymap.ActionRefreshSchema)+" reloads it")}
+			}
+			return []searchItem{noMatch("table", term)}
 		}
 
 		items := make([]searchItem, len(tables))

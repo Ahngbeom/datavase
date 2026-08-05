@@ -176,7 +176,7 @@ func (a *App) directoryChoices(term string) []searchItem {
 	}
 
 	if len(items) == 0 {
-		return []searchItem{message("no such directory", "type an absolute path, or ~/…")}
+		return []searchItem{nothingHere("no such directory", "type an absolute path, or ~/…")}
 	}
 	if cut {
 		items = append(items, truncatedNotice("too many directories — type more of the path"))

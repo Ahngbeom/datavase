@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/Ahngbeom/datavase/internal/result"
@@ -29,6 +30,26 @@ type searchItem struct {
 // message builds a non-selectable row, for "nothing found" and errors.
 func message(text, detail string) searchItem {
 	return searchItem{primary: text, secondary: detail}
+}
+
+// noMatch is the answer to a search that found nothing.
+//
+// It repeats the term, so a typo is visible in the answer rather than only in
+// the field above it — which is the field the reader has already stopped
+// looking at by the time they read this.
+func noMatch(what, term string) searchItem {
+	return message(fmt.Sprintf("no %s matches %q", what, term), "")
+}
+
+// nothingHere is the answer to a place with nothing in it, which is not the
+// same answer at all.
+//
+// Before anything is typed nothing has been searched for, so "no matching
+// tables" is a report on a search nobody ran — and it used to sit directly
+// above an invitation to run one, the two lines contradicting each other on
+// the screen a new user meets first. An empty screen is an invitation to act.
+func nothingHere(text, detail string) searchItem {
+	return message(text, detail)
 }
 
 // heading builds a row that names a group of the rows beneath it.

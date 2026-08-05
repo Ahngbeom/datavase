@@ -168,6 +168,13 @@ func centred(p tview.Primitive, width, height int) tview.Primitive {
 	return newFitted(p, width, height)
 }
 
+// centredText is centred for a dialog whose whole contents are known, so the
+// box can be as tall as they are rather than as tall as it was allowed to be.
+func centredText(p tview.Primitive, text string, width, height int) tview.Primitive {
+	return newFitted(p, width, height).
+		sizedTo(func(w int) int { return dialogHeight(text, w) })
+}
+
 // startHere is the whole of what someone needs on the first screenful.
 //
 // The reference below is complete, which is what makes it useless as an
@@ -363,9 +370,10 @@ func (a *App) modalEscapeHatch() string {
 const helpKeyColumn = 20
 
 func (a *App) showHelp() {
+	text := a.helpText()
 	view := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(a.helpText())
+		SetText(text)
 
 	// The reference no longer fits a modest terminal, and a pane that scrolls
 	// without saying so reads as one that is simply cut off — which is what
@@ -377,6 +385,6 @@ func (a *App) showHelp() {
 		a.app.SetFocus(a.editor)
 	})
 
-	a.pages.AddPage(pageHelp, centred(view, 84, 40), true, true)
+	a.pages.AddPage(pageHelp, centredText(view, text, 84, 40), true, true)
 	a.app.SetFocus(view)
 }

@@ -54,7 +54,11 @@ type status struct {
 	err           error
 	limitInjected int
 	truncated     bool
-	message       string
+	// columnsLeft is how many of the result's columns have scrolled off the
+	// left of the grid. Zero when the grid is at its first column, which is
+	// the ordinary case and says nothing.
+	columnsLeft int
+	message     string
 }
 
 // field is one item of the bar, with whether it may be dropped when the line
@@ -245,6 +249,15 @@ func (s status) fields() []field {
 		if s.err != nil {
 			out = add(out, tag(colourDanger, oneLine(s.err.Error())), false, 0)
 		}
+	}
+
+	// Outside the switch, and never dropped. A grid scrolled sideways is the
+	// same kind of fact as a truncated result — what is on screen is not the
+	// whole answer — and it outlives the statement that produced it, so it
+	// cannot belong to any one phase. Its absence is silence rather than
+	// "0 columns", which is what leaves the notice any force.
+	if s.columnsLeft > 0 {
+		out = add(out, tag(colourNotice, plural(s.columnsLeft, "column")+" left of view"), false, 0)
 	}
 
 	if s.message != "" {

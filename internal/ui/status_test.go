@@ -424,3 +424,60 @@ func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
 		t.Errorf("inside a transaction: %q does not say the work can be undone", inside)
 	}
 }
+
+// A grid wider than the terminal scrolls, and the columns that go off the left
+// take the row's identity with them: a screenful starting at "total_cents" is
+// indistinguishable from one whose query never selected an id. The bar is the
+// only thing that can say so.
+func TestStatusSaysHowManyColumnsAreOffTheLeft(t *testing.T) {
+	s := baseStatus()
+	s.phase = phaseDone
+	s.rows = 5
+	s.columnsLeft = 3
+
+	got := s.renderWidth(120)
+	if !strings.Contains(got, "3 columns left of view") {
+		t.Errorf("the scrolled-off columns were not reported: %q", got)
+	}
+}
+
+// Scrolled back to the first column there is nothing to admit, and a bar that
+// says "0 columns left of view" is noise where the notice used to mean
+// something.
+func TestStatusIsSilentWhenNothingIsOffTheLeft(t *testing.T) {
+	s := baseStatus()
+	s.phase = phaseDone
+	s.rows = 5
+
+	if got := s.renderWidth(120); strings.Contains(got, "left of view") {
+		t.Errorf("an unscrolled grid was reported as scrolled: %q", got)
+	}
+}
+
+// It is the same kind of fact as a truncated result — what is on screen is not
+// the whole answer — so it survives a narrow terminal for the same reason.
+func TestStatusKeepsTheColumnNoticeAtAnyWidth(t *testing.T) {
+	s := baseStatus()
+	s.phase = phaseDone
+	s.rows = 50000
+	s.elapsed = 1234 * time.Millisecond
+	s.columnsLeft = 2
+
+	for _, width := range []int{120, 80, 60, 40} {
+		got := s.renderWidth(width)
+		if !strings.Contains(got, "2 columns left of view") {
+			t.Errorf("width %d: the scrolled-off columns were dropped: %q", width, got)
+		}
+	}
+}
+
+// One column off the left is not "1 columns".
+func TestStatusCountsASingleScrolledColumnInTheSingular(t *testing.T) {
+	s := baseStatus()
+	s.phase = phaseDone
+	s.columnsLeft = 1
+
+	if got := s.renderWidth(120); !strings.Contains(got, "1 column left of view") {
+		t.Errorf("the singular was not used: %q", got)
+	}
+}

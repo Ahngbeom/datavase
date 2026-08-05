@@ -1101,7 +1101,35 @@ func (a *App) currentStatus() status {
 		s.vimMode = a.vim.Mode().String()
 		s.vimPending = a.vim.Pending()
 	}
+	s.columnsLeft = a.columnsOffView()
 	return s
+}
+
+// columnsOffView is how many of the result's columns have scrolled off the
+// left of the grid.
+//
+// Read here rather than pushed on every keypress: the grid scrolls itself in
+// response to the arrow keys, so there is no moment this application could
+// hook that the grid does not already know about. Reading the offset is also
+// the only exact answer — how many columns fit on the right depends on widths
+// tview works out while it draws.
+//
+// It reports nothing while another tab is in front. The offset survives the
+// tab switch, and a bar warning about a grid nobody is looking at is a warning
+// that gets learned as noise.
+func (a *App) columnsOffView() int {
+	if a.resultTabs == nil || a.resultTabs.current() != tabResults {
+		return 0
+	}
+	if a.buf.ColumnCount() == 0 {
+		return 0
+	}
+
+	_, column := a.grid.GetOffset()
+	if column < 0 {
+		return 0
+	}
+	return column
 }
 
 // record adds a finished statement to the query history.

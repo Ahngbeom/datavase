@@ -958,21 +958,74 @@ func TestCompletionWithNoMatchesSaysSo(t *testing.T) {
 	}
 }
 
+// seedCatalogTable creates a table before any interface exists.
+//
+// It cannot go through the harness the way seedRows does: the refresh this is
+// for is started by New, so a table created afterwards is not in the snapshot
+// it takes. That is the whole reason this opens a connection of its own.
+func seedCatalogTable(t *testing.T, name string) {
+	t.Helper()
+
+	ds, password := testmysql.DataSource(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := db.Open(ctx, ds, password, "")
+	if err != nil {
+		t.Fatalf("db.Open() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if _, err := conn.Exec(ctx, "DROP TABLE IF EXISTS "+name); err != nil {
+			t.Errorf("dropping %s: %v", name, err)
+		}
+		conn.Close()
+	})
+
+	for _, sql := range []string{
+		"DROP TABLE IF EXISTS " + name,
+		"CREATE TABLE " + name + " (n INT PRIMARY KEY)",
+	} {
+		if _, err := conn.Exec(ctx, sql); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+}
+
 // The refresh that runs at startup has to actually populate the cache —
 // without it completion would stay empty until a manual reload.
+//
+// It brings its own table, and looks for that one rather than counting
+// whatever the schema happens to hold. Counting passed on tables another test
+// had left behind and failed against a database that had none, so the result
+// said more about what had run before it than about the refresh — and this was
+// the one test in the package that could not be run on its own.
 func TestSchemaCacheIsPopulatedInTheBackground(t *testing.T) {
+	const fixture = "dv_catalog_fixture"
+	seedCatalogTable(t, fixture)
+
 	h := newHarness(t, config.EnvDev)
 	name := h.app.conn.DataSource().Name
 
 	h.waitForBackgroundRefresh(name)
 
+	// Schemas landing is enough of a signal: Cache.Save writes the schemas, the
+	// tables and the columns of one snapshot in a single transaction, so there
+	// is no moment where the first is visible and the rest are not.
 	tables, err := h.cache.Tables(context.Background(), name, testmysql.DefaultDatabase)
 	if err != nil {
 		t.Fatalf("Tables() error = %v", err)
 	}
-	if len(tables) == 0 {
-		t.Error("the cache holds no tables after the background refresh")
+
+	for _, cached := range tables {
+		if cached.Name == fixture {
+			return
+		}
 	}
+	t.Errorf("the background refresh did not cache %q; the cache holds %v", fixture, tableNames(tables))
 }
 
 // seedRows gives the interface tests a table of their own to write to, so a

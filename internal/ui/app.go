@@ -399,9 +399,14 @@ func (a *App) buildWidgets() {
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.content = newGridContent(a.buf)
+	// The header row is pinned, and so is the first column. Saying how many
+	// columns have scrolled off is half the answer; the other half is keeping
+	// the one that says which row this is, since a screenful beginning at
+	// "total_cents" is unreadable however honestly the bar reports it — and the
+	// first column of a SELECT is where people put the id.
 	a.grid = tview.NewTable().
 		SetContent(a.content).
-		SetFixed(1, 0).
+		SetFixed(1, 1).
 		SetSelectable(true, true)
 	a.grid.SetInputCapture(a.gridKey)
 

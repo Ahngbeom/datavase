@@ -87,3 +87,58 @@ func TestTheColumnNoticeIsSilentOnAnotherTab(t *testing.T) {
 const wideSelect = "SELECT " +
 	"REPEAT('a',18) AS a, REPEAT('b',18) AS b, REPEAT('c',18) AS c, REPEAT('d',18) AS d, " +
 	"REPEAT('e',18) AS e, REPEAT('f',18) AS f, REPEAT('g',18) AS g, REPEAT('h',18) AS h"
+
+// Saying how many columns have gone is half the answer. The other half is
+// keeping the one that says which row this is: a screenful beginning at
+// "total_cents" is unreadable however honestly the bar reports it, because
+// nothing on it identifies the row.
+//
+// The first column of a SELECT is the one people put the id in, so it is
+// pinned and the rest scroll past it.
+func TestTheFirstColumnStaysWhileTheRestScroll(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.runSQL(wideSelect, 1)
+
+	h.do(keymap.ActionNextPane)
+	h.waitFor("the grid", func(a *App) bool { return a.app.GetFocus() == a.grid })
+
+	for i := 0; i < 6; i++ {
+		h.press(tcell.KeyRight)
+	}
+	h.waitFor("the grid to scroll", func(a *App) bool {
+		_, column := a.grid.GetOffset()
+		return column > 0
+	})
+
+	screen := h.text()
+	if !strings.Contains(screen, "a") || !strings.Contains(screen, "aaaaaaaaaaaaaaaaaa") {
+		t.Errorf("the first column went off the left with the others:\n%s", screen)
+	}
+}
+
+// The pinned column is on screen, so it is not one of the columns that have
+// gone — and the count must not quietly start including it.
+func TestThePinnedColumnIsNotCountedAsGone(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.runSQL(wideSelect, 1)
+
+	h.do(keymap.ActionNextPane)
+	h.waitFor("the grid", func(a *App) bool { return a.app.GetFocus() == a.grid })
+
+	for i := 0; i < 6; i++ {
+		h.press(tcell.KeyRight)
+	}
+	h.waitFor("the grid to scroll", func(a *App) bool {
+		_, column := a.grid.GetOffset()
+		return column > 0
+	})
+
+	h.inspect(func(a *App) bool {
+		_, column := a.grid.GetOffset()
+		// Columns 1..column are hidden; column 0 is pinned and on screen.
+		if got := a.columnsOffView(); got != column {
+			t.Errorf("columnsOffView() = %d with an offset of %d", got, column)
+		}
+		return true
+	})
+}

@@ -22,6 +22,10 @@ jobs:
       - run: make lint
       - run: make test
 
+      # install.sh is now the first thing a new user runs, and a shell script
+      # fails at the person it was meant to help rather than at build time.
+      - run: shellcheck install.sh
+
   # The behaviour worth protecting — the guard against a real server, streamed
   # results, KILL QUERY, catalog reads and the interface itself — only exists
   # under the integration tag, so CI that skipped this would be checking the
@@ -57,27 +61,31 @@ jobs:
 
       - run: make test-integration
 
-  # Every platform the release builds for, checked on every change rather than
-  # discovered at tag time when it is too late to fix quietly.
-  cross-build:
+  # The release, rehearsed on every change rather than discovered at tag time
+  # when it is too late to fix quietly.
+  #
+  # This replaces a build matrix that listed the platforms a second time: the
+  # snapshot builds every target .goreleaser.yaml declares, so the list cannot
+  # drift, and it also exercises the archives, the Linux packages and the
+  # Homebrew cask — none of which a `go build` would have compiled at all. It
+  # publishes nothing; --snapshot refuses to.
+  release-config:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        goos: [linux, darwin, windows]
-        goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
-
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - env:
-          CGO_ENABLED: 0
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -o /dev/null ./cmd/dv
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean

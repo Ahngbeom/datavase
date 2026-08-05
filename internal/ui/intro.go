@@ -73,15 +73,16 @@ func (a *App) introGuardLine() string {
 }
 
 func (a *App) showIntro() {
+	text := a.introText()
 	view := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(a.introText())
+		SetText(text)
 
 	view.SetBorder(true).SetTitle(" welcome ")
 	view.SetBackgroundColor(tcell.ColorBlack)
 	view.SetInputCapture(a.introKey)
 
-	a.pages.AddPage(pageIntro, centred(view, 76, 18), true, true)
+	a.pages.AddPage(pageIntro, centredText(view, text, 76, 18), true, true)
 	// This is what hands the card the keyboard when it is reopened from the
 	// palette, over an interface that is already running. On the first run it
 	// is redundant rather than load-bearing: Run's SetRoot takes the focus

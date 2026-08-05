@@ -241,3 +241,31 @@ func (h *harness) waitForOtherSession(t *testing.T, contains string) {
 	}
 	t.Fatalf("no other session is running %q:\n%s", contains, h.text())
 }
+
+// The tab is composed while it is still hidden, so the width it is laid out
+// for has to be the width it is eventually drawn at rather than the zero rect
+// a hidden tab reports. It used to be the latter, and the twenty-column floor
+// that fell back to folded every statement into a stack of four-word lines.
+func TestTheProcessListUsesTheWholeWidthOfThePane(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.do(keymap.ActionSessions)
+	if !h.waitForScreen("information_schema") {
+		t.Fatalf("the process list never appeared:\n%s", h.text())
+	}
+
+	// The listing quotes the statement it is itself running, which is long
+	// enough to fold on any terminal. On a pane this wide it must fold near
+	// the pane's width, not near the floor.
+	widest := 0
+	for _, line := range strings.Split(h.text(), "\n") {
+		if strings.Contains(line, "information_schema") || strings.Contains(line, "SELECT") {
+			if n := len(strings.TrimSpace(line)); n > widest {
+				widest = n
+			}
+		}
+	}
+	if widest <= 30 {
+		t.Errorf("the widest statement line is %d cells on a pane far wider:\n%s", widest, h.text())
+	}
+}

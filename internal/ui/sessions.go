@@ -10,6 +10,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/match"
 	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/result"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -20,9 +21,57 @@ const sessionsTimeout = 20 * time.Second
 
 const sessionsPlaceholder = "Nothing read yet."
 
+// sessionsPane shows the process list, or the lock waits, laid out for the
+// width it is actually drawn at.
+//
+// The width has to be read during Draw. Asking the widget when the text is
+// composed returns the zero rect tview holds for a tab that has never been
+// shown, and the twenty-column floor that answer falls back to folded a
+// statement into a stack of four-word lines on an eighty-column terminal.
+// Laying out per frame also means the listing re-folds when the window is
+// resized, rather than keeping the shape it had when it was read.
+//
+// It holds the layout function rather than the listing, because two different
+// things are shown here — a process list and a tree of lock waits — and the
+// pane has no business knowing which of them it is holding.
+type sessionsPane struct {
+	*tview.TextView
+
+	// layout renders whatever is showing at a width, or nil before anything
+	// has been read.
+	layout func(width int) string
+	// width is what the text was last laid out for, so an unchanged size
+	// costs nothing.
+	width int
+}
+
+func newSessionsPane() *sessionsPane {
+	// Deliberately not wrapped by the widget: the listing is folded to width
+	// before it gets here, and a second wrap would break the indentation that
+	// says which statement belongs to which connection.
+	view := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	view.SetText(sessionsPlaceholder)
+
+	return &sessionsPane{TextView: view}
+}
+
+// show hands the pane something to render, to be laid out the next time it is
+// drawn.
+func (p *sessionsPane) show(layout func(width int) string) {
+	p.layout, p.width = layout, 0
+	p.ScrollToBeginning()
+}
+
+func (p *sessionsPane) Draw(screen tcell.Screen) {
+	if _, _, width, _ := p.GetInnerRect(); p.layout != nil && width > 0 && width != p.width {
+		p.width = width
+		p.SetText(p.layout(width))
+	}
+	p.TextView.Draw(screen)
+}
+
 func (a *App) buildSessionsTab() tview.Primitive {
-	a.sessionsView = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	a.sessionsView.SetText(sessionsPlaceholder)
+	a.sessionsView = newSessionsPane()
 	return a.sessionsView
 }
 
@@ -55,7 +104,7 @@ func (a *App) refreshSessions(keep string) {
 				return
 			}
 
-			a.sessionsView.SetText(sessionsText(listing, a.paneWidth(a.sessionsView))).ScrollToBeginning()
+			a.sessionsView.show(func(width int) string { return sessionsText(listing, width) })
 			a.resultTabs.show(tabSessions)
 			if keep != "" {
 				a.notice(keep)
@@ -175,15 +224,6 @@ func wrapPlain(text string, width int) []string {
 		lines = append(lines, string(line))
 	}
 	return lines
-}
-
-// paneWidth is the room a pane has, read rather than assumed.
-func (a *App) paneWidth(v *tview.TextView) int {
-	_, _, width, _ := v.GetInnerRect()
-	if width < 20 {
-		return 20
-	}
-	return width
 }
 
 // killPhrase is the word that has to be typed before a kill goes through, or
@@ -388,7 +428,7 @@ func (a *App) showLocks() {
 				return
 			}
 
-			a.sessionsView.SetText(lockTreeText(tree, a.paneWidth(a.sessionsView))).ScrollToBeginning()
+			a.sessionsView.show(func(width int) string { return lockTreeText(tree, width) })
 			a.resultTabs.show(tabSessions)
 			a.notice(lockSummary(tree))
 		})

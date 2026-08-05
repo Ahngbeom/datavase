@@ -43,12 +43,11 @@ func unlockHint(paletteKey string) string {
 // here on purpose: a dialog offering "run anyway" is a dialog people learn
 // to dismiss, which is exactly how the production accident happens.
 func (a *App) refuse(d guard.Decision) {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText(refusalText(d, a.keyLabel(keymap.ActionCommandPalette))).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(int, string) { a.closeDialog() })
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	modal.SetTextColor(colourDanger)
 	a.openDialog(modal)
 }
@@ -66,7 +65,7 @@ func (a *App) confirm(stmt sqlparse.Statement, d guard.Decision) {
 }
 
 func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText(fmt.Sprintf("%s\n\n%s\n\nRun it?", d.Reason, preview(stmt.SQL))).
 		AddButtons([]string{"Cancel", "Run"}).
 		SetDoneFunc(func(_ int, label string) {
@@ -78,7 +77,6 @@ func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
 			a.start(stmt, d)
 		})
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	a.openDialog(modal)
 }
 
@@ -131,6 +129,23 @@ func preview(sql string) string {
 
 	flat := strings.Join(strings.Fields(sql), " ")
 	return result.EscapeTags(result.Truncate(flat, limit))
+}
+
+// newModal is the one place a tview Modal is built, because it is the one
+// place its background can be set completely.
+//
+// A Modal is three primitives — a Box, a Frame and a Form — and its own
+// SetBackgroundColor reaches only the last two. The Box is what draws the
+// border, so a Modal told to be black came out as a ring of the library's
+// blue around black text. Every other dialog here draws its border on the
+// background it was given; these four were the ones that did not, and one of
+// them is the guard's refusal.
+func newModal() *tview.Modal {
+	modal := tview.NewModal()
+	modal.SetBackgroundColor(tcell.ColorBlack)
+	// The embedded Box, which SetBackgroundColor above does not reach.
+	modal.Box.SetBackgroundColor(tcell.ColorBlack)
+	return modal
 }
 
 func (a *App) openDialog(p tview.Primitive) {

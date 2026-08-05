@@ -1177,7 +1177,7 @@ func (a *App) transactionControl(verb string) {
 // committed. Leaving would roll it back, which is the safe reading of a
 // session that ended without saying commit — but not one to do silently.
 func (a *App) confirmDiscardTransaction() {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText("A transaction is open.\n\nQuitting rolls it back.").
 		AddButtons([]string{"Cancel", "Roll back and quit"}).
 		SetDoneFunc(func(_ int, label string) {
@@ -1187,7 +1187,6 @@ func (a *App) confirmDiscardTransaction() {
 			}
 		})
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	a.openDialog(modal)
 }
 

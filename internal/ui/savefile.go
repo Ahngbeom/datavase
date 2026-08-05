@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // saveFile writes the editor back to the file it came from.
@@ -71,7 +69,7 @@ func (a *App) writeFile() {
 // user's own text and their own file — the point is that it takes a decision
 // rather than a reflex.
 func (a *App) confirmDiscard(text, proceedLabel string, proceed func()) {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText(text).
 		AddButtons([]string{"Cancel", proceedLabel}).
 		SetDoneFunc(func(_ int, label string) {
@@ -81,7 +79,6 @@ func (a *App) confirmDiscard(text, proceedLabel string, proceed func()) {
 			}
 		})
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	modal.SetTextColor(colourNotice)
 	a.openDialog(modal)
 }

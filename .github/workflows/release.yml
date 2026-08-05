@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write # goreleaser creates the GitHub release and uploads archives
+  id-token: write # the attestation is signed against this run's OIDC identity
+  attestations: write # and stored on the repository
 
 jobs:
   goreleaser:

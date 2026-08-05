@@ -10,7 +10,30 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+
+    # HOMEBREW_TAP_GITHUB_TOKEN is an environment secret, and an environment
+    # secret reaches a job only when the job names its environment. Without
+    # this line it does not arrive as an error — it arrives as an empty string,
+    # indistinguishable from a secret nobody added, and the cask is skipped by
+    # a release that otherwise looks like it worked.
+    environment: HOMEBREW_TAP
+
     steps:
+      # Skipping the cask keeps a release from failing after it has already
+      # uploaded its archives, but a silent skip cannot be told apart from a
+      # misconfigured one — an environment secret reaching a job that did not
+      # name its environment is empty, exactly like one nobody added. Say so
+      # where the run can be seen, and carry on.
+      - name: Report whether the Homebrew cask can be published
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN is empty. The Homebrew cask will not be published, so 'brew install Ahngbeom/tap/dv' will keep serving the previous version. Every other artifact is unaffected."
+          else
+            echo "Homebrew tap token present; the cask will be published."
+          fi
+
       - uses: actions/checkout@v4
         with:
           # goreleaser builds the changelog from the commits since the last

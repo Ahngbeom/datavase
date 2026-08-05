@@ -445,9 +445,14 @@ func (a *App) buildWidgets() {
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.content = newGridContent(a.buf)
+	// The header row is pinned, and so is the first column. Saying how many
+	// columns have scrolled off is half the answer; the other half is keeping
+	// the one that says which row this is, since a screenful beginning at
+	// "total_cents" is unreadable however honestly the bar reports it — and the
+	// first column of a SELECT is where people put the id.
 	a.grid = tview.NewTable().
 		SetContent(a.content).
-		SetFixed(1, 0).
+		SetFixed(1, 1).
 		SetSelectable(true, true)
 	a.grid.SetInputCapture(a.gridKey)
 
@@ -1151,7 +1156,35 @@ func (a *App) currentStatus() status {
 		s.vimMode = a.vim.Mode().String()
 		s.vimPending = a.vim.Pending()
 	}
+	s.columnsLeft = a.columnsOffView()
 	return s
+}
+
+// columnsOffView is how many of the result's columns have scrolled off the
+// left of the grid.
+//
+// Read here rather than pushed on every keypress: the grid scrolls itself in
+// response to the arrow keys, so there is no moment this application could
+// hook that the grid does not already know about. Reading the offset is also
+// the only exact answer — how many columns fit on the right depends on widths
+// tview works out while it draws.
+//
+// It reports nothing while another tab is in front. The offset survives the
+// tab switch, and a bar warning about a grid nobody is looking at is a warning
+// that gets learned as noise.
+func (a *App) columnsOffView() int {
+	if a.resultTabs == nil || a.resultTabs.current() != tabResults {
+		return 0
+	}
+	if a.buf.ColumnCount() == 0 {
+		return 0
+	}
+
+	_, column := a.grid.GetOffset()
+	if column < 0 {
+		return 0
+	}
+	return column
 }
 
 // record adds a finished statement to the query history.

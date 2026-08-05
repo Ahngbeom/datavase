@@ -106,6 +106,7 @@ func (a *App) usage() {
 	fmt.Fprint(a.Err, `datavase — terminal MySQL client
 
 usage:
+  dv init               set up the first datasource, asking for what it needs
   dv [open <name>]      open the TUI
   dv open <name> --dir <path>
                         open the TUI with a worktree of SQL files attached

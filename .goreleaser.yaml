@@ -61,9 +61,16 @@ homebrew_casks:
       name: homebrew-tap
       branch: main
       # A separate repository, which the workflow's GITHUB_TOKEN cannot write
-      # to. index rather than .Env.X so a missing variable is an empty string
-      # instead of a template error that fails the whole release.
-      token: '{{ index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}'
+      # to.
+      #
+      # This field takes `{{ .Env.NAME }}` and nothing else — goreleaser checks
+      # the shape of the string rather than rendering it, and rejects any other
+      # form. `{{ index .Env "..." }}` here failed v0.6.0 after the release had
+      # been published, with "expected {{ .Env.VAR_NAME }} only". The safety
+      # that form was reaching for lives on skip_upload below, which does take
+      # an arbitrary template, and release.yml always defines the variable —
+      # empty when the secret is absent — so this never resolves a missing key.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
 
     # Without the token there is nowhere to push, and a release that failed for
     # that reason would have already uploaded the archives — leaving a tag that

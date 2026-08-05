@@ -16,6 +16,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/history"
+	"github.com/Ahngbeom/datavase/internal/intro"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/secret"
@@ -137,6 +138,14 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		}
 	}
 
+	// Whether the first-run card has been shown. Optional for the same reason:
+	// a state directory that cannot be written costs the card being shown once
+	// more, not the session.
+	var introPath string
+	if path, err := intro.DefaultPath(); err == nil {
+		introPath = path
+	}
+
 	// The worktree is optional in the same way: a path that no longer exists —
 	// a branch cleaned up since the command was last run — should cost the
 	// file list, not the session the user is trying to start.
@@ -159,12 +168,13 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	// the one it leaves, and a session closed twice or by nobody is how a
 	// tunnel outlives the thing it was carrying.
 	return ui.New(sess, cfg, ui.Deps{
-		Keys:     keys,
-		Cache:    cache,
-		History:  hist,
-		Worktree: wt,
-		Recent:   recents,
-		Connect:  connectTo,
+		Keys:      keys,
+		Cache:     cache,
+		History:   hist,
+		Worktree:  wt,
+		Recent:    recents,
+		IntroPath: introPath,
+		Connect:   connectTo,
 	}).Run()
 }
 

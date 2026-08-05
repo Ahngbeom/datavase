@@ -33,6 +33,11 @@ const (
 	cmdDisableWrites = "lock writes"
 )
 
+// cmdGettingStarted reopens the first-run card. It is a constant because the
+// card names it as the way back to itself, and a name that drifted from the
+// command would be an instruction that does not work.
+const cmdGettingStarted = "getting started"
+
 // paletteCategories are the headings a browsed palette is grouped under, in
 // the order they appear.
 //
@@ -379,6 +384,12 @@ func paletteCommands() []command {
 			run:      func(a *App) { a.editorAction(keymap.ActionDeleteLine) },
 		},
 
+		{
+			name:     cmdGettingStarted,
+			summary:  "show the card this session opened with",
+			category: catOther,
+			run:      (*App).showIntro,
+		},
 		{
 			name:     "help",
 			category: catOther,

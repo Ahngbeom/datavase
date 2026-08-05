@@ -36,6 +36,20 @@ added by editing the file.
 Nothing changes for an existing configuration: `dv` finds it and opens it
 exactly as before.
 
+**The first session opens on a short card.** The few keys worth knowing, and —
+the part nothing else says — what the guard will do to a statement that changes
+data on this particular datasource. Against production it says they are refused
+until writes are unlocked; anywhere else, that they ask first.
+
+Any key puts it away, and a key it named then does what it named: pressing `F1`
+on a card that says "F1 show this help" opens the reference rather than nothing.
+`getting started` in the command palette brings it back, because making a dialog
+go away is not the same as having read it.
+
+It is recorded under `XDG_STATE_HOME`, alongside the schema cache and the query
+history, and is optional in the same way: a state directory that cannot be
+written costs the card being shown once more, never the session.
+
 **The command palette is grouped when you browse it.** Opened with nothing
 typed it now reads under headings — *Running*, *The result*, *Finding things*
 and so on — instead of forty commands in one undifferentiated run. Type and it

@@ -438,14 +438,49 @@ func (a *App) editorDetail() string {
 }
 
 // resultDetail says what the empty results tab would otherwise not say.
+func (a *App) resultDetail() string {
+	return resultHint(resultState{
+		tab:     a.resultTabs.current(),
+		columns: a.buf.ColumnCount(),
+		running: a.running != nil,
+		wrote:   a.status.written != nil,
+	})
+}
+
+// resultState is everything the hint depends on.
+type resultState struct {
+	tab     string
+	columns int
+	running bool
+	// wrote says the last statement changed rows instead of returning them,
+	// which is an empty grid for a reason rather than an empty grid.
+	wrote bool
+}
+
+// resultHint is the trailing line on the results tab's header.
 //
 // With no box around it, an empty region is simply blank — which reads as a
-// gap in the layout rather than as a pane waiting for a statement.
-func (a *App) resultDetail() string {
-	if a.resultTabs.current() == tabResults && a.buf.ColumnCount() == 0 {
+// gap in the layout rather than as a pane waiting for a statement. So the
+// header says which it is, and it has to say the right one: it used to know
+// only "run a statement to see rows here", and went on saying it while a
+// statement was running and the bar two rows below said so. A pane telling
+// the user to do the thing they are watching happen is the same contradiction
+// the finders opened with.
+func resultHint(s resultState) string {
+	if s.tab != tabResults || s.columns > 0 {
+		return ""
+	}
+
+	switch {
+	case s.running:
+		return "waiting for the first row…"
+	case s.wrote:
+		// The grid is empty because the server sent a count rather than rows,
+		// which the bar reports and the pane otherwise contradicts.
+		return "no rows: that statement changed data"
+	default:
 		return "run a statement to see rows here"
 	}
-	return ""
 }
 
 // currentTopBar is where the session is, read at draw time so the schema and

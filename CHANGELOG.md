@@ -5,7 +5,57 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.6.0 — 2026-08-05
+
+**Nothing here needs doing before you upgrade.** No configuration file
+changes, and an existing keychain entry keeps working exactly as it did — the
+new environment variable is consulted first, and nobody has one set.
+
+If you installed with `go install`, the new install script and the Homebrew
+cask are alternatives rather than replacements; upgrading the way you already
+do still works.
+
 ### Added
+
+**Installing no longer means building.** On macOS or Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Ahngbeom/datavase/main/install.sh | sh
+```
+
+or `brew install Ahngbeom/tap/dv`, or a `.deb`, `.rpm` or `.apk` from the
+release page. Until now there were two ways in and both asked for something:
+`go install` needs a Go toolchain, which is the build a single static binary
+exists to avoid, and the archive on the release page did not run on macOS at
+all. The binary is signed ad-hoc by the Go linker and notarized by nobody, and
+a file a browser downloaded carries the quarantine attribute that macOS
+enforces against exactly that — so the instruction to download it and put `dv`
+on the PATH was one that could not be followed.
+
+Nothing curl downloads is quarantined, and the Homebrew cask strips the
+attribute on install, so both routes run the moment they finish. An archive
+taken by hand still needs `xattr -dr com.apple.quarantine ./dv`, which the
+release page now says instead of leaving it to be discovered.
+
+The script verifies against `checksums.txt` before it installs anything, takes
+`DV_VERSION` to pin a release and `DV_INSTALL_DIR` to choose where the binary
+goes, and installs by rename so a `dv` that is running is never the
+half-written file.
+
+**A password can come from the environment.** `DATAVASE_PASSWORD_<NAME>` —
+the datasource name upper-cased, with anything that cannot appear in a
+variable name turned into `_`, so `prod-app` is `DATAVASE_PASSWORD_PROD_APP`.
+
+A headless Linux server runs no D-Bus Secret Service, and that is what the
+keychain needs. On the machine a terminal database client is most likely to be
+installed on there was nowhere to put a password and no other way to supply
+one: `dv init` proved the connection, wrote the configuration, then failed and
+pointed at `dv auth`, which needs the same keychain that had just refused. The
+wizard now finishes and names the variable to export.
+
+It takes precedence over the keychain rather than filling in behind it, so the
+same command does the same thing on every machine. It is also how a password
+is supplied in CI or a container.
 
 **`dv init` sets up the first datasource by asking.** Until now the first thing
 a new user met was a YAML example printed to stderr, which asked someone who

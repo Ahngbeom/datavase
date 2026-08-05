@@ -64,7 +64,28 @@ make build      # produces ./dv — CGO-free, single static binary
 Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
 no companion tools. It is one binary.
 
+## Set up
+
+```sh
+dv init
+```
+
+It asks for the connection, tests it against the server **before** writing
+anything, stores the password in the keychain, and asks which keyboard you
+want. Running `dv` with no configuration does the same thing, so there is
+nothing to read first.
+
+Every question but one comes with a default that Enter takes. `env` does not:
+it is the only answer that decides what the guard does, so it has to be chosen
+rather than accepted.
+
+It refuses to touch a `config.yaml` that already exists — a second datasource
+is added by editing the file.
+
 ## Configure
+
+`dv init` writes this file; the rest of this section is what it looks like
+afterwards, and what to add by hand.
 
 `~/.config/datavase/config.yaml` (or `$XDG_CONFIG_HOME/datavase/config.yaml`):
 
@@ -106,6 +127,7 @@ immediately instead of surfacing later as a confusing error.
 ## Use
 
 ```sh
+dv init               # set up the first datasource
 dv                    # opens the only configured datasource
 dv open prod-app      # opens a named one
 dv ls                 # list datasources and whether a password is stored

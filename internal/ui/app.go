@@ -265,6 +265,10 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	}
 	a.status.message = a.openingMessage(conn.ServerVersion())
 
+	// Before any widget is built: tview copies its palette into each one as it
+	// is created, so a default claimed afterwards would reach nothing.
+	applyTheme()
+
 	a.buildWidgets()
 	a.buildLayout()
 	a.bindKeys()

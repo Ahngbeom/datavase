@@ -180,10 +180,10 @@ func writeProcess(b *strings.Builder, p procs.Process, width int) {
 func colouredAge(p procs.Process) string {
 	age := p.Elapsed.Truncate(time.Second).String()
 	if !p.Working() {
-		return fmt.Sprintf("[gray]idle %s[-]", age)
+		return tag(colourMuted, "idle "+age)
 	}
 	if p.Elapsed >= longRunning {
-		return fmt.Sprintf("[red]%s[-]", age)
+		return tag(colourDanger, age)
 	}
 	return age
 }
@@ -384,14 +384,14 @@ func writeBlocked(b *strings.Builder, n *procs.Blocked, prefix, childPrefix stri
 	head := fmt.Sprintf("%d  %s@%s", n.Thread.ID, n.Thread.User, n.Thread.Host)
 	switch {
 	case n.Waited > 0:
-		head += fmt.Sprintf("  [red]waiting %s[-]", n.Waited.Truncate(time.Second))
+		head += "  " + tag(colourDanger, fmt.Sprintf("waiting %s", n.Waited.Truncate(time.Second)))
 	case n.Thread.Idle:
 		// The most common answer to "why is everything stuck", and the one a
 		// list of running statements cannot give: it holds the lock and is
 		// running nothing.
-		head += "  [red]holding, idle in transaction[-]"
+		head += "  " + tag(colourDanger, "holding, idle in transaction")
 	default:
-		head += "  [red]holding[-]"
+		head += "  " + tag(colourDanger, "holding")
 	}
 
 	fmt.Fprintf(b, "%s%s\n", prefix, result.EscapeTags(head))

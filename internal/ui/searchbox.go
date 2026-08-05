@@ -162,7 +162,11 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 			// be swallowed as a colour tag.
 			main := result.EscapeTags(item.primary)
 			if item.group {
-				main = tag(colourNotice, item.primary)
+				// Weight rather than the notice colour: a category is not a
+				// state anyone could forget they are in, and spending that cue
+				// on the word "Files" leaves nothing that means "writes are
+				// unlocked" and nothing else.
+				main = headingTag(main)
 			}
 
 			list.AddItem(main, result.EscapeTags(item.secondary), 0, func() {

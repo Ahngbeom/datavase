@@ -7,7 +7,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/intro"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -38,8 +37,8 @@ const introKeyColumn = 12
 func (a *App) introText() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "[aqua]datavase[-] — connected to [%s]%s[-]\n\n",
-		colourAccent, result.EscapeTags(a.conn.DataSource().Name))
+	fmt.Fprintf(&b, "%s — connected to %s\n\n",
+		tag(colourAccent, "datavase"), tag(colourAccent, a.conn.DataSource().Name))
 
 	for _, action := range startHere {
 		fmt.Fprintf(&b, "  %s  %s\n",
@@ -48,14 +47,14 @@ func (a *App) introText() string {
 
 	// What the guard will do is the one thing about this session that cannot be
 	// worked out by pressing keys, and it is the reason the rest of this exists.
-	fmt.Fprintf(&b, "\n[%s]%s[-]\n", colourNotice, a.introGuardLine())
+	fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, a.introGuardLine()))
 
 	if a.keys.Modal() {
-		b.WriteString("\n[gray]The editor is modal: press i before you type, Esc to leave.[-]\n")
+		b.WriteString("\n" + tag(colourMuted, "The editor is modal: press i before you type, Esc to leave.") + "\n")
 	}
 
-	fmt.Fprintf(&b, "\n[gray]Enter to start · %s then \"%s\" to read this again.[-]",
-		result.EscapeTags(a.keyLabel(keymap.ActionCommandPalette)), cmdGettingStarted)
+	b.WriteString("\n" + tag(colourMuted, fmt.Sprintf("Enter to start · %s then %q to read this again.",
+		a.keyLabel(keymap.ActionCommandPalette), cmdGettingStarted)))
 	return b.String()
 }
 

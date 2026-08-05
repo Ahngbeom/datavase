@@ -265,16 +265,16 @@ func (a *App) helpText() string {
 			action.Describe())
 	}
 
-	b.WriteString("[aqua]datavase[-]\n")
+	b.WriteString(tag(colourAccent, "datavase") + "\n")
 
-	b.WriteString("\n[yellow]Start here[-]\n")
+	b.WriteString("\n" + headingTag("Start here") + "\n")
 	for _, action := range startHere {
 		line(action)
 	}
 	b.WriteString(a.modalEscapeHatch())
 
 	for _, group := range helpGroups {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", group.title)
+		fmt.Fprintf(&b, "\n%s\n", headingTag(group.title))
 
 		for _, action := range group.actions {
 			line(action)
@@ -286,14 +286,14 @@ func (a *App) helpText() string {
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
 	if advice := keymap.TerminalAdvice(os.Getenv("TERM"), a.keys); advice != "" {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", result.EscapeTags(advice))
+		fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, advice))
 	}
 	if onMac {
-		b.WriteString("\n[gray]⌘ bindings need the terminal to forward them:\n" +
-			"run `dv keys --ghostty` or `dv keys --iterm2` outside datavase.[-]\n")
+		b.WriteString("\n" + tag(colourMuted, "⌘ bindings need the terminal to forward them:\n"+
+			"run `dv keys --ghostty` or `dv keys --iterm2` outside datavase.") + "\n")
 	}
 
-	b.WriteString("\n[gray]Press Escape to close.[-]")
+	b.WriteString("\n" + tag(colourMuted, "Press Escape to close."))
 	return b.String()
 }
 
@@ -310,7 +310,7 @@ func (a *App) helpText() string {
 func commandHelpText(paletteKey string) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\n[yellow]Commands — %s, then type[-]\n", result.EscapeTags(paletteKey))
+	fmt.Fprintf(&b, "\n%s\n", headingTag("Commands — "+result.EscapeTags(paletteKey)+", then type"))
 	for _, c := range paletteCommands() {
 		fmt.Fprintf(&b, "  %s  %s\n",
 			keymap.PadLabel(result.EscapeTags(c.name), helpKeyColumn), result.EscapeTags(c.summary))
@@ -330,15 +330,15 @@ func (a *App) vimHelp() string {
 
 	var b strings.Builder
 	for _, group := range vim.Reference() {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", group.Title)
+		fmt.Fprintf(&b, "\n%s\n", headingTag(group.Title))
 		for _, entry := range group.Entries {
 			fmt.Fprintf(&b, "  %s  %s\n",
 				keymap.PadLabel(entry.Keys, helpKeyColumn), entry.Description)
 		}
 	}
 
-	b.WriteString("\n[gray]To keep this keyboard, put `keymap: {preset: vim}` in\n" +
-		"~/.config/datavase/config.yaml.[-]\n")
+	b.WriteString("\n" + tag(colourMuted, "To keep this keyboard, put `keymap: {preset: vim}` in\n"+
+		"~/.config/datavase/config.yaml.") + "\n")
 	return b.String()
 }
 
@@ -353,9 +353,10 @@ func (a *App) modalEscapeHatch() string {
 	if !a.keys.Modal() {
 		return ""
 	}
-	return fmt.Sprintf("\n[gray]Typing does nothing? This editor is modal — press i first.\n"+
-		"For an ordinary editor: %s, then \"keymap datagrip\".[-]\n",
-		result.EscapeTags(a.keyLabel(keymap.ActionCommandPalette)))
+	return "\n" + tag(colourMuted, fmt.Sprintf(
+		"Typing does nothing? This editor is modal — press i first.\n"+
+			"For an ordinary editor: %s, then \"keymap datagrip\".",
+		a.keyLabel(keymap.ActionCommandPalette))) + "\n"
 }
 
 // helpKeyColumn is the width of the key column on the help screen.

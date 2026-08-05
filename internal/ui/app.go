@@ -128,7 +128,7 @@ type App struct {
 	planView *planPane
 
 	// sessionsView lists what else is running on the server.
-	sessionsView *tview.TextView
+	sessionsView *sessionsPane
 
 	// completion is nil until the schema cache is available; the popup says
 	// so rather than appearing broken.

@@ -438,6 +438,12 @@ func (a *App) setPreset(p keymap.Preset) {
 	// dropped into insert mode by a keyboard change is not something anyone
 	// would guess had happened.
 	a.vim = vim.New()
+	// The placeholder names the run key and, on a modal keyboard, says to press
+	// i first. It was composed once when the widgets were built, so arriving at
+	// the vim keyboard this way — which is the advertised way — left the empty
+	// editor promising that typing would work. That is the failure the
+	// placeholder exists to prevent, reached through the door it guards.
+	a.editor.SetPlaceholder(a.editorPlaceholder())
 	a.notice(fmt.Sprintf("keymap: %s — %s for keys", p, a.helpKeyLabel()))
 }
 

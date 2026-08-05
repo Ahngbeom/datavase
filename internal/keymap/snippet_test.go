@@ -3,6 +3,7 @@ package keymap
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -250,5 +251,37 @@ func TestGhosttySnippetOmitsWordMovement(t *testing.T) {
 		if strings.HasPrefix(line, "keybind") && strings.Contains(line, "alt+") {
 			t.Errorf("snippet forwards an Option binding that already works: %s", line)
 		}
+	}
+}
+
+// The status bar is one line on a terminal that starts at eighty columns, and
+// the full advice is nearly eighty on its own — it could not share that line
+// with the two hints beside it, so on the terminals that need it the advice
+// was the clause that never appeared.
+//
+// The short form drops the diagnosis and keeps the instruction. Where there
+// is room — the help screen, `dv keys` — the full sentence still runs.
+func TestShortTerminalAdviceFitsBesideTheOtherHints(t *testing.T) {
+	m := Default()
+
+	if got := TerminalAdviceShort("xterm-256color", m); got != "" {
+		t.Errorf("TerminalAdviceShort(xterm) = %q, want no advice", got)
+	}
+
+	got := TerminalAdviceShort("screen-256color", m)
+	if got == "" {
+		t.Fatal("TerminalAdviceShort(screen-256color) = \"\", want an instruction")
+	}
+	for _, want := range []string{"Ctrl+↩", "F5"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("short advice = %q, want it to mention %q", got, want)
+		}
+	}
+
+	// Two clauses of the opening line stand beside it: "F1 for keys" and
+	// "^B for the schema tree", with separators. What is left is the budget.
+	const budget = 80 - len("F1 for keys") - len(" · ") - len("^B for the schema tree") - len(" · ")
+	if n := utf8.RuneCountInString(got); n > budget {
+		t.Errorf("short advice is %d runes, leaving no room for the hints beside it: %q", n, got)
 	}
 }

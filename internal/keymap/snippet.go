@@ -54,6 +54,27 @@ func TerminalAdvice(term string, m *Map) string {
 		primary.Label(false), term, fallback.Label(false))
 }
 
+// TerminalAdviceShort is the same warning for a line that has to share.
+//
+// The full sentence is nearly eighty cells, which is a whole default terminal:
+// on the status bar it could not sit beside the two hints it opens with, so on
+// exactly the terminals that need it the advice was the clause with no room.
+// This keeps the instruction and drops the diagnosis, which the help screen
+// and `dv keys` still carry in full.
+func TerminalAdviceShort(term string, m *Map) string {
+	if SupportsExtendedKeys(term) {
+		return ""
+	}
+
+	primary, fallback := primaryAndFallback(m, ActionRun)
+	if primary == nil || fallback == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%s does not work here — use %s",
+		primary.Label(false), fallback.Label(false))
+}
+
 // primaryAndFallback picks the binding this advice is about and the one that
 // survives a terminal without the extended protocols.
 //

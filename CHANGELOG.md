@@ -5,11 +5,16 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.6.3 — 2026-08-05
 
-**Nothing here needs doing before you upgrade.** No configuration file changes,
-no keys moved, and no statement is judged differently — this is a pass over
-what the interface says and how it is drawn.
+**Nothing to do before upgrading, and nothing you can do that you could not
+before.** No configuration file changes, no keys moved, and no statement is
+judged differently — this is a pass over what the interface says and how it is
+drawn, and every entry below is something that was already meant to be true.
+
+The one worth upgrading for is the first: a result wider than the terminal used
+to scroll away the column that says which row you are looking at, and say
+nothing about having done it.
 
 ### Fixed
 

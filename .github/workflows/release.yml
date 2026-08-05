@@ -28,3 +28,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN is scoped to this repository, so it cannot push the
+          # cask to Ahngbeom/homebrew-tap. A secret that has not been added
+          # arrives here as an empty string, which .goreleaser.yaml reads as
+          # "skip the cask" rather than failing a release that has already
+          # uploaded its archives.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

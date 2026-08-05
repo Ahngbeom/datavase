@@ -44,16 +44,37 @@ Not built, and worth knowing before you lean on it:
 
 ## Install
 
+macOS or Linux:
+
 ```sh
-go install github.com/Ahngbeom/datavase/cmd/dv@latest
+curl -fsSL https://raw.githubusercontent.com/Ahngbeom/datavase/main/install.sh | sh
 ```
 
-Or take a prebuilt binary for macOS, Linux or Windows from
-[Releases](https://github.com/Ahngbeom/datavase/releases) — put `dv` on your
-PATH and check it with `dv version`.
+Homebrew:
+
+```sh
+brew install Ahngbeom/tap/dv
+```
+
+Linux packages (`.deb`, `.rpm`, `.apk`) and a Windows `.zip` are on the
+[latest release](https://github.com/Ahngbeom/datavase/releases/latest).
+
+Check it with `dv version`, then run `dv init`.
+
+Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
+no companion tools. It is one binary.
 
 Upgrading an existing setup: [CHANGELOG.md](CHANGELOG.md) says what changed
 and whether anything needs doing to your configuration first.
+
+<details>
+<summary>Other ways in</summary>
+
+With a Go toolchain, which builds it rather than downloading it:
+
+```sh
+go install github.com/Ahngbeom/datavase/cmd/dv@latest
+```
 
 From a clone:
 
@@ -61,8 +82,19 @@ From a clone:
 make build      # produces ./dv — CGO-free, single static binary
 ```
 
-Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
-no companion tools. It is one binary.
+The install script takes `DV_VERSION` to pin a release and `DV_INSTALL_DIR` to
+choose where the binary goes; it defaults to `/usr/local/bin`, or
+`~/.local/bin` when that needs root.
+
+**Downloading an archive with a browser on macOS** gets the file quarantined,
+and this binary is not notarized, so macOS will refuse to run it. The script
+and Homebrew both avoid that. If you took the archive by hand:
+
+```sh
+xattr -dr com.apple.quarantine ./dv
+```
+
+</details>
 
 ## Set up
 

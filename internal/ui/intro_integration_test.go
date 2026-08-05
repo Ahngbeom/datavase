@@ -88,6 +88,100 @@ func TestTheIntroductionIsNotShownAgain(t *testing.T) {
 	})
 }
 
+// The card is a list of keys, put in front of someone who has not used this
+// before — and while it was up, not one of them did anything. "Press it and
+// watch nothing happen" is the failure the placeholder and the opening notice
+// both exist to prevent, and this dialog was committing it with its own
+// contents.
+func TestAKeyTheCardNamesWorksOnTheFirstPress(t *testing.T) {
+	path := introPath(t)
+	h := newIntroHarness(t, path)
+
+	h.waitFor("the introduction", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageIntro
+	})
+
+	// One of the five the card lists, and the one with somewhere visible to go.
+	h.do(keymap.ActionHelp)
+
+	h.waitFor("the key reference the card named", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageHelp
+	})
+	if !intro.Seen(path) {
+		t.Error("the card went away without recording that it had been shown")
+	}
+}
+
+// Anything the card does not name puts it away and stops there. The key is
+// spent on the dismissal rather than arriving in the editor behind it, which
+// would be a character nobody meant to type.
+func TestAnyOtherKeyPutsTheCardAway(t *testing.T) {
+	h := newIntroHarness(t, introPath(t))
+
+	h.waitFor("the introduction", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageIntro
+	})
+
+	h.typeInto("x")
+
+	h.waitFor("the card to close", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return pageMain == name
+	})
+	h.inspect(func(a *App) bool {
+		if got := a.editor.GetText(); got != "" {
+			t.Errorf("editor = %q, want the dismissing key not to be typed into it", got)
+		}
+		return true
+	})
+}
+
+// Any key closing it must not include the keys that move within it. On a
+// terminal too small for the whole card, closing on the very key that would
+// have shown the rest is how it becomes unreadable.
+func TestScrollingWithinTheCardDoesNotCloseIt(t *testing.T) {
+	h := newIntroHarness(t, introPath(t))
+
+	h.waitFor("the introduction", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageIntro
+	})
+
+	for _, key := range []tcell.Key{tcell.KeyDown, tcell.KeyPgDn, tcell.KeyUp, tcell.KeyPgUp} {
+		h.press(key)
+	}
+
+	h.inspect(func(a *App) bool {
+		if name, _ := a.pages.GetFrontPage(); name != pageIntro {
+			t.Errorf("front page = %q after scrolling, want the card still up", name)
+		}
+		return true
+	})
+}
+
+// Enter and Escape are what the card itself offers, and mean nothing beyond
+// putting it away — Enter must not also run whatever it happens to be bound to.
+func TestEnterAndEscapeOnlyPutTheCardAway(t *testing.T) {
+	for _, key := range []tcell.Key{tcell.KeyEnter, tcell.KeyEscape} {
+		h := newIntroHarness(t, introPath(t))
+
+		h.waitFor("the introduction", func(a *App) bool {
+			name, _ := a.pages.GetFrontPage()
+			return name == pageIntro
+		})
+
+		h.press(key)
+
+		h.waitFor("the card to close onto the interface", func(a *App) bool {
+			name, _ := a.pages.GetFrontPage()
+			return name == pageMain
+		})
+	}
+}
+
 // Hardcoding the keys would make the card lie to precisely the people who
 // rebound them — the same reason the key reference is generated.
 func TestTheIntroductionNamesTheKeysThatAreInForce(t *testing.T) {

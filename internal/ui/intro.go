@@ -79,10 +79,39 @@ func (a *App) showIntro() {
 
 	view.SetBorder(true).SetTitle(" welcome ")
 	view.SetBackgroundColor(tcell.ColorBlack)
-	view.SetDoneFunc(func(tcell.Key) { a.closeIntro() })
+	view.SetInputCapture(a.introKey)
 
 	a.pages.AddPage(pageIntro, centred(view, 76, 18), true, true)
+	// This is what hands the card the keyboard when it is reopened from the
+	// palette, over an interface that is already running. On the first run it
+	// is redundant rather than load-bearing: Run's SetRoot takes the focus
+	// afterwards and Pages gives it to the front page, which is this one.
 	a.app.SetFocus(view)
+}
+
+// introKey puts the card away on any key, and then does what that key names.
+//
+// A dialog in front suspends the global bindings, which is right for every
+// other dialog and exactly wrong for one whose contents are a list of keys.
+// Someone reading "F1 show this help", pressing F1 and watching nothing happen
+// has met the failure the empty-editor placeholder and the opening notice both
+// exist to prevent — from the screen that was put there to prevent it.
+func (a *App) introKey(ev *tcell.EventKey) *tcell.EventKey {
+	switch ev.Key() {
+	// Moving within the card is not a decision to leave it. On a terminal too
+	// small for the whole thing, closing on the very key that would have shown
+	// the rest is how the card becomes unreadable.
+	case tcell.KeyUp, tcell.KeyDown, tcell.KeyPgUp, tcell.KeyPgDn:
+		return ev
+	}
+
+	a.closeIntro()
+
+	// A key bound to nothing — Enter and Escape on every preset, which is why
+	// the card offers them as the way out — dispatches to nothing and has
+	// already done its job by getting here.
+	a.dispatch(a.keys.Lookup(ev))
+	return nil
 }
 
 // closeIntro puts the card away and records that it was shown.

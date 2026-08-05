@@ -7,14 +7,44 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**`dv init` sets up the first datasource by asking.** Until now the first thing
+a new user met was a YAML example printed to stderr, which asked someone who
+had not run datavase yet to know what `env` changes and to get a hand-typed
+file past a parser that rejects unknown keys. `dv` with no configuration now
+asks the questions instead; `dv init` asks them on purpose.
+
+**The connection is tested before the file is written.** A wrong host or a
+wrong account is reported in the server's own words and asked again, with the
+previous answer as the default. Nothing reaches disk until something answered,
+so there is no wrong value to find and hand-edit later.
+
+**`env` is the one question with no default.** Every other answer is offered
+with something Enter will take; this one has to be chosen. It is the only thing
+the wizard cannot work out for itself and the only one that decides whether the
+guard does anything, and the guess that is wrong on a production database is
+the guess that leaves it unguarded.
+
+**It asks which keyboard you want.** The editor is still modal by default, but
+that default is now a choice someone made rather than one they discover by
+typing and watching nothing happen. The answer is written to `config.yaml`
+alongside a comment saying what the other presets are.
+
+The password goes to the keychain in the same pass, so `dv init` is the whole
+of setup. An existing `config.yaml` is never touched — a second datasource is
+added by editing the file.
+
+Nothing changes for an existing configuration: `dv` finds it and opens it
+exactly as before.
+
 **The first session opens on a short card.** The few keys worth knowing, and —
 the part nothing else says — what the guard will do to a statement that changes
 data on this particular datasource. Against production it says they are refused
 until writes are unlocked; anywhere else, that they ask first.
 
-Enter puts it away and it does not come back. `getting started` in the command
-palette reopens it, because pressing Enter to make a dialog go away is not the
-same as having read it.
+Any key puts it away, and a key it named then does what it named: pressing `F1`
+on a card that says "F1 show this help" opens the reference rather than nothing.
+`getting started` in the command palette brings it back, because making a dialog
+go away is not the same as having read it.
 
 It is recorded under `XDG_STATE_HOME`, alongside the schema cache and the query
 history, and is optional in the same way: a state directory that cannot be

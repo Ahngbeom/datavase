@@ -438,6 +438,12 @@ func (a *App) setPreset(p keymap.Preset) {
 	// dropped into insert mode by a keyboard change is not something anyone
 	// would guess had happened.
 	a.vim = vim.New()
+	// The placeholder names the run key and, on a modal keyboard, says to press
+	// i first. It was composed once when the widgets were built, so arriving at
+	// the vim keyboard this way — which is the advertised way — left the empty
+	// editor promising that typing would work. That is the failure the
+	// placeholder exists to prevent, reached through the door it guards.
+	a.editor.SetPlaceholder(a.editorPlaceholder())
 	a.notice(fmt.Sprintf("keymap: %s — %s for keys", p, a.helpKeyLabel()))
 }
 
@@ -547,7 +553,7 @@ func paletteItems(term string, choose func(command) func()) []searchItem {
 		rows = append(rows, ranked{item: row(cmd), tier: tier, score: score})
 	}
 	if len(rows) == 0 {
-		return []searchItem{message("no matching command", "press Escape to close")}
+		return []searchItem{noMatch("command", term)}
 	}
 	return sortRanked(rows)
 }
@@ -714,7 +720,11 @@ func (a *App) showHistory() {
 			return []searchItem{message("search failed", err.Error())}
 		}
 		if len(entries) == 0 {
-			return []searchItem{message("no matching statements", "")}
+			if term == "" {
+				return []searchItem{nothingHere("nothing has been run yet",
+					"statements are remembered once they finish")}
+			}
+			return []searchItem{noMatch("statement", term)}
 		}
 
 		items := make([]searchItem, len(entries))

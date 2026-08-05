@@ -69,7 +69,11 @@ func (a *App) dataSourceChoices(term string) []searchItem {
 
 	items := sortRanked(rows)
 	if len(items) == 0 {
-		return []searchItem{message("no matching datasource", "type part of a name")}
+		if term == "" {
+			return []searchItem{nothingHere("no other datasource is configured",
+				"add one with `dv init`")}
+		}
+		return []searchItem{noMatch("datasource", term)}
 	}
 	return items
 }

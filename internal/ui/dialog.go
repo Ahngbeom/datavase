@@ -43,12 +43,11 @@ func unlockHint(paletteKey string) string {
 // here on purpose: a dialog offering "run anyway" is a dialog people learn
 // to dismiss, which is exactly how the production accident happens.
 func (a *App) refuse(d guard.Decision) {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText(refusalText(d, a.keyLabel(keymap.ActionCommandPalette))).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(int, string) { a.closeDialog() })
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	modal.SetTextColor(colourDanger)
 	a.openDialog(modal)
 }
@@ -66,7 +65,7 @@ func (a *App) confirm(stmt sqlparse.Statement, d guard.Decision) {
 }
 
 func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
-	modal := tview.NewModal().
+	modal := newModal().
 		SetText(fmt.Sprintf("%s\n\n%s\n\nRun it?", d.Reason, preview(stmt.SQL))).
 		AddButtons([]string{"Cancel", "Run"}).
 		SetDoneFunc(func(_ int, label string) {
@@ -78,7 +77,6 @@ func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
 			a.start(stmt, d)
 		})
 
-	modal.SetBackgroundColor(tcell.ColorBlack)
 	a.openDialog(modal)
 }
 
@@ -133,6 +131,23 @@ func preview(sql string) string {
 	return result.EscapeTags(result.Truncate(flat, limit))
 }
 
+// newModal is the one place a tview Modal is built, because it is the one
+// place its background can be set completely.
+//
+// A Modal is three primitives — a Box, a Frame and a Form — and its own
+// SetBackgroundColor reaches only the last two. The Box is what draws the
+// border, so a Modal told to be black came out as a ring of the library's
+// blue around black text. Every other dialog here draws its border on the
+// background it was given; these four were the ones that did not, and one of
+// them is the guard's refusal.
+func newModal() *tview.Modal {
+	modal := tview.NewModal()
+	modal.SetBackgroundColor(tcell.ColorBlack)
+	// The embedded Box, which SetBackgroundColor above does not reach.
+	modal.Box.SetBackgroundColor(tcell.ColorBlack)
+	return modal
+}
+
 func (a *App) openDialog(p tview.Primitive) {
 	a.pages.AddPage(pageConfirm, p, true, true)
 	a.app.SetFocus(p)
@@ -151,6 +166,13 @@ func (a *App) closeDialog() {
 // reference came to be cut off.
 func centred(p tview.Primitive, width, height int) tview.Primitive {
 	return newFitted(p, width, height)
+}
+
+// centredText is centred for a dialog whose whole contents are known, so the
+// box can be as tall as they are rather than as tall as it was allowed to be.
+func centredText(p tview.Primitive, text string, width, height int) tview.Primitive {
+	return newFitted(p, width, height).
+		sizedTo(func(w int) int { return dialogHeight(text, w) })
 }
 
 // startHere is the whole of what someone needs on the first screenful.
@@ -250,16 +272,16 @@ func (a *App) helpText() string {
 			action.Describe())
 	}
 
-	b.WriteString("[aqua]datavase[-]\n")
+	b.WriteString(tag(colourAccent, "datavase") + "\n")
 
-	b.WriteString("\n[yellow]Start here[-]\n")
+	b.WriteString("\n" + headingTag("Start here") + "\n")
 	for _, action := range startHere {
 		line(action)
 	}
 	b.WriteString(a.modalEscapeHatch())
 
 	for _, group := range helpGroups {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", group.title)
+		fmt.Fprintf(&b, "\n%s\n", headingTag(group.title))
 
 		for _, action := range group.actions {
 			line(action)
@@ -271,14 +293,14 @@ func (a *App) helpText() string {
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
 	if advice := keymap.TerminalAdvice(os.Getenv("TERM"), a.keys); advice != "" {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", result.EscapeTags(advice))
+		fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, advice))
 	}
 	if onMac {
-		b.WriteString("\n[gray]⌘ bindings need the terminal to forward them:\n" +
-			"run `dv keys --ghostty` or `dv keys --iterm2` outside datavase.[-]\n")
+		b.WriteString("\n" + tag(colourMuted, "⌘ bindings need the terminal to forward them:\n"+
+			"run `dv keys --ghostty` or `dv keys --iterm2` outside datavase.") + "\n")
 	}
 
-	b.WriteString("\n[gray]Press Escape to close.[-]")
+	b.WriteString("\n" + tag(colourMuted, "Press Escape to close."))
 	return b.String()
 }
 
@@ -295,7 +317,7 @@ func (a *App) helpText() string {
 func commandHelpText(paletteKey string) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "\n[yellow]Commands — %s, then type[-]\n", result.EscapeTags(paletteKey))
+	fmt.Fprintf(&b, "\n%s\n", headingTag("Commands — "+result.EscapeTags(paletteKey)+", then type"))
 	for _, c := range paletteCommands() {
 		fmt.Fprintf(&b, "  %s  %s\n",
 			keymap.PadLabel(result.EscapeTags(c.name), helpKeyColumn), result.EscapeTags(c.summary))
@@ -315,15 +337,15 @@ func (a *App) vimHelp() string {
 
 	var b strings.Builder
 	for _, group := range vim.Reference() {
-		fmt.Fprintf(&b, "\n[yellow]%s[-]\n", group.Title)
+		fmt.Fprintf(&b, "\n%s\n", headingTag(group.Title))
 		for _, entry := range group.Entries {
 			fmt.Fprintf(&b, "  %s  %s\n",
 				keymap.PadLabel(entry.Keys, helpKeyColumn), entry.Description)
 		}
 	}
 
-	b.WriteString("\n[gray]To keep this keyboard, put `keymap: {preset: vim}` in\n" +
-		"~/.config/datavase/config.yaml.[-]\n")
+	b.WriteString("\n" + tag(colourMuted, "To keep this keyboard, put `keymap: {preset: vim}` in\n"+
+		"~/.config/datavase/config.yaml.") + "\n")
 	return b.String()
 }
 
@@ -338,18 +360,20 @@ func (a *App) modalEscapeHatch() string {
 	if !a.keys.Modal() {
 		return ""
 	}
-	return fmt.Sprintf("\n[gray]Typing does nothing? This editor is modal — press i first.\n"+
-		"For an ordinary editor: %s, then \"keymap datagrip\".[-]\n",
-		result.EscapeTags(a.keyLabel(keymap.ActionCommandPalette)))
+	return "\n" + tag(colourMuted, fmt.Sprintf(
+		"Typing does nothing? This editor is modal — press i first.\n"+
+			"For an ordinary editor: %s, then \"keymap datagrip\".",
+		a.keyLabel(keymap.ActionCommandPalette))) + "\n"
 }
 
 // helpKeyColumn is the width of the key column on the help screen.
 const helpKeyColumn = 20
 
 func (a *App) showHelp() {
+	text := a.helpText()
 	view := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(a.helpText())
+		SetText(text)
 
 	// The reference no longer fits a modest terminal, and a pane that scrolls
 	// without saying so reads as one that is simply cut off — which is what
@@ -361,6 +385,6 @@ func (a *App) showHelp() {
 		a.app.SetFocus(a.editor)
 	})
 
-	a.pages.AddPage(pageHelp, centred(view, 84, 40), true, true)
+	a.pages.AddPage(pageHelp, centredText(view, text, 84, 40), true, true)
 	a.app.SetFocus(view)
 }

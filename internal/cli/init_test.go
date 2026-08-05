@@ -542,3 +542,38 @@ func TestHandleInitRecognisesTheCommand(t *testing.T) {
 		})
 	}
 }
+
+// A machine with no keychain must still finish setup. Returning an error here
+// would discard a connection that was just proved to work and send the user to
+// `dv auth`, which needs the very keychain that refused.
+func TestTheWizardFinishesWhenTheKeychainRefuses(t *testing.T) {
+	s := &script{answers: answers(), choices: choices(), password: "secret"}
+	w, path := newWizard(t, s)
+	w.Secrets = refusingSecrets{err: errors.New("no secret service")}
+
+	if err := w.Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+
+	if _, err := os.ReadFile(path); err != nil {
+		t.Fatalf("the config was not written: %v", err)
+	}
+
+	out := w.Out.(*bytes.Buffer).String()
+	// Without the variable's name the user is told the setup failed and given
+	// nothing that would make it work.
+	if want := secret.EnvVarName("local"); !strings.Contains(out, want) {
+		t.Errorf("output does not name %s, so there is no way forward:\n%s", want, out)
+	}
+	if !strings.Contains(out, path) {
+		t.Errorf("output does not say the config was written:\n%s", out)
+	}
+}
+
+// refusingSecrets is a keychain that is not there, as a headless Linux box
+// presents one.
+type refusingSecrets struct{ err error }
+
+func (r refusingSecrets) Get(string) (string, error) { return "", r.err }
+func (r refusingSecrets) Set(string, string) error   { return r.err }
+func (r refusingSecrets) Delete(string) error        { return r.err }

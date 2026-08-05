@@ -117,7 +117,7 @@ func (a *App) showRow() {
 		return ev
 	})
 
-	a.openDialog(centred(view, 90, 30))
+	a.openDialog(centredText(view, detail, 90, 30))
 }
 
 // stepRow moves the grid's selection and redraws the open row view, so the

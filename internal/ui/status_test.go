@@ -425,6 +425,161 @@ func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
 	}
 }
 
+// A line the terminal was too narrow for used to simply stop, mid-word, with
+// nothing to say it had been cut. The same application abbreviates a file name
+// in the region header with an ellipsis, so on one screen "for the s" and
+// "run a statement to see rows …" sat two rows apart.
+func TestATruncatedBarSaysItWasTruncated(t *testing.T) {
+	s := baseStatus()
+	s.message = "server 11.4.12-MariaDB · F1 for keys · ^B for the schema tree"
+
+	got := s.renderWidth(30)
+	if !strings.HasSuffix(visibleText(got), "…") {
+		t.Errorf("the cut line does not say it was cut: %q", got)
+	}
+}
+
+// The ellipsis is part of the line, not an extra cell hung off the end of a
+// terminal that had no room for it.
+func TestTheEllipsisIsPaidForOutOfTheWidth(t *testing.T) {
+	s := baseStatus()
+	s.message = strings.Repeat("wide ", 40)
+
+	for _, width := range []int{40, 30, 20, 10, 4, 2, 1} {
+		got := s.renderWidth(width)
+		if w := visibleWidth(got); w > width {
+			t.Errorf("width %d: the cut line is %d cells: %q", width, w, got)
+		}
+	}
+}
+
+// A line that fits is not decorated with a promise of more.
+func TestALineThatFitsGetsNoEllipsis(t *testing.T) {
+	s := baseStatus()
+	s.message = "committed"
+
+	if got := s.renderWidth(80); strings.Contains(got, "…") {
+		t.Errorf("a line that fits was marked as cut: %q", got)
+	}
+}
+
+// The opening line is the only place a user is told that the key this
+// interface keeps naming cannot reach it through their terminal. It used to be
+// the last clause of the longest sentence on screen, so on eighty columns —
+// which is where a default terminal starts — it was the part that got cut.
+func TestTheOpeningLineLeadsWithWhatTheTerminalCannotDeliver(t *testing.T) {
+	s := baseStatus()
+	s.opening = openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		advice:        "Ctrl+↩ does not work here — use F5",
+	})
+
+	if got := s.renderWidth(80); !strings.Contains(got, "does not work here") {
+		t.Errorf("the terminal advice was the first thing cut at eighty columns: %q", got)
+	}
+}
+
+// The schema pane starts hidden, so this clause is the only announcement that
+// it exists. It has to survive the terminal a default one starts at.
+func TestTheOpeningLineKeepsTheSchemaTreeAtEightyColumns(t *testing.T) {
+	s := baseStatus()
+	s.opening = openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		advice:        "Ctrl+↩ does not work here — use F5",
+	})
+
+	if got := s.renderWidth(80); !strings.Contains(got, "schema tree") {
+		t.Errorf("nothing announced the schema tree at eighty columns: %q", got)
+	}
+}
+
+// A clause that does not fit is dropped whole. Half a hint reads as a hint
+// that is wrong rather than one that was cut.
+func TestTheOpeningLineDropsWholeClausesRatherThanCuttingOne(t *testing.T) {
+	s := baseStatus()
+	s.opening = openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+	})
+
+	for _, width := range []int{80, 60, 40, 30} {
+		got := visibleText(s.renderWidth(width))
+		if strings.Contains(got, "for the s") && !strings.Contains(got, "for the schema tree") {
+			t.Errorf("width %d: a clause was cut rather than dropped: %q", width, got)
+		}
+		if strings.Contains(got, "…") {
+			t.Errorf("width %d: the greeting was truncated rather than shed: %q", width, got)
+		}
+	}
+}
+
+// With nothing wrong with the terminal the line opens on what the user can do
+// next, and still names the server it reached.
+func TestTheOpeningLineWithoutAdvice(t *testing.T) {
+	s := baseStatus()
+	s.opening = openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+	})
+
+	line := s.renderWidth(200)
+	for _, want := range []string{"F1 for keys", "^B for the schema tree", "11.4.12-MariaDB-ubu2404"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the opening line does not mention %q: %q", want, line)
+		}
+	}
+}
+
+// A modal editor where nobody was told about insert mode is one where the
+// first keystroke does nothing, so that clause outranks the server version
+// too.
+func TestTheOpeningLinePutsTheModalHintAheadOfTheServerVersion(t *testing.T) {
+	line := strings.Join(openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		modal:         true,
+	}), " · ")
+
+	modal := strings.Index(line, "i to type")
+	server := strings.Index(line, "11.4.12")
+	if modal < 0 || server < 0 {
+		t.Fatalf("the opening line is missing a clause: %q", line)
+	}
+	if modal > server {
+		t.Errorf("the modal hint sits behind the server version: %q", line)
+	}
+}
+
+// visibleText is what the terminal shows, colour tags removed.
+func visibleText(s string) string {
+	var (
+		b     strings.Builder
+		inTag bool
+		runes = []rune(s)
+	)
+	for i := 0; i < len(runes); i++ {
+		switch {
+		case runes[i] == '[' && i+1 < len(runes) && runes[i+1] == '[':
+			b.WriteRune('[')
+			i++
+		case runes[i] == '[':
+			inTag = true
+		case runes[i] == ']' && inTag:
+			inTag = false
+		case !inTag:
+			b.WriteRune(runes[i])
+		}
+	}
+	return b.String()
+}
+
 // A grid wider than the terminal scrolls, and the columns that go off the left
 // take the row's identity with them: a screenful starting at "total_cents" is
 // indistinguishable from one whose query never selected an id. The bar is the

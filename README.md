@@ -44,16 +44,37 @@ Not built, and worth knowing before you lean on it:
 
 ## Install
 
+macOS or Linux:
+
 ```sh
-go install github.com/Ahngbeom/datavase/cmd/dv@latest
+curl -fsSL https://raw.githubusercontent.com/Ahngbeom/datavase/main/install.sh | sh
 ```
 
-Or take a prebuilt binary for macOS, Linux or Windows from
-[Releases](https://github.com/Ahngbeom/datavase/releases) — put `dv` on your
-PATH and check it with `dv version`.
+Homebrew:
+
+```sh
+brew install Ahngbeom/tap/dv
+```
+
+Linux packages (`.deb`, `.rpm`, `.apk`) and a Windows `.zip` are on the
+[latest release](https://github.com/Ahngbeom/datavase/releases/latest).
+
+Check it with `dv version`, then run `dv init`.
+
+Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
+no companion tools. It is one binary.
 
 Upgrading an existing setup: [CHANGELOG.md](CHANGELOG.md) says what changed
 and whether anything needs doing to your configuration first.
+
+<details>
+<summary>Other ways in</summary>
+
+With a Go toolchain, which builds it rather than downloading it:
+
+```sh
+go install github.com/Ahngbeom/datavase/cmd/dv@latest
+```
 
 From a clone:
 
@@ -61,8 +82,33 @@ From a clone:
 make build      # produces ./dv — CGO-free, single static binary
 ```
 
-Nothing else is needed, and nothing else is wanted: no runtime, no drivers,
-no companion tools. It is one binary.
+The install script takes `DV_VERSION` to pin a release and `DV_INSTALL_DIR` to
+choose where the binary goes; it defaults to `/usr/local/bin`, or
+`~/.local/bin` when that needs root.
+
+**Downloading an archive with a browser on macOS** gets the file quarantined,
+and this binary is not notarized, so macOS will refuse to run it. The script
+and Homebrew both avoid that. If you took the archive by hand:
+
+```sh
+xattr -dr com.apple.quarantine ./dv
+```
+
+</details>
+
+### Checking where a download came from
+
+Every released archive and package is signed by the workflow that built it. To check one:
+
+```sh
+gh attestation verify <the archive you downloaded> --repo Ahngbeom/datavase
+```
+
+That answers a different question from the checksum the install script
+already verifies. A checksum says the file arrived intact; this says it was
+built by this repository's release workflow and not swapped for something
+else — which the checksum cannot tell you, because it is downloaded from the
+same place as the file it describes.
 
 ## Set up
 
@@ -120,6 +166,20 @@ Passwords never go in this file. Store them in the OS keychain:
 dv auth prod-app          # prompts, echo off
 dv auth -rm prod-app      # remove
 ```
+
+**On a machine with no keychain** — a headless Linux server runs no D-Bus
+Secret Service, so there is nothing for `dv auth` to write to — pass the
+password in the environment instead:
+
+```sh
+export DATAVASE_PASSWORD_PROD_APP=...
+```
+
+The variable is `DATAVASE_PASSWORD_` followed by the datasource name, upper
+cased, with anything that cannot appear in a variable name turned into `_`.
+It is also how you supply a password in CI or a container. When it is set it
+takes precedence over the keychain, so the same command does the same thing on
+every machine.
 
 Unknown keys are rejected rather than ignored, so a typo like `hots:` fails
 immediately instead of surfacing later as a confusing error.

@@ -57,10 +57,10 @@ func (a *App) showUseSchema() {
 
 		if len(items) == 0 {
 			if term == "" {
-				return []searchItem{message("no schemas cached yet",
+				return []searchItem{nothingHere("no schemas cached yet",
 					"the schema tree is still loading")}
 			}
-			return []searchItem{message("no matching schema", "type part of a name")}
+			return []searchItem{noMatch("schema", term)}
 		}
 		return items
 	})

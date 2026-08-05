@@ -107,7 +107,11 @@ func (a *App) fileChoices(term string) []searchItem {
 			return []searchItem{message("no SQL files here",
 				"nothing matching *.sql under "+a.wt.Root)}
 		}
-		return []searchItem{message("no matching file", "type part of a path")}
+		if term == "" {
+			return []searchItem{nothingHere("no SQL files here yet",
+				"save one to the attached directory and it will show up")}
+		}
+		return []searchItem{noMatch("file", term)}
 	}
 
 	if a.wtSnap.Truncated {

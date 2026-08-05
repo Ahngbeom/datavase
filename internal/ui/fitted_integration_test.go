@@ -159,3 +159,58 @@ func itoa(n int) string {
 	}
 	return string(buf[i:])
 }
+
+// The row view is one line per column, and a wide table's row is a handful of
+// them. It used to be drawn in a box thirty rows tall whatever was in it, so
+// six lines of detail came with twenty-two empty rows inside the border —
+// which reads as a pane that has not finished loading.
+func TestTheRowViewIsAsTallAsTheRow(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.runSQL("SELECT 1 AS a, 2 AS b, 3 AS c", 1)
+
+	h.do(keymap.ActionNextPane)
+	h.waitFor("the grid", func(a *App) bool { return a.app.GetFocus() == a.grid })
+	h.do(keymap.ActionInspect)
+	if !h.waitForScreen("row 1 of 1") {
+		t.Fatalf("the row view never opened:\n%s", h.text())
+	}
+
+	// Three columns, a border above and below.
+	if got := boxHeight(h.text()); got > 6 {
+		t.Errorf("a three-column row is drawn in a box %d rows tall:\n%s", got, h.text())
+	}
+}
+
+// The key reference is longer than any terminal, so it keeps its full height
+// and scrolls — sizing to contents must not shrink what genuinely needs the
+// room.
+func TestTheKeyReferenceKeepsItsHeight(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.do(keymap.ActionHelp)
+	if !h.waitForScreen("Start here") {
+		t.Fatalf("the key reference never opened:\n%s", h.text())
+	}
+
+	if got := boxHeight(h.text()); got < 20 {
+		t.Errorf("the key reference is drawn in a box %d rows tall:\n%s", got, h.text())
+	}
+}
+
+// boxHeight is how many rows the drawn dialog's border spans.
+func boxHeight(screen string) int {
+	first, last := -1, -1
+	for i, line := range strings.Split(screen, "\n") {
+		if !strings.ContainsAny(line, "╔╚║╭╰│┌└") {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		last = i
+	}
+	if first < 0 {
+		return 0
+	}
+	return last - first + 1
+}

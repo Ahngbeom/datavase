@@ -7,6 +7,8 @@ import (
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/procs"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // Stopping somebody else's work is the operation that most wants a
@@ -118,4 +120,72 @@ func TestALockTreeNamesTheIdleHolder(t *testing.T) {
 			t.Errorf("the tree does not show %q:\n%s", want, out)
 		}
 	}
+}
+
+// The process list is laid out for a width, and the width it was laid out for
+// used to be read when the text was composed rather than when it was drawn.
+//
+// A tab that has never been shown has no width to give, so the reply was the
+// twenty-column floor and a statement came out folded into a stack of
+// four-word lines on an eighty-column terminal. This is the same failure the
+// plan pane, the status bar and the top bar are all built to avoid.
+func TestTheProcessListIsLaidOutForTheWidthItIsDrawnAt(t *testing.T) {
+	var laidOutFor int
+
+	pane := newSessionsPane()
+	pane.show(func(width int) string {
+		laidOutFor = width
+		return "listing"
+	})
+
+	// Never drawn, so nothing has been laid out and nothing has been guessed.
+	if laidOutFor != 0 {
+		t.Fatalf("the listing was laid out for %d before it was ever drawn", laidOutFor)
+	}
+
+	drawAt(t, pane, 100, 10)
+	if laidOutFor < 90 {
+		t.Errorf("laid out for %d columns on a pane 100 wide", laidOutFor)
+	}
+}
+
+// A window that is made narrower has to fold the statements again; one that
+// has not changed must not pay to.
+func TestTheProcessListIsLaidOutAgainOnlyWhenTheWidthChanges(t *testing.T) {
+	var layouts []int
+
+	pane := newSessionsPane()
+	pane.show(func(width int) string {
+		layouts = append(layouts, width)
+		return "listing"
+	})
+
+	drawAt(t, pane, 100, 10)
+	drawAt(t, pane, 100, 10)
+	if len(layouts) != 1 {
+		t.Errorf("an unchanged width was laid out %d times: %v", len(layouts), layouts)
+	}
+
+	drawAt(t, pane, 60, 10)
+	if len(layouts) != 2 {
+		t.Errorf("a resize did not lay the listing out again: %v", layouts)
+	}
+	if layouts[1] >= layouts[0] {
+		t.Errorf("the narrower window was laid out for %v", layouts)
+	}
+}
+
+// drawAt draws a primitive at a size, on a screen no test has to look at.
+func drawAt(t *testing.T, p tview.Primitive, width, height int) {
+	t.Helper()
+
+	screen := tcell.NewSimulationScreen("UTF-8")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	defer screen.Fini()
+	screen.SetSize(width, height)
+
+	p.SetRect(0, 0, width, height)
+	p.Draw(screen)
 }

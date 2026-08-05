@@ -1,6 +1,7 @@
 # Release configuration. Run by .github/workflows/release.yml on a v* tag.
 #
-# Validate a change without publishing anything:
+# ci.yml rehearses this on every change, so a mistake here now fails on the
+# pull request rather than at tag time. To do the same locally:
 #
 #	goreleaser check
 #	goreleaser release --snapshot --clean
@@ -50,14 +51,85 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# A cask rather than a formula: `brews` is deprecated, and a formula is meant
+# to build from source, which is the one thing this project exists not to make
+# anyone do.
+homebrew_casks:
+  - name: dv
+    repository:
+      owner: Ahngbeom
+      name: homebrew-tap
+      branch: main
+      # A separate repository, which the workflow's GITHUB_TOKEN cannot write
+      # to.
+      #
+      # This field takes `{{ .Env.NAME }}` and nothing else — goreleaser checks
+      # the shape of the string rather than rendering it, and rejects any other
+      # form. `{{ index .Env "..." }}` here failed v0.6.0 after the release had
+      # been published, with "expected {{ .Env.VAR_NAME }} only". The safety
+      # that form was reaching for lives on skip_upload below, which does take
+      # an arbitrary template, and release.yml always defines the variable —
+      # empty when the secret is absent — so this never resolves a missing key.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+
+    # Without the token there is nowhere to push, and a release that failed for
+    # that reason would have already uploaded the archives — leaving a tag that
+    # cannot be retried. Skipping keeps every other artifact intact.
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+
+    binaries: [dv]
+
+    homepage: https://github.com/Ahngbeom/datavase
+    description: A terminal MySQL/MariaDB client. Single static binary, no runtime, no IDE.
+
+    # The archives live on github.com while the homepage is the repository, and
+    # `brew audit` wants to be told that on purpose.
+    url:
+      verified: github.com/Ahngbeom/datavase/
+
+    # The binary is signed ad-hoc by the Go linker and notarized by nobody, so
+    # macOS refuses to run it once Homebrew's download has been quarantined.
+    # Without this hook `brew install` appears to succeed and `dv` is killed on
+    # first run.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/dv"]
+          end
+
+# Linux packages, so a server can install this the same way it installs
+# everything else. These are release assets only — there is no apt or yum
+# repository behind them.
+nfpms:
+  - id: packages
+    package_name: dv
+    file_name_template: "dv_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    formats: [deb, rpm, apk]
+    bindir: /usr/bin
+
+    homepage: https://github.com/Ahngbeom/datavase
+    description: A terminal MySQL/MariaDB client. Single static binary, no runtime, no IDE.
+    license: MIT
+    # The GitHub noreply address rather than a personal one: package metadata is
+    # published and indexed, and a real inbox does not need to be.
+    maintainer: Ahngbeom <Ahngbeom@users.noreply.github.com>
+
 changelog:
   use: github
-  sort: asc
+  # No sort: the commits are worth reading in the order they happened. Sorting
+  # them put v0.5.0's list in alphabetical order, which reads as though the
+  # work were unrelated to itself.
   filters:
+    # This project writes prose commit subjects, not Conventional Commits, so
+    # prefix filters like "^docs:" would match nothing — the previous set never
+    # excluded a single commit. Merges are what actually needs excluding: eight
+    # of v0.5.0's fifteen lines were "Merge pull request #NN", which says
+    # nothing the entry it merged does not say better.
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
+      - "^Merge pull request"
+      - "^Merge branch"
+      - "^Merge main"
 
 release:
   # A pointer rather than the notes themselves. goreleaser can load a header
@@ -73,12 +145,50 @@ release:
     — the edited account of this release, and anything that needs doing before
     you upgrade. The commit list below is generated.
 
+  # Ordered by what it costs the reader. `go install` is last because it needs
+  # a Go toolchain, which is a build — the thing every other line here avoids.
   footer: |
     ## Install
+
+    **macOS or Linux** — pinned to this release, since a page for an old tag
+    that quietly installed the newest one would be lying.
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/Ahngbeom/datavase/main/install.sh | DV_VERSION={{ .Tag }} sh
+    ```
+
+    **Homebrew**
+
+    ```sh
+    brew install Ahngbeom/tap/dv
+    ```
+
+    **Linux packages** — the `.deb`, `.rpm` and `.apk` above.
+
+    **Windows** — the `.zip` above; put `dv.exe` on your PATH.
+
+    Then `dv init` sets up the first connection, and `dv version` says which
+    build you have.
+
+    <details><summary>From source, if you have Go</summary>
 
     ```sh
     go install github.com/Ahngbeom/datavase/cmd/dv@{{ .Tag }}
     ```
+    </details>
 
-    Or download the archive for your platform above, and put `dv` on your PATH.
-    Verify it with `dv version`.
+    ---
+
+    Downloading an archive with a **browser** on macOS gets it quarantined, and
+    an unnotarized binary that is quarantined will not run. The install script
+    and Homebrew both avoid that. If you took the archive by hand:
+
+    ```sh
+    xattr -dr com.apple.quarantine ./dv
+    ```
+
+    Every archive and package above is signed by the workflow that built it. To check one:
+
+    ```sh
+    gh attestation verify dv_{{ .Tag }}_darwin_arm64.tar.gz --repo Ahngbeom/datavase
+    ```

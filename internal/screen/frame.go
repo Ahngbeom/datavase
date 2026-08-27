@@ -154,12 +154,23 @@ func (s *Screen) emit(all bool) {
 	}
 }
 
-// SetSize is what a client resize arrives as. Task 4 posts the event the
-// interface needs to relayout.
+// SetSize is what a client resize arrives as.
+//
+// The order is load-bearing. tview relayouts when it sees the resize event
+// and asks the screen how big it is while doing so; posting the event before
+// the buffer has been resized lays the interface out at the size it just
+// stopped being.
 func (s *Screen) SetSize(w, h int) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	current, currentH := s.buf.Size()
+	if w == current && h == currentH {
+		s.mu.Unlock()
+		return
+	}
 	s.buf.Resize(w, h)
+	s.mu.Unlock()
+
+	s.PostEventWait(tcell.NewEventResize(w, h))
 }
 
 func (s *Screen) SetTitle(title string) {

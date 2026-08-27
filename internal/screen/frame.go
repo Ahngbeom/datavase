@@ -76,13 +76,23 @@ type Frame struct {
 // thing to hold and one thing to drop, and so a test can record every kind of
 // output in one place.
 //
-// No method may block. Every one of them is called from the goroutine that
-// draws the interface, which is also the goroutine reading rows off the
-// database connection; MySQL will not accept another statement until that
-// result set is drained, so a sink that waits on a wedged terminal stalls the
-// statement, its cancellation and the schema browser with it. Frames have a
-// bounded path for this in proto.FrameQueue — the other four methods have
-// nothing behind them, and whatever implements them owns that.
+// No method may block. SetTitle, SetClipboard, GetClipboard and Beep are
+// called from the goroutine that draws the interface, which is also the
+// goroutine reading rows off the database connection; MySQL will not accept
+// another statement until that result set is drained, so a sink that waits on
+// a wedged terminal stalls the statement, its cancellation and the schema
+// browser with it. Frame is called from that same goroutine for an ordinary
+// draw, and from whichever goroutine attached the sink for the repaint that
+// Attach sends. Frames have a bounded path for this in proto.FrameQueue — the
+// other four methods have nothing behind them, and whatever implements them
+// owns that.
+//
+// An implementation must not call back into the screen — Detach, Show or Sync
+// — from inside Frame. Delivery is serialised behind a single lock that Frame
+// is called under, and Detach, Show and Sync all take that same lock, so a
+// call back in from inside Frame blocks forever. "The write failed, drop the
+// client" is the most natural thing to reach for in a transport, and it has
+// to be done from somewhere other than inside Frame.
 type Sink interface {
 	Frame(Frame)
 	SetTitle(string)

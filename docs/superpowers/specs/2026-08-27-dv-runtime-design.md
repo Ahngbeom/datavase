@@ -566,7 +566,6 @@ database.
 - Merging two frames and applying the result gives the same screen as
   applying both in order. **The claim is about the resulting screen, not the
   cell list.**
-- A `Hello` with a different version is rejected.
 - `Show` called a hundred times with a blocked writer does not stall the
   caller.
 - The snapshot JSON contains no row array, and no `password` or `secret`

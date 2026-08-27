@@ -61,10 +61,17 @@ mouse and resize events up, and draws the cells that come back.
 [terminal] <-----cell diff------ dv (client) <--socket------+
 ```
 
-`internal/ui` is not modified. `App.SetScreen` already exists as production
-API — the UI integration tests have driven the whole interface through it,
-without a terminal, since they were written. The server is that seam used in
-production.
+The interface is not restructured. `App.SetScreen` already exists as
+production API — the UI integration tests have driven the whole interface
+through it, without a terminal, since they were written. The server is that
+seam used in production. `internal/ui` gains one action and one optional
+dependency and nothing else; no widget, no state, no test of it moves.
+
+The server does not know `ui.App` either. It drives three methods —
+`SetScreen(tcell.Screen)`, `Run() error`, `Stop()` — which `*ui.App` already
+has. That keeps `internal/daemon` free of tview and, more usefully, lets its
+round-trip tests drive a stand-in that draws a known pattern, so the whole
+client/server exchange is tested without a database.
 
 ### Rejected: semantic frames
 
@@ -136,9 +143,15 @@ i l n o q r s u v w x y`.
 
 Adding the action touches five places, and that is the design working rather
 than a cost: `keymap/action.go` (constant, both name maps, the full list),
-`keymap/map.go` (binding), `ui/dialog.go` (the `Application` help group),
+`keymap/map.go` (binding), `ui/dialog.go` (the `Other` help group),
 `ui/palette.go` (command palette), `ui/app.go` (dispatch). `dialog_test.go`
 fails if the help entry is missing.
+
+Detach reaches the runtime the way switching datasource reaches the keychain:
+`ui.Deps` gains a `Detach func()`, and a nil one means this session has no
+server to leave — which is what `--no-session` gets, and what the status bar
+says rather than the key appearing dead. `internal/ui` learns nothing about
+sockets from it.
 
 ### Naming a different datasource against a live session
 
@@ -422,17 +435,14 @@ leak through.
     "schema": "app",
     "statement": {
       "running": true,
-      "started_at": "2026-08-27T10:31:00Z",
       "elapsed_ms": 4210,
-      "kind": "select",
       "sql": "SELECT ...",
-      "guard": { "verdict": "allow", "injected_limit": 1000 }
+      "injected_limit": 1000,
+      "truncated": false
     },
     "result": {
       "columns": ["id", "customer", "total"],
-      "row_count": 4213,
-      "truncated": false,
-      "error": null
+      "row_count": 4213
     },
     "batch": { "running": false, "completed": 0, "total": 0 },
     "worktree": {
@@ -440,10 +450,20 @@ leak through.
       "open_file": "monthly.sql", "modified": true
     },
     "editor": { "lines": 42, "modified": true },
-    "mode": "normal"
+    "mode": "NORMAL",
+    "writes_enabled": false,
+    "in_transaction": false
   }
 }
 ```
+
+The statement's kind and guard's verdict are not here. Neither is recorded
+anywhere the interface can read back — `guard.Evaluate` returns a `Decision`
+that is acted on and discarded — and adding storage for them would be
+production state existing for an observer's sake. What survives of the
+decision is the part that changed the statement: the injected `LIMIT`. Whether
+production writes are unlocked is reported instead, because that is a property
+of the session rather than of one statement.
 
 ### What it does not carry, and why
 
@@ -500,7 +520,7 @@ exactly once in `helpGroups` (`ui/dialog_test.go`), every sequence in
 | `internal/screen` | a `tcell.Screen` whose terminal is elsewhere | sockets, tview, `dv` |
 | `internal/proto` | wire messages, codec, the frame queue | sockets, tview, the interface |
 | `internal/snapshot` | builds and serves the observation snapshot | `ui.App`, sockets |
-| `internal/daemon` | the headless server: owns `App`, sockets, lifecycle | terminals |
+| `internal/daemon` | the headless server: owns the session, sockets, lifecycle | terminals, tview, `ui` |
 | `internal/attach` | the client: owns the real terminal | **`ui`, `db`, `config`** |
 
 The last row is the one to hold. `attach` does not know that `dv` is a
@@ -614,8 +634,9 @@ wiring.
 | `cli`/`main` wiring, `keymap`/`ui` edits | ~350 | ~200 |
 | **Total** | **~2,300** | **~1,950** |
 
-About 10% on top of the existing 42,000 lines. `internal/ui`'s 19,172 lines
-are not touched.
+About 10% on top of the existing 42,000 lines. `internal/ui` changes only by
+the five places `ActionDetach` reaches and the one field added to `Deps`; none
+of its 19,172 lines are restructured and none of its tests change.
 
 ## Risks and deferred decisions
 

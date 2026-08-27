@@ -189,3 +189,72 @@ func TestDrawingWhileDetachedIsSafe(t *testing.T) {
 
 	s.Detach() // detaching when never attached is not an error either
 }
+
+// apply plays a frame onto a grid, the way a client would.
+func apply(grid map[[2]int]rune, f screen.Frame) {
+	for _, c := range f.Cells {
+		grid[[2]int{c.X, c.Y}] = c.Main
+	}
+}
+
+// Merging is what lets a slow reader be given one frame instead of a queue.
+// It is only allowed if the result draws the same screen as playing both.
+func TestMergeDrawsTheSameScreenAsPlayingBoth(t *testing.T) {
+	first := screen.Frame{
+		Cells: []screen.Cell{
+			{X: 1, Y: 0, Main: 'a', Width: 1},
+			{X: 5, Y: 2, Main: 'b', Width: 1},
+		},
+		Cursor: screen.Cursor{X: 1, Y: 0, Visible: true},
+	}
+	second := screen.Frame{
+		Cells: []screen.Cell{
+			{X: 1, Y: 0, Main: 'z', Width: 1},
+			{X: 9, Y: 4, Main: 'c', Width: 1},
+		},
+		Cursor: screen.Cursor{X: 9, Y: 4, Visible: true},
+	}
+
+	inOrder := map[[2]int]rune{}
+	apply(inOrder, first)
+	apply(inOrder, second)
+
+	merged := map[[2]int]rune{}
+	apply(merged, first.Merge(second))
+
+	if len(merged) != len(inOrder) {
+		t.Fatalf("merged screen has %d cells, playing both gives %d", len(merged), len(inOrder))
+	}
+	for pos, want := range inOrder {
+		if merged[pos] != want {
+			t.Errorf("at %v: merged has %q, playing both gives %q", pos, merged[pos], want)
+		}
+	}
+}
+
+// A cell the waiting frame carried and the new one does not must survive.
+// Dropping it instead of merging leaves stale content on screen forever.
+func TestMergeKeepsCellsTheNewFrameDoesNotTouch(t *testing.T) {
+	waiting := screen.Frame{Cells: []screen.Cell{{X: 5, Y: 2, Main: 'b', Width: 1}}}
+	arriving := screen.Frame{Cells: []screen.Cell{{X: 1, Y: 0, Main: 'z', Width: 1}}}
+
+	got := waiting.Merge(arriving)
+
+	if len(got.Cells) != 2 {
+		t.Fatalf("merge produced %d cells, want 2", len(got.Cells))
+	}
+	find(t, got, 5, 2)
+	find(t, got, 1, 0)
+}
+
+// The caret is not a cell: the newest position is the only correct one.
+func TestMergeTakesTheNewerCursor(t *testing.T) {
+	waiting := screen.Frame{Cursor: screen.Cursor{X: 1, Y: 1, Visible: true}}
+	arriving := screen.Frame{Cursor: screen.Cursor{X: 8, Y: 3, Visible: false}}
+
+	got := waiting.Merge(arriving)
+
+	if got.Cursor != (screen.Cursor{X: 8, Y: 3, Visible: false}) {
+		t.Errorf("Cursor = %+v, want the arriving one", got.Cursor)
+	}
+}

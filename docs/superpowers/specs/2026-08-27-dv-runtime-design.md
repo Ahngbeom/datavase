@@ -274,7 +274,12 @@ needed:
 ## The protocol — `internal/proto`
 
 Messages and framing over an `io.Reader`/`io.Writer`. It knows nothing about
-sockets or screens, so `net.Pipe` tests all of it.
+sockets, so `net.Pipe` tests all of it.
+
+`Frame`, `Cell` and `Caps` are owned by `internal/screen`, and `proto` encodes
+them. The dependency points that way because the screen holds the concept and
+the protocol only carries it; a wire format that owned the cell type would make
+the screen change whenever the transport did.
 
 Encoding is `encoding/gob`: cell frames carry `rune`, `[]rune` and
 `tcell.Style` directly, it is standard library (no CGO), and its stream
@@ -318,6 +323,10 @@ drains it.
 **If the slot is occupied, the frames are merged: for each coordinate, the
 later cell wins. Cursor and title take the newest.** Cells present in the
 waiting frame and absent from the new one survive.
+
+The merge itself is `screen.Frame.Merge` — a pure operation on frames, tested
+where frames are defined. `proto` owns only the one-deep queue, because pacing
+is a property of the transport rather than of the picture.
 
 Merging is sound because both frames are differences against the same
 baseline — the screen the client is currently showing, having applied neither.
@@ -472,7 +481,7 @@ exactly once in `helpGroups` (`ui/dialog_test.go`), every sequence in
 | Package | What it does | What it deliberately does not know |
 | --- | --- | --- |
 | `internal/screen` | a `tcell.Screen` whose terminal is elsewhere | sockets, tview, `dv` |
-| `internal/proto` | wire messages, codec, the frame slot | sockets, screens |
+| `internal/proto` | wire messages, codec, the frame queue | sockets, tview, the interface |
 | `internal/snapshot` | builds and serves the observation snapshot | `ui.App`, sockets |
 | `internal/daemon` | the headless server: owns `App`, sockets, lifecycle | terminals |
 | `internal/attach` | the client: owns the real terminal | **`ui`, `db`, `config`** |

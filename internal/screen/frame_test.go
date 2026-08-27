@@ -1,7 +1,9 @@
 package screen_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Ahngbeom/datavase/internal/screen"
 	"github.com/gdamore/tcell/v2"
@@ -259,23 +261,48 @@ func TestMergeTakesTheNewerCursor(t *testing.T) {
 	}
 }
 
-// The interface relayouts on tcell's resize event. Resizing the buffer
-// without posting one leaves every widget at the old geometry.
-func TestSetSizePostsResizeAfterResizing(t *testing.T) {
+// The interface relayouts when tcell's resize event arrives and asks the
+// screen how big it is while doing so. An event that can be seen before the
+// buffer has been resized lays every widget out at the size the terminal has
+// just stopped being.
+func TestSetSizeResizesBeforeTheEventCanBeSeen(t *testing.T) {
 	s, _ := attached(t, 20, 5)
 
-	s.SetSize(40, 10)
+	// A full event queue pins SetSize inside PostEventWait, which is the only
+	// moment the order is observable at all: the new size has to be readable
+	// while the event is still stuck behind the backlog.
+	for s.PostEvent(tcell.NewEventInterrupt(nil)) == nil {
+	}
 
-	ev, ok := s.PollEvent().(*tcell.EventResize)
-	if !ok {
-		t.Fatalf("PollEvent returned %T, want *tcell.EventResize", ev)
+	resized := make(chan struct{})
+	go func() {
+		s.SetSize(40, 10)
+		close(resized)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if w, h := s.Size(); w == 40 && h == 10 {
+			break
+		}
+		if time.Now().After(deadline) {
+			w, h := s.Size()
+			t.Fatalf("screen size = %dx%d while the resize event was already queued; tview would relayout at the old geometry", w, h)
+		}
+		time.Sleep(time.Millisecond)
 	}
-	if w, h := ev.Size(); w != 40 || h != 10 {
-		t.Errorf("event size = %dx%d, want 40x10", w, h)
+
+	for {
+		ev, ok := s.PollEvent().(*tcell.EventResize)
+		if !ok {
+			continue // the backlog this test queued up
+		}
+		if w, h := ev.Size(); w != 40 || h != 10 {
+			t.Errorf("event size = %dx%d, want 40x10", w, h)
+		}
+		break
 	}
-	if w, h := s.Size(); w != 40 || h != 10 {
-		t.Errorf("screen size = %dx%d, want 40x10; the event must not arrive before the size", w, h)
-	}
+	<-resized
 }
 
 // Drawing goes on while detached and clears the dirty flags as it goes. A
@@ -298,5 +325,82 @@ func TestReattachingRepaintsEverything(t *testing.T) {
 	}
 	if c := find(t, f, 3, 3); c.Main != 'q' {
 		t.Errorf("cell drawn while detached came back as %q, want 'q'", c.Main)
+	}
+}
+
+// blockingSink holds the first frame it is handed until it is released, which
+// is what makes the delivery of a second frame observable.
+type blockingSink struct {
+	mu      sync.Mutex
+	frames  []screen.Frame
+	started bool
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingSink) Frame(f screen.Frame) {
+	b.mu.Lock()
+	first := !b.started
+	b.started = true
+	b.mu.Unlock()
+
+	if first {
+		close(b.entered)
+		<-b.release
+	}
+
+	b.mu.Lock()
+	b.frames = append(b.frames, f)
+	b.mu.Unlock()
+}
+
+func (b *blockingSink) SetTitle(string)     {}
+func (b *blockingSink) SetClipboard([]byte) {}
+func (b *blockingSink) RequestClipboard()   {}
+func (b *blockingSink) Bell()               {}
+
+// Attaching sends the whole screen from whichever goroutine took the client;
+// the interface goes on drawing on its own. A draw that finishes while that
+// repaint is still in the sink must not pass it, or the terminal applies the
+// newer cells and then has the older full frame paint them back to what they
+// were — stale until something happens to touch them again.
+func TestADrawCannotOvertakeTheRepaintBeforeIt(t *testing.T) {
+	s := screen.New(screen.Caps{Width: 20, Height: 5, Colors: 256, CharacterSet: "UTF-8"})
+	b := &blockingSink{entered: make(chan struct{}), release: make(chan struct{})}
+
+	attaching := make(chan struct{})
+	go func() {
+		s.Attach(b)
+		close(attaching)
+	}()
+	<-b.entered // the repaint is inside the sink and has not returned
+
+	s.SetContent(2, 1, 'x', nil, tcell.StyleDefault)
+	drawn := make(chan struct{})
+	go func() {
+		s.Show()
+		close(drawn)
+	}()
+
+	select {
+	case <-drawn:
+		t.Fatal("a draw reached the sink while the repaint before it was still being delivered")
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	close(b.release)
+	<-attaching
+	<-drawn
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.frames) != 2 {
+		t.Fatalf("sink got %d frames, want the repaint and then the draw", len(b.frames))
+	}
+	if n := len(b.frames[0].Cells); n != 20*5 {
+		t.Errorf("first frame carried %d cells, want the whole screen (%d)", n, 20*5)
+	}
+	if n := len(b.frames[1].Cells); n != 1 {
+		t.Errorf("second frame carried %d cells, want only the one that changed", n)
 	}
 }

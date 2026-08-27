@@ -75,6 +75,14 @@ type Frame struct {
 // It is an interface rather than a set of callbacks so that "attached" is one
 // thing to hold and one thing to drop, and so a test can record every kind of
 // output in one place.
+//
+// No method may block. Every one of them is called from the goroutine that
+// draws the interface, which is also the goroutine reading rows off the
+// database connection; MySQL will not accept another statement until that
+// result set is drained, so a sink that waits on a wedged terminal stalls the
+// statement, its cancellation and the schema browser with it. Frames have a
+// bounded path for this in proto.FrameQueue — the other four methods have
+// nothing behind them, and whatever implements them owns that.
 type Sink interface {
 	Frame(Frame)
 	SetTitle(string)
@@ -92,6 +100,8 @@ type Sink interface {
 // what changed. Without the full frame, the first one after re-attaching is
 // empty and the terminal keeps showing whatever it had.
 func (s *Screen) Attach(sink Sink) {
+	// The sink is set and the lock dropped before Sync, which takes deliver
+	// for itself; holding it across the repaint would deadlock on it.
 	s.mu.Lock()
 	s.sink = sink
 	s.mu.Unlock()
@@ -101,17 +111,26 @@ func (s *Screen) Attach(sink Sink) {
 
 // Detach stops emitting. The interface goes on drawing and does not learn
 // that nobody is watching.
+//
+// It waits on deliver so that a frame emit has already built cannot land in a
+// sink this call has dropped.
 func (s *Screen) Detach() {
+	s.deliver.Lock()
+	defer s.deliver.Unlock()
+
 	s.mu.Lock()
 	s.sink = nil
 	s.mu.Unlock()
 }
 
-// Show emits the cells that changed since the last call and clears their
-// flags.
+// Show clears the dirty flags whether or not a sink is listening, because the
+// buffer is tview's and the interface draws on it either way. What that costs
+// is the record of everything drawn while detached, which is why Attach
+// repaints rather than waiting for the next Show.
 func (s *Screen) Show() { s.emit(false) }
 
-// Sync emits every cell.
+// Sync emits every cell the buffer holds, skipping only the column behind a
+// wide rune as Show does.
 //
 // It does not go through the buffer's dirty flags. tcell marks a cell dirty
 // by clearing the record of what was last drawn there, which leaves a cell
@@ -122,6 +141,9 @@ func (s *Screen) Show() { s.emit(false) }
 func (s *Screen) Sync() { s.emit(true) }
 
 func (s *Screen) emit(all bool) {
+	s.deliver.Lock()
+	defer s.deliver.Unlock()
+
 	s.mu.Lock()
 
 	var cells []Cell
@@ -220,21 +242,25 @@ func (s *Screen) currentSink() Sink {
 // one is simply correct.
 func (f Frame) Merge(next Frame) Frame {
 	if len(next.Cells) == 0 {
-		return Frame{Cells: f.Cells, Cursor: next.Cursor}
+		return Frame{Cells: append([]Cell{}, f.Cells...), Cursor: next.Cursor}
 	}
 
 	at := make(map[[2]int]int, len(f.Cells)+len(next.Cells))
 	cells := make([]Cell, 0, len(f.Cells)+len(next.Cells))
 
-	for _, c := range append(append([]Cell{}, f.Cells...), next.Cells...) {
-		key := [2]int{c.X, c.Y}
-		if i, seen := at[key]; seen {
-			cells[i] = c
-			continue
+	take := func(from []Cell) {
+		for _, c := range from {
+			key := [2]int{c.X, c.Y}
+			if i, seen := at[key]; seen {
+				cells[i] = c
+				continue
+			}
+			at[key] = len(cells)
+			cells = append(cells, c)
 		}
-		at[key] = len(cells)
-		cells = append(cells, c)
 	}
+	take(f.Cells)
+	take(next.Cells)
 
 	return Frame{Cells: cells, Cursor: next.Cursor}
 }

@@ -26,6 +26,10 @@ const eventQueue = 128
 //
 // It is supplied rather than probed because the terminal is elsewhere. Every
 // field here is a question only the process holding it can answer.
+//
+// Width and Height are the size at the handshake and nothing keeps them
+// current: SetSize resizes the buffer and leaves these alone, so Size is the
+// authority on how big the screen is once a terminal has been resized.
 type Caps struct {
 	Width, Height int
 	Colors        int
@@ -35,11 +39,21 @@ type Caps struct {
 
 // Screen implements tcell.Screen against a cell buffer instead of a terminal.
 type Screen struct {
+	// deliver serialises frame delivery. emit builds under mu and sends
+	// after releasing it, so a sink is never called with the screen locked;
+	// without a second lock outside mu, Attach's full repaint and Show's next
+	// delta can overtake each other and put old cells back on the terminal.
+	// Every path takes deliver before mu and never the reverse.
+	deliver sync.Mutex
+
 	mu   sync.Mutex
 	buf  tcell.CellBuffer
 	caps Caps
 
-	// style is the default set by SetStyle, used by Clear and PutStr.
+	// style is the default SetStyle recorded. Nothing here draws with it:
+	// cells travel carrying the style they were written with, and the
+	// substitution a real screen does for StyleDefault happens on the client,
+	// against the client's own default.
 	style tcell.Style
 
 	cursor      Cursor
@@ -77,9 +91,13 @@ func (s *Screen) Fini() {
 
 // --- capabilities: the client's answers, never invented ---
 
-func (s *Screen) Colors() int           { return s.caps.Colors }
-func (s *Screen) CharacterSet() string  { return s.caps.CharacterSet }
-func (s *Screen) HasMouse() bool        { return s.caps.HasMouse }
+func (s *Screen) Colors() int          { return s.caps.Colors }
+func (s *Screen) CharacterSet() string { return s.caps.CharacterSet }
+func (s *Screen) HasMouse() bool       { return s.caps.HasMouse }
+
+// HasKey answers for every key because the screen that decides which keys
+// reach anyone is the real one on the client, and Caps carries no key set to
+// answer from. Refusing here would suppress a key the terminal can send.
 func (s *Screen) HasKey(tcell.Key) bool { return true }
 
 func (s *Screen) Size() (int, int) {
@@ -134,11 +152,12 @@ func (s *Screen) PutStrStyled(x, y int, str string, style tcell.Style) {
 	}
 }
 
+// PutStr writes with the default style, which is what tcell.Screen promises.
+// Substituting the SetStyle default here would make this screen draw text a
+// real one would not, and the whole design rests on the two being the same
+// screen.
 func (s *Screen) PutStr(x, y int, str string) {
-	s.mu.Lock()
-	style := s.style
-	s.mu.Unlock()
-	s.PutStrStyled(x, y, str, style)
+	s.PutStrStyled(x, y, str, tcell.StyleDefault)
 }
 
 func (s *Screen) SetContent(x, y int, mainc rune, combc []rune, style tcell.Style) {
@@ -257,9 +276,11 @@ func (s *Screen) ChannelEvents(ch chan<- tcell.Event, quit <-chan struct{}) {
 
 // --- things a screen without a terminal cannot do ---
 
-// EnableMouse and friends record nothing: the client turned these on for its
-// own screen before it ever connected, and the interface asking again here
-// changes nothing about what the terminal will send.
+// EnableMouse and friends record nothing, which makes them a requirement on
+// whatever holds the terminal: it must enable mouse, paste and focus
+// reporting on its own screen before it connects. The interface asking here
+// cannot reach the terminal, so anything the client left off is never sent
+// and nothing later can ask for it again.
 func (s *Screen) EnableMouse(...tcell.MouseFlags) {}
 func (s *Screen) DisableMouse()                   {}
 func (s *Screen) EnablePaste()                    {}

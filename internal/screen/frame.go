@@ -4,9 +4,12 @@ import "github.com/gdamore/tcell/v2"
 
 // Style is tcell.Style in a form an encoder can carry.
 //
-// tcell.Style has no exported fields, so encoding/gob writes it as a zero
-// value and every cell arrives colourless. Nothing catches that at compile
-// time, which is why this type exists and why a test pins the round trip.
+// tcell.Style has no exported fields, and encoding/gob refuses a type that
+// has none: "gob: type tcell.Style has no exported fields". A cell carrying
+// one would not travel at all — the encode fails before a byte is written,
+// and the reader waits for a frame that never comes. Nothing catches that at
+// compile time, which is why this type exists and why a test pins the round
+// trip.
 //
 // The hyperlink a style can carry (OSC 8) is not here: tcell offers Url and
 // UrlId as setters and no getters, so it cannot be read back out. dv writes

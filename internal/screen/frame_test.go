@@ -258,3 +258,45 @@ func TestMergeTakesTheNewerCursor(t *testing.T) {
 		t.Errorf("Cursor = %+v, want the arriving one", got.Cursor)
 	}
 }
+
+// The interface relayouts on tcell's resize event. Resizing the buffer
+// without posting one leaves every widget at the old geometry.
+func TestSetSizePostsResizeAfterResizing(t *testing.T) {
+	s, _ := attached(t, 20, 5)
+
+	s.SetSize(40, 10)
+
+	ev, ok := s.PollEvent().(*tcell.EventResize)
+	if !ok {
+		t.Fatalf("PollEvent returned %T, want *tcell.EventResize", ev)
+	}
+	if w, h := ev.Size(); w != 40 || h != 10 {
+		t.Errorf("event size = %dx%d, want 40x10", w, h)
+	}
+	if w, h := s.Size(); w != 40 || h != 10 {
+		t.Errorf("screen size = %dx%d, want 40x10; the event must not arrive before the size", w, h)
+	}
+}
+
+// Drawing goes on while detached and clears the dirty flags as it goes. A
+// client that comes back must be sent everything, not the nothing that is
+// left over.
+func TestReattachingRepaintsEverything(t *testing.T) {
+	s, r := attached(t, 20, 5)
+	s.Sync()
+
+	s.Detach()
+	s.SetContent(3, 3, 'q', nil, tcell.StyleDefault)
+	s.Show() // nobody listening; the dirty flag is spent here
+
+	r.frames = nil
+	s.Attach(r)
+
+	f := last(t, r)
+	if len(f.Cells) != 20*5 {
+		t.Fatalf("re-attaching sent %d cells, want the whole screen (%d)", len(f.Cells), 20*5)
+	}
+	if c := find(t, f, 3, 3); c.Main != 'q' {
+		t.Errorf("cell drawn while detached came back as %q, want 'q'", c.Main)
+	}
+}

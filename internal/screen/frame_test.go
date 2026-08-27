@@ -249,6 +249,21 @@ func TestMergeKeepsCellsTheNewFrameDoesNotTouch(t *testing.T) {
 	find(t, got, 1, 0)
 }
 
+// A frame already handed to a reader must not be corrupted by a later one:
+// the zero-cell fast path used to return a frame sharing the receiver's
+// backing array, so mutating what Merge returned changed what an earlier
+// reader was still holding.
+func TestMergeZeroCellFastPathDoesNotAliasTheReceiver(t *testing.T) {
+	waiting := screen.Frame{Cells: []screen.Cell{{X: 5, Y: 2, Main: 'b', Width: 1}}}
+
+	got := waiting.Merge(screen.Frame{})
+	got.Cells[0].Main = 'z'
+
+	if waiting.Cells[0].Main != 'b' {
+		t.Errorf("mutating the merged frame changed the receiver's cell to %q", waiting.Cells[0].Main)
+	}
+}
+
 // The caret is not a cell: the newest position is the only correct one.
 func TestMergeTakesTheNewerCursor(t *testing.T) {
 	waiting := screen.Frame{Cursor: screen.Cursor{X: 1, Y: 1, Visible: true}}
@@ -292,15 +307,28 @@ func TestSetSizeResizesBeforeTheEventCanBeSeen(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	for {
-		ev, ok := s.PollEvent().(*tcell.EventResize)
-		if !ok {
-			continue // the backlog this test queued up
+	// PollEvent blocks once the backlog is drained, so a SetSize that stopped
+	// posting the resize event at all must not hang the test: it has to fail
+	// by name instead of surfacing as a timeout panic.
+	found := make(chan *tcell.EventResize, 1)
+	go func() {
+		for {
+			ev, ok := s.PollEvent().(*tcell.EventResize)
+			if !ok {
+				continue // the backlog this test queued up
+			}
+			found <- ev
+			return
 		}
+	}()
+
+	select {
+	case ev := <-found:
 		if w, h := ev.Size(); w != 40 || h != 10 {
 			t.Errorf("event size = %dx%d, want 40x10", w, h)
 		}
-		break
+	case <-time.After(2 * time.Second):
+		t.Fatal("no resize event arrived within 2s; SetSize did not post one")
 	}
 	<-resized
 }

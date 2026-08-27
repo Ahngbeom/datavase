@@ -192,3 +192,35 @@ func (s *Screen) currentSink() Sink {
 	defer s.mu.Unlock()
 	return s.sink
 }
+
+// Merge folds next into f so one frame can be delivered where two were
+// waiting.
+//
+// It is sound because both are differences against the same picture — the one
+// the reader is still showing, having applied neither. For any position the
+// later cell wins; a position only f touched survives, which is the whole
+// difference between merging and discarding. Discarding would leave whatever f
+// was carrying stale on the screen for good.
+//
+// The cursor is not a position on the screen but a single value, so the newer
+// one is simply correct.
+func (f Frame) Merge(next Frame) Frame {
+	if len(next.Cells) == 0 {
+		return Frame{Cells: f.Cells, Cursor: next.Cursor}
+	}
+
+	at := make(map[[2]int]int, len(f.Cells)+len(next.Cells))
+	cells := make([]Cell, 0, len(f.Cells)+len(next.Cells))
+
+	for _, c := range append(append([]Cell{}, f.Cells...), next.Cells...) {
+		key := [2]int{c.X, c.Y}
+		if i, seen := at[key]; seen {
+			cells[i] = c
+			continue
+		}
+		at[key] = len(cells)
+		cells = append(cells, c)
+	}
+
+	return Frame{Cells: cells, Cursor: next.Cursor}
+}

@@ -237,9 +237,26 @@ real tcell screen computes width and handles the trailing cell itself. The
 width travels with each cell for diagnosis, not for the client to predict
 coordinates — every cell carries its own.
 
-`Sync` calls `Invalidate()` and takes the same path. A whole frame is needed
-in exactly two places, re-attach and resize, and tview already calls `Sync` at
+`Sync` emits every cell instead, and deliberately does not go through the
+dirty flags. tcell marks a cell dirty by clearing its record of what was last
+drawn there, which leaves a cell nothing was ever written to
+indistinguishable from a clean one — so an invalidated blank screen reports
+nothing to send. A repaint has to mean every cell, because the terminal being
+repainted for may be showing anything at all. A whole frame is needed in
+exactly two places, re-attach and resize, and tview already calls `Sync` at
 both.
+
+### A cell carries a flattened style
+
+`tcell.Style` has no exported fields. `encoding/gob` writes only exported
+fields, so a cell carrying one arrives with a zero style and no colour, and
+nothing fails to build. Cells therefore carry a `screen.Style` — foreground,
+background, attributes, underline style and underline colour — built with
+`Decompose` and the underline getters and rebuilt with the matching setters.
+
+The one thing that cannot make the trip is the OSC 8 hyperlink a style can
+carry: tcell offers `Url` and `UrlId` as setters and exposes no getters. dv
+writes no hyperlink markup, so nothing is lost today; see the risks below.
 
 ### While detached
 
@@ -616,3 +633,10 @@ handoff between versions becomes routine rather than exceptional.
 spinners may stutter. The final state is always correct.
 
 **Drawing while detached is wasted work.** Accepted, for the reason above.
+
+**Hyperlink styles do not survive the wire.** `tcell.Style` carries an OSC 8
+url and id that tcell exposes no getter for, so `screen.Style` cannot read
+them back. dv writes no hyperlink markup today — tview parses `[:::url]` tags
+and nothing in this repository emits one — so a style bearing a url should
+never reach the screen. It becomes a real defect the day dv adds links, and
+the fix then is upstream: a getter on `tcell.Style`.

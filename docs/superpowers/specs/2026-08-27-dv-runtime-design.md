@@ -261,11 +261,18 @@ both.
 
 ### A cell carries a flattened style
 
-`tcell.Style` has no exported fields. `encoding/gob` writes only exported
-fields, so a cell carrying one arrives with a zero style and no colour, and
-nothing fails to build. Cells therefore carry a `screen.Style` — foreground,
-background, attributes, underline style and underline colour — built with
-`Decompose` and the underline getters and rebuilt with the matching setters.
+`tcell.Style` has no exported fields, and `encoding/gob` refuses a type that
+has none: `gob: type tcell.Style has no exported fields`. A cell carrying one
+would not travel at all — the encode fails before a byte is written, and the
+reader waits for a frame that never arrives. Nothing catches it at compile
+time. Cells therefore carry a `screen.Style` — foreground, background,
+attributes, underline style and underline colour — built with `Decompose` and
+the underline getters and rebuilt with the matching setters.
+
+That mechanism is measured rather than reasoned: an earlier draft of this
+document said gob would write a zero style and let a colourless frame through,
+which would have been the quieter failure. It refuses instead, so the symptom
+is a wedged reader rather than a grey screen.
 
 The one thing that cannot make the trip is the OSC 8 hyperlink a style can
 carry: tcell offers `Url` and `UrlId` as setters and exposes no getters. dv

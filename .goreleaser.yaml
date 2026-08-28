@@ -70,12 +70,12 @@ homebrew_casks:
       # that form was reaching for lives on skip_upload below, which does take
       # an arbitrary template, and release.yml always defines the variable —
       # empty when the secret is absent — so this never resolves a missing key.
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
 
     # Without the token there is nowhere to push, and a release that failed for
     # that reason would have already uploaded the archives — leaving a tag that
     # cannot be retried. Skipping keeps every other artifact intact.
-    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
 
     binaries: [dv]
 

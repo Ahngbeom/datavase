@@ -13,25 +13,25 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
 
-    # HOMEBREW_TAP_GITHUB_TOKEN is an environment secret, and an environment
-    # secret reaches a job only when the job names its environment. Without
-    # this line it does not arrive as an error — it arrives as an empty string,
-    # indistinguishable from a secret nobody added, and the cask is skipped by
-    # a release that otherwise looks like it worked.
+    # HOMEBREW_TAP_TOKEN reaches this job whether it is a repository secret
+    # or scoped to this environment; naming the environment here is what lets
+    # an environment-scoped secret of the same name reach it. Without this
+    # line a scoped secret does not arrive as an error — it arrives as an
+    # empty string, indistinguishable from a secret nobody added, and the
+    # cask is skipped by a release that otherwise looks like it worked.
     environment: HOMEBREW_TAP
 
     steps:
       # Skipping the cask keeps a release from failing after it has already
       # uploaded its archives, but a silent skip cannot be told apart from a
-      # misconfigured one — an environment secret reaching a job that did not
-      # name its environment is empty, exactly like one nobody added. Say so
-      # where the run can be seen, and carry on.
+      # misconfigured one — a secret the job cannot see is empty, exactly
+      # like one nobody added. Say so where the run can be seen, and carry on.
       - name: Report whether the Homebrew cask can be published
         env:
-          TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN is empty. The Homebrew cask will not be published, so 'brew install Ahngbeom/tap/dv' will keep serving the previous version. Every other artifact is unaffected."
+            echo "::warning::HOMEBREW_TAP_TOKEN is empty. The Homebrew cask will not be published, so 'brew install Ahngbeom/tap/dv' will keep serving the previous version. Every other artifact is unaffected."
           else
             echo "Homebrew tap token present; the cask will be published."
           fi
@@ -58,7 +58,7 @@ jobs:
           # arrives here as an empty string, which .goreleaser.yaml reads as
           # "skip the cask" rather than failing a release that has already
           # uploaded its archives.
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       # After goreleaser, because dist/checksums.txt is written by it and the
       # release is already published by the time it exists — attesting is

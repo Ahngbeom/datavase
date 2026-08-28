@@ -934,7 +934,43 @@ func sessionSnapshot(ctx context.Context) (*snapshot.Session, error) {
 }
 ```
 
-Set `live` in `buildSession` just before returning the app.
+`buildSession`'s return statement no longer ends with a bare `return
+ui.New(...), warnings, nil` — Part 2's final whole-branch review found that
+`buildSession` opened `catalog.Cache`/`history.Store` and nothing closed them,
+and the fix wrapped the session in `closingSession{statefulSession:
+sessionAdapter{...}, closers}` so they close when `Run` returns. `ui.New(...)`
+is now a nested expression inside that composite literal rather than a named
+local.
+
+Bind it to a local first, set `live` from that local, then build the wrapper
+around it:
+
+```go
+	app := ui.New(sess, cfg, ui.Deps{
+		Keys:      keys,
+		Cache:     cache,
+		History:   hist,
+		Worktree:  wt,
+		Recent:    recents,
+		IntroPath: introPath,
+		Connect:   connectTo,
+		Detach:    srv.Detach,
+	})
+
+	liveMu.Lock()
+	live = app
+	liveMu.Unlock()
+
+	return closingSession{
+		statefulSession: sessionAdapter{app},
+		closers:         closers,
+	}, warnings, nil
+```
+
+`App.Snapshot` is a method on `*ui.App` directly and is unaffected by the
+`sessionAdapter`/`closingSession` wrapping — those exist only so the return
+value also satisfies `daemon.Stateful`/`daemon.Session`, not to change what
+`*ui.App` itself can do.
 
 Finally, in `main.go`, add `APISnapshot: apiSnapshot` to the `cli.App`
 literal.

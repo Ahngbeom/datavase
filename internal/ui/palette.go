@@ -314,7 +314,7 @@ func paletteCommands() []command {
 			name:     "detach directory",
 			category: catFiles,
 			summary:  "forget the attached worktree",
-			run:      (*App).detach,
+			run:      (*App).detachWorktree,
 		},
 		{
 			name:     "open file",
@@ -396,6 +396,13 @@ func paletteCommands() []command {
 			summary:  "show the key reference",
 			covers:   keymap.ActionHelp,
 			run:      (*App).showHelp,
+		},
+		{
+			name:     "detach",
+			category: catOther,
+			summary:  "leave the terminal, keeping the session running",
+			covers:   keymap.ActionDetach,
+			run:      (*App).detach,
 		},
 		{
 			name:     "quit",

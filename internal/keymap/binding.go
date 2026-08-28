@@ -82,6 +82,8 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlUnderscore: '/',
 	// Ctrl+Enter degrades to a line feed, which is Ctrl+J.
 	tcell.KeyCtrlJ: enterStandIn,
+	// Ctrl+\ arrives as the file separator, 0x1C.
+	tcell.KeyCtrlBackslash: '\\',
 }
 
 // enterStandIn is the rune Ctrl+J folds to. It is not a character anyone can

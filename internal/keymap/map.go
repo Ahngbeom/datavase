@@ -333,6 +333,9 @@ func baseMap() *Map {
 
 	// Application.
 	m.bind(ActionHelp, plain(tcell.KeyF1)...)
+	m.bind(ActionDetach,
+		append(ctrlAndCmdRune('\\', 0),
+			Binding{Key: tcell.KeyF10, Mods: tcell.ModShift})...)
 	m.bind(ActionQuit,
 		append(ctrlAndCmdRune('q', 0), Binding{Key: tcell.KeyF10})...)
 

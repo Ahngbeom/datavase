@@ -51,6 +51,20 @@ type Switcher interface {
 // means refusing rather than assuming.
 const stateTimeout = 2 * time.Second
 
+// startTimeout bounds building the session, which opens a real database
+// connection and may raise an SSH tunnel first. It matches what dv gives a
+// connection attempt everywhere else, so a host behind a dropped VPN fails
+// here the same way it fails when dv runs on its own — and, because admit
+// holds admitMu across Start, an unbounded wait here would leave every later
+// attach queued behind it for the life of the process.
+const startTimeout = 15 * time.Second
+
+// byeTimeout bounds the goodbye sent when the session ends. The message is a
+// courtesy — a client also learns of the end from the socket closing — so a
+// terminal that has stopped reading costs a moment at shutdown rather than a
+// server process that never exits.
+const byeTimeout = time.Second
+
 type Options struct {
 	// Version is what a client must match exactly.
 	Version string
@@ -59,7 +73,11 @@ type Options struct {
 	// anything the user should be told about how it was built — a schema
 	// cache that would not open, a worktree that no longer exists. Those
 	// would otherwise land in a log nobody reads.
-	Start func(proto.Hello) (Session, []string, error)
+	//
+	// The context bounds building only, not the session that comes out of
+	// it: whatever Start opens must outlive the call and is owned by the
+	// returned Session from then on.
+	Start func(context.Context, proto.Hello) (Session, []string, error)
 }
 
 // Server holds one session and at most one client.
@@ -77,7 +95,6 @@ type Server struct {
 	session    Session
 	screen     *screen.Screen
 	dataSource string
-	warnings   []string
 	client     *conn
 
 	runOnce sync.Once
@@ -123,6 +140,33 @@ func (s *Server) Stop() {
 	}
 	// Nothing was ever started, so there is nothing to unwind.
 	s.finish(nil)
+}
+
+// farewell tells the attached terminal that the session it was showing has
+// ended, so it exits on a message that says why rather than on a socket that
+// simply stopped — which is indistinguishable, from the client's side, from
+// the server having died.
+func (s *Server) farewell() {
+	s.mu.Lock()
+	c := s.client
+	s.mu.Unlock()
+	if c == nil {
+		return
+	}
+
+	// send is a write with no deadline, and this goroutine is the one that
+	// must reach finish for the process to exit at all. Bound it: a client
+	// that has stopped draining its socket cannot be allowed to hold the
+	// session open past its own end.
+	sent := make(chan struct{})
+	go func() {
+		c.send(proto.ToClient{Kind: proto.KindBye, Bye: &proto.Bye{Reason: proto.ByeQuit}})
+		close(sent)
+	}()
+	select {
+	case <-sent:
+	case <-time.After(byeTimeout):
+	}
 }
 
 func (s *Server) finish(err error) {

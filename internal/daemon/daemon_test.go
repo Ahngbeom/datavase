@@ -75,7 +75,7 @@ func TestVersionMismatchIsRefused(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			t.Error("the session was built for a client that should have been refused")
 			return newEchoSession(), nil, nil
 		},
@@ -109,7 +109,7 @@ func TestStopEndsTheSessionWithoutAHello(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			t.Error("a stop request waited for a Hello before it was honoured")
 			return newEchoSession(), nil, nil
 		},
@@ -142,7 +142,7 @@ func TestWarningsTravelInTheWelcome(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return newEchoSession(), []string{"completion disabled: read-only state directory"}, nil
 		},
 	})
@@ -175,7 +175,7 @@ func TestKeyGoesUpAndTheFrameComesBack(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return newEchoSession(), nil, nil
 		},
 	})
@@ -234,7 +234,7 @@ func TestClientGoingAwayDoesNotStopTheSession(t *testing.T) {
 	session := newEchoSession()
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return session, nil, nil
 		},
 	})
@@ -258,6 +258,55 @@ func TestClientGoingAwayDoesNotStopTheSession(t *testing.T) {
 	}
 }
 
+// A terminal whose socket simply stops cannot tell a session that ended from
+// a server that died, and the two want different things from the user. The
+// session says goodbye before it goes.
+func TestTheClientIsToldWhyTheSessionEnded(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	srv := daemon.New(daemon.Options{
+		Version: "0.7.0",
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
+			return newEchoSession(), nil, nil
+		},
+	})
+	go srv.Serve(server)
+
+	enc, dec := proto.NewEncoder(client), proto.NewDecoder(client)
+	if err := enc.ToServer(hello("0.7.0")); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+	if welcome, err := dec.ToClient(); err != nil || welcome.Kind != proto.KindWelcome {
+		t.Fatalf("welcome = %v, err = %v", welcome.Kind, err)
+	}
+
+	go srv.Stop()
+
+	// A deadline rather than a select on a timer: nothing closes this end of
+	// the pipe, so a goodbye that never comes leaves the read blocked, and
+	// the failure would otherwise be the whole package timing out.
+	if err := client.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("deadline: %v", err)
+	}
+
+	// Frames drawn on the way out come first; the goodbye is what the client
+	// is waiting to see among them.
+	for {
+		m, err := dec.ToClient()
+		if err != nil {
+			t.Fatalf("the session ended without telling the terminal why: %v", err)
+		}
+		if m.Kind != proto.KindBye {
+			continue
+		}
+		if m.Bye == nil || m.Bye.Reason != proto.ByeQuit {
+			t.Fatalf("Bye = %+v, want reason %q", m.Bye, proto.ByeQuit)
+		}
+		return
+	}
+}
+
 // A statement in flight is what a second dv must not take the session away
 // from, and a session that will not answer is treated as busy: refusing is
 // the smaller mistake.
@@ -267,7 +316,7 @@ func TestBusySessionRefusesAnotherDataSource(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return &busySession{echoSession: newEchoSession()}, nil, nil
 		},
 	})
@@ -322,7 +371,7 @@ func TestReplacingAStalledOldClientDoesNotHangTheNewAttach(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return newEchoSession(), nil, nil
 		},
 	})
@@ -381,7 +430,7 @@ func TestConcurrentFirstAttachStartsOnlyOneSession(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			atomic.AddInt32(&starts, 1)
 			time.Sleep(150 * time.Millisecond)
 			return newEchoSession(), nil, nil

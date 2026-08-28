@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -176,7 +177,10 @@ func (s *Server) admit(h proto.Hello, rwc io.ReadWriteCloser) (*conn, []string, 
 		start := s.opts.Start
 		s.mu.Unlock()
 
-		session, warnings, err := start(h)
+		ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+		defer cancel()
+
+		session, warnings, err := start(ctx, h)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -186,12 +190,16 @@ func (s *Server) admit(h proto.Hello, rwc io.ReadWriteCloser) (*conn, []string, 
 
 		s.mu.Lock()
 		s.session, s.screen = session, scr
-		s.dataSource, s.warnings = h.DataSource, warnings
+		s.dataSource = h.DataSource
 		c := newConn(rwc)
 		s.client = c
 		s.mu.Unlock()
 
-		go func() { s.finish(session.Run()) }()
+		go func() {
+			err := session.Run()
+			s.farewell()
+			s.finish(err)
+		}()
 		return c, warnings, nil
 	}
 

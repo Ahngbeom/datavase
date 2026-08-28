@@ -103,7 +103,13 @@ func run() int {
 		ServerStatus: serverStatus,
 	}
 	if !*noSession {
-		app.Attach = attachSession
+		// The resolved path, not the flag as typed: a server spawned from
+		// here is told which file to read rather than working it out again,
+		// so a datasource name cannot mean one host on this side of the
+		// socket and another host on the other.
+		app.Attach = func(ctx context.Context, ds *config.DataSource, cfg *config.Config, opt cli.UIOptions) error {
+			return attachSession(ctx, ds, cfg, opt, path)
+		}
 	}
 	return app.Run(flag.Args())
 }
@@ -238,11 +244,15 @@ type closingSession struct {
 }
 
 func (s closingSession) Run() error {
-	err := s.statefulSession.Run()
-	for _, c := range s.closers {
-		c.Close()
-	}
-	return err
+	// Deferred rather than sequential: a panic out of the interface would
+	// otherwise leave the SQLite handles open, and the server process running
+	// this session outlives any one session.
+	defer func() {
+		for _, c := range s.closers {
+			c.Close()
+		}
+	}()
+	return s.statefulSession.Run()
 }
 
 // buildSession is what the server calls when the first client arrives.
@@ -252,7 +262,7 @@ func (s closingSession) Run() error {
 // nobody reads. And the password comes from the keychain and nowhere else:
 // the terminal that could answer a prompt is in another process, which is the
 // same reason a mid-session switch has never prompted.
-func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon.Session, []string, error) {
+func buildSession(ctx context.Context, h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon.Session, []string, error) {
 	ds, err := lookupDataSource(cfg, h.DataSource)
 	if err != nil {
 		return nil, nil, err
@@ -319,7 +329,11 @@ func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon
 		}
 	}
 
-	sess, err := session.Open(context.Background(), ds, password)
+	// The context bounds the connection attempt only, the way openUI's does.
+	// Without one an unreachable host would hang here forever, and this call
+	// runs under the server's admit lock: every later attach, for any
+	// datasource, would queue behind it until the process was stopped by hand.
+	sess, err := session.Open(ctx, ds, password)
 	if err != nil {
 		return nil, nil, err
 	}

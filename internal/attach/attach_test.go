@@ -2,6 +2,7 @@ package attach_test
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"strings"
 	"sync"
@@ -89,7 +90,7 @@ func TestWhatTheSessionDrewIsWhatTheTerminalShows(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return &echoSession{}, nil, nil
 		},
 	})
@@ -135,7 +136,7 @@ func TestRejectionComesBackAsAnError(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			t.Error("the session was built for a client that should have been refused")
 			return &echoSession{}, nil, nil
 		},
@@ -183,7 +184,7 @@ func TestWarningsReachStderr(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: "0.7.0",
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return &echoSession{}, []string{"completion disabled: read-only state directory"}, nil
 		},
 	})

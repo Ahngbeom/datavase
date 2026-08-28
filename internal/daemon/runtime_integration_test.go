@@ -6,6 +6,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,6 +62,41 @@ func integrationConfig(t *testing.T) *config.Config {
 	return &config.Config{DataSources: []config.DataSource{*ds}}
 }
 
+// snapshotScreen wraps a SimulationScreen so a test can read what it shows
+// without racing the goroutine drawing it: real GetContents hands back the
+// live front buffer by reference, and attach.Run's receive loop keeps
+// mutating that same buffer on every frame. Copying it out under a mutex on
+// every Show gives the test a read that -race accepts, and one that can never
+// see half of one frame and half of the next.
+//
+// internal/attach's own tests carry the same wrapper. It cannot be shared:
+// the two live in different test packages, and an unexported helper does not
+// cross that boundary.
+type snapshotScreen struct {
+	tcell.SimulationScreen
+
+	mu            sync.Mutex
+	cells         []tcell.SimCell
+	width, height int
+}
+
+func (s *snapshotScreen) Show() {
+	s.SimulationScreen.Show()
+	cells, w, h := s.SimulationScreen.GetContents()
+	cp := make([]tcell.SimCell, len(cells))
+	copy(cp, cells)
+
+	s.mu.Lock()
+	s.cells, s.width, s.height = cp, w, h
+	s.mu.Unlock()
+}
+
+func (s *snapshotScreen) GetContents() ([]tcell.SimCell, int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cells, s.width, s.height
+}
+
 // screenText joins a simulation screen into one string, so a test can ask
 // whether something is on it without caring where.
 func screenText(sim tcell.SimulationScreen) string {
@@ -111,14 +147,15 @@ func attachTo(t *testing.T, srv *daemon.Server, w, h int) (tcell.SimulationScree
 		t.Fatalf("sim init: %v", err)
 	}
 	sim.SetSize(w, h)
+	snap := &snapshotScreen{SimulationScreen: sim}
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = attach.Run(client, attach.Options{Version: testVersion, Screen: sim})
+		_ = attach.Run(client, attach.Options{Version: testVersion, Screen: snap})
 	}()
 
-	return sim, func() {
+	return snap, func() {
 		client.Close()
 		<-done
 	}
@@ -145,7 +182,7 @@ func TestAStatementSurvivesTheTerminal(t *testing.T) {
 	cfg := integrationConfig(t)
 	srv := daemon.New(daemon.Options{
 		Version: testVersion,
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return realSession(t, cfg), nil, nil
 		},
 	})
@@ -179,7 +216,7 @@ func TestAnotherDataSourceIsRefusedWhileAStatementRuns(t *testing.T) {
 
 	srv := daemon.New(daemon.Options{
 		Version: testVersion,
-		Start: func(proto.Hello) (daemon.Session, []string, error) {
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
 			return realSession(t, cfg), nil, nil
 		},
 	})

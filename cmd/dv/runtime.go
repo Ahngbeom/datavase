@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/attach"
@@ -14,6 +15,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/daemon"
 	"github.com/Ahngbeom/datavase/internal/proto"
+	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/version"
 )
 
@@ -28,7 +30,11 @@ const spawnWait = 3 * time.Second
 // a server that will not start, a machine where none of this works at all —
 // each of those costs persistence, says one line about it, and runs the way
 // dv always did.
-func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config, opt cli.UIOptions) error {
+//
+// The context is not used: it bounds a connection attempt, and the connection
+// is opened in the server process, which bounds it there. Applying it here
+// would put a deadline on the whole attached session instead.
+func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config, opt cli.UIOptions, configPath string) error {
 	path, err := daemon.SocketPath()
 	if err != nil {
 		return fallback(ds, cfg, opt, err)
@@ -36,7 +42,7 @@ func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config,
 
 	conn, err := daemon.Dial(path)
 	if err != nil {
-		if err := spawnServer(); err != nil {
+		if err := spawnServer(configPath); err != nil {
 			return fallback(ds, cfg, opt, err)
 		}
 		conn, err = waitForSocket(path)
@@ -47,10 +53,33 @@ func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config,
 
 	return attach.Run(conn, attach.Options{
 		Version:    version.String(),
-		WorkDir:    opt.WorkDir,
+		WorkDir:    absWorkDir(opt.WorkDir),
 		DataSource: ds.Name,
 		Err:        os.Stderr,
 	})
+}
+
+// absWorkDir resolves --dir here, in the process that knows what it was
+// relative to.
+//
+// The server opens the worktree it is sent, and a relative path there is
+// resolved against the server's own working directory — inherited from
+// whichever dv happened to start it and never changed since. So `dv --dir .`
+// would silently attach that directory instead of this one, with no warning,
+// because "." always exists.
+//
+// A working directory that cannot be read is not worth losing the session
+// over: the worktree is optional, and the path goes on unresolved so the
+// server's own "no worktree attached" warning is what the user sees.
+func absWorkDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	return abs
 }
 
 // fallback runs monolithically and says why, once.
@@ -59,7 +88,11 @@ func fallback(ds *config.DataSource, cfg *config.Config, opt cli.UIOptions, caus
 
 	password, err := secrets().Get(ds.Name)
 	if err != nil {
-		return fmt.Errorf("no password for %q; run: dv auth %s", ds.Name, ds.Name)
+		// Both ways out, the same as every other path that reads a password:
+		// a machine with no keychain is exactly the machine most likely to
+		// have got here.
+		return fmt.Errorf("no password for %q; run: dv auth %s — or set %s",
+			ds.Name, ds.Name, secret.EnvVarName(ds.Name))
 	}
 	return openUI(context.Background(), ds, password, cfg, opt)
 }
@@ -79,7 +112,7 @@ func waitForSocket(path string) (net.Conn, error) {
 	}
 }
 
-func spawnServer() error {
+func spawnServer(configPath string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -95,8 +128,13 @@ func spawnServer() error {
 	}
 	defer logFile.Close()
 
-	cmd := exec.Command(exe, "server")
+	// The config file is named rather than left to be resolved again: the
+	// server must read the same one this client did, or `dv -c other.yaml`
+	// starts a server that looks a datasource name up somewhere else.
+	cmd := exec.Command(exe, "-c", configPath, "server")
 	cmd.Stdout, cmd.Stderr = logFile, logFile
+	// Stdin stays nil, which os/exec gives the null device — this process
+	// must never be able to read from the terminal that started it.
 	detach(cmd)
 
 	if err := cmd.Start(); err != nil {
@@ -125,8 +163,8 @@ func runServer(cfg *config.Config) error {
 	var srv *daemon.Server
 	srv = daemon.New(daemon.Options{
 		Version: version.String(),
-		Start: func(h proto.Hello) (daemon.Session, []string, error) {
-			return buildSession(h, cfg, srv)
+		Start: func(ctx context.Context, h proto.Hello) (daemon.Session, []string, error) {
+			return buildSession(ctx, h, cfg, srv)
 		},
 	})
 

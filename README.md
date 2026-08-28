@@ -28,6 +28,8 @@ Built:
   stop it — and what is holding the lock everything else is waiting on.
 - **Work in a directory of SQL**: open, run and save its files, with git
   telling you which have changed.
+- **Keep the session when the terminal goes**: detach, close the laptop, come
+  back from another terminal and the statement is still running.
 - **The production guard**, which is the reason for the rest.
 
 Not built, and worth knowing before you lean on it:
@@ -268,11 +270,13 @@ your hands reach for.
 | Show which connections are waiting on which | `⌘⇧L` | `Ctrl+Shift+L` |
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
+| Detach, leaving the session running | `⌘\` | `Ctrl+\` |
 | Quit | `⌘Q` | `Ctrl+Q` |
 
 `F5` runs, `F2` saves, `F4` shows a definition, `F6` switches tab, `F7` chooses
-the schema, `F8` opens a file, `F9` searches the history, `F10` quits, `F11`
-switches datasource and `F12` sorts a column, everywhere, as fallbacks. Two
+the schema, `F8` opens a file, `F9` searches the history, `F10` quits,
+`Shift+F10` detaches, `F11` switches datasource and `F12` sorts a column,
+everywhere, as fallbacks. Two
 combinations are impossible
 rather than merely awkward: `⌘⇥` is the macOS application switcher, and
 `Ctrl+I` is byte 0x09 — the same as `⇥`.
@@ -380,6 +384,63 @@ Listed bindings replace an action's defaults rather than adding to them. An
 unknown preset, action name or binding is refused at startup, and the help
 screen is generated from the map in force — so it cannot drift out of step
 with what the keys actually do.
+
+## The session outlives the terminal
+
+The interface and the connection it holds run in a background process, so
+closing the terminal does not end what is running in it. A `SELECT` streaming
+ten million rows, an open transaction, an `ALTER` that has been going for
+twenty minutes — none of them care that the SSH connection dropped or that the
+laptop lid closed.
+
+`⌘\` or `Ctrl+\` detaches: the terminal is given back and the session keeps
+going. `Shift+F10` does the same where the modified key does not survive the
+terminal. Detaching asks about nothing — quitting asks about an open
+transaction and an unsaved buffer because quitting destroys them, and
+detaching destroys neither.
+
+Running `dv` again attaches to the same session, on the same buffer, with the
+same results still there. From a different terminal, a different SSH
+connection or a different machine on the same account, it is still the same
+session — there is only ever one, and the newest terminal wins it. The one it
+replaces is told why rather than left looking frozen.
+
+```sh
+dv                    # attach to the running session, or start one
+dv status             # say whether a session is running, and where
+dv server stop        # end the session and the process holding it
+```
+
+`⌘Q` still quits for good: the session ends, the background process exits, and
+the next `dv` starts a fresh one.
+
+Asking for a different datasource while a statement is running is refused
+rather than obeyed — switching closes the connection it leaves, which would
+kill the statement this is all for:
+
+```
+a statement is running on "prod-app".
+
+  dv              attach to it
+  dv server stop  end it and start again
+```
+
+The background process is a convenience, never a requirement. If it cannot be
+started — a read-only state directory, a machine where the socket cannot be
+made — `dv` says so in one line and runs the session in the terminal the way
+it always did:
+
+```
+no session server (…); this session ends with the terminal
+```
+
+`dv --no-session` asks for that on purpose. The detach key then says there is
+nothing to detach from rather than pretending, and the session ends with the
+terminal.
+
+`dv server` runs the same process in the foreground instead of the background,
+which is how to watch what it is doing. It is otherwise the same thing: the
+first `dv` that attaches decides which datasource it opens.
 
 ## The production guard
 

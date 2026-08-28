@@ -66,6 +66,13 @@ type Options struct {
 type Server struct {
 	opts Options
 
+	// admitMu serialises the whole of admit: the "does a session exist, and
+	// if not, start one" decision. It is separate from mu, which guards
+	// cheap state reads used elsewhere in the package (Detach, Stop) and
+	// must stay uncontended by something as slow as Start, which opens a
+	// real database connection.
+	admitMu sync.Mutex
+
 	mu         sync.Mutex
 	session    Session
 	screen     *screen.Screen

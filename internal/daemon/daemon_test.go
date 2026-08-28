@@ -3,6 +3,8 @@ package daemon_test
 import (
 	"context"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -268,3 +270,117 @@ func (b *busySession) State(context.Context) (daemon.State, error) {
 }
 
 func (b *busySession) SwitchTo(string) {}
+
+// A stalled old client (still connected, but not draining its socket — a
+// suspended process, a frozen SSH session) must not brick reconnection: a
+// second dv attaching should win promptly, not hang forever behind a write
+// nobody is reading.
+func TestReplacingAStalledOldClientDoesNotHangTheNewAttach(t *testing.T) {
+	oldClient, oldServer := net.Pipe()
+	defer oldClient.Close()
+
+	srv := daemon.New(daemon.Options{
+		Version: "0.7.0",
+		Start: func(proto.Hello) (daemon.Session, []string, error) {
+			return newEchoSession(), nil, nil
+		},
+	})
+	go srv.Serve(oldServer)
+	defer srv.Stop()
+
+	oldEnc, oldDec := proto.NewEncoder(oldClient), proto.NewDecoder(oldClient)
+	if err := oldEnc.ToServer(hello("0.7.0")); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+	if _, err := oldDec.ToClient(); err != nil { // welcome
+		t.Fatalf("welcome: %v", err)
+	}
+	if _, err := oldDec.ToClient(); err != nil { // the attach frame
+		t.Fatalf("first frame: %v", err)
+	}
+	// The old client stops reading from here on, as though its terminal
+	// were suspended — it never closes its end either.
+
+	newClient, newServer := net.Pipe()
+	defer newClient.Close()
+	go srv.Serve(newServer)
+
+	if err := proto.NewEncoder(newClient).ToServer(hello("0.7.0")); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+
+	type result struct {
+		msg proto.ToClient
+		err error
+	}
+	welcome := make(chan result, 1)
+	go func() {
+		m, err := proto.NewDecoder(newClient).ToClient()
+		welcome <- result{m, err}
+	}()
+
+	select {
+	case r := <-welcome:
+		if r.err != nil {
+			t.Fatalf("decode: %v", r.err)
+		}
+		if r.msg.Kind != proto.KindWelcome {
+			t.Fatalf("Kind = %v, want KindWelcome", r.msg.Kind)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the new client's attach hung behind a stalled old client's unread Bye")
+	}
+}
+
+// Two connections racing to attach before any session exists must not both
+// start one: whichever loses would open a database connection nothing ever
+// closes.
+func TestConcurrentFirstAttachStartsOnlyOneSession(t *testing.T) {
+	var starts int32
+
+	srv := daemon.New(daemon.Options{
+		Version: "0.7.0",
+		Start: func(proto.Hello) (daemon.Session, []string, error) {
+			atomic.AddInt32(&starts, 1)
+			time.Sleep(150 * time.Millisecond)
+			return newEchoSession(), nil, nil
+		},
+	})
+	defer srv.Stop()
+
+	clientA, serverA := net.Pipe()
+	defer clientA.Close()
+	clientB, serverB := net.Pipe()
+	defer clientB.Close()
+
+	go srv.Serve(serverA)
+	go srv.Serve(serverB)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for _, c := range []net.Conn{clientA, clientB} {
+		go func(c net.Conn) {
+			defer wg.Done()
+			// Both clients attach as though neither knows the other is
+			// there — the race admit must survive, not avoid by luck.
+			_ = proto.NewEncoder(c).ToServer(hello("0.7.0"))
+			// Whatever admit decided for this client — a welcome, a bye
+			// from losing the race, or the connection simply closing —
+			// reading it once means this client's admit call has returned.
+			_, _ = proto.NewDecoder(c).ToClient()
+		}(c)
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for both racing attaches to settle")
+	}
+
+	if got := atomic.LoadInt32(&starts); got != 1 {
+		t.Fatalf("Start was called %d times by two attaches racing to go first, want 1", got)
+	}
+}

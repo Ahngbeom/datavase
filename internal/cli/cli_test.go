@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -174,6 +175,94 @@ func TestAuthNeverPrintsThePassword(t *testing.T) {
 
 	if strings.Contains(h.out.String()+h.err.String(), "typed-password") {
 		t.Errorf("password leaked into output: stdout=%q stderr=%q", h.out, h.err)
+	}
+}
+
+// stubSecrets is a minimal secret.Store for tests that only need a fixed
+// answer, without the bookkeeping secret.Memory offers.
+type stubSecrets map[string]string
+
+func (s stubSecrets) Get(account string) (string, error) {
+	pw, ok := s[account]
+	if !ok {
+		return "", secret.ErrNotFound
+	}
+	return pw, nil
+}
+func (s stubSecrets) Set(account, password string) error { s[account] = password; return nil }
+func (s stubSecrets) Delete(account string) error        { delete(s, account); return nil }
+
+// Attaching must not ask for a password. The prompt needs a terminal and the
+// connection is opened in another process, which is why a switch mid-session
+// has never prompted either.
+func TestOpenPrefersAttachAndDoesNotPrompt(t *testing.T) {
+	var attached string
+	app := &App{
+		Config: &config.Config{DataSources: []config.DataSource{{Name: "local", Env: config.EnvDev}}},
+		Out:    io.Discard,
+		Err:    io.Discard,
+		ReadPassword: func(string) (string, error) {
+			t.Error("attaching asked for a password")
+			return "", nil
+		},
+		Attach: func(_ context.Context, ds *config.DataSource, _ *config.Config, _ UIOptions) error {
+			attached = ds.Name
+			return nil
+		},
+		OpenUI: func(context.Context, *config.DataSource, string, *config.Config, UIOptions) error {
+			t.Error("OpenUI was used while a runtime was available")
+			return nil
+		},
+	}
+
+	if code := app.Run(nil); code != exitOK {
+		t.Fatalf("Run = %d, want %d", code, exitOK)
+	}
+	if attached != "local" {
+		t.Errorf("attached to %q, want \"local\"", attached)
+	}
+}
+
+// --no-session is the escape hatch, and it has to keep the behaviour that
+// existed before there was anything to escape from.
+func TestWithoutARuntimeOpenUIStillRuns(t *testing.T) {
+	var opened string
+	app := &App{
+		Config:       &config.Config{DataSources: []config.DataSource{{Name: "local", Env: config.EnvDev}}},
+		Out:          io.Discard,
+		Err:          io.Discard,
+		Secrets:      stubSecrets{"local": "hunter2"},
+		ReadPassword: func(string) (string, error) { return "hunter2", nil },
+		OpenUI: func(_ context.Context, ds *config.DataSource, pw string, _ *config.Config, _ UIOptions) error {
+			opened = ds.Name + ":" + pw
+			return nil
+		},
+	}
+
+	if code := app.Run(nil); code != exitOK {
+		t.Fatalf("Run = %d, want %d", code, exitOK)
+	}
+	if opened != "local:hunter2" {
+		t.Errorf("opened %q, want \"local:hunter2\"", opened)
+	}
+}
+
+// dv status has to answer even when there is no server, because "is one
+// running" is the question it exists for.
+func TestStatusReportsWithNoServer(t *testing.T) {
+	var out bytes.Buffer
+	app := &App{
+		Config:       &config.Config{},
+		Out:          &out,
+		Err:          io.Discard,
+		ServerStatus: func() (string, error) { return "no dv server is running", nil },
+	}
+
+	if code := app.Run([]string{"status"}); code != exitOK {
+		t.Fatalf("Run = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "no dv server") {
+		t.Errorf("status printed %q", out.String())
 	}
 }
 

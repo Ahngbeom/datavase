@@ -32,6 +32,7 @@ const (
 	KindFocus
 	KindClipboardData
 	KindDetach
+	KindStop
 
 	// Server to client.
 	KindWelcome

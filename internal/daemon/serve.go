@@ -151,7 +151,18 @@ func (s *Server) Serve(rwc io.ReadWriteCloser) {
 
 // admit decides whether this client may have the session, starting one if
 // there is none.
+//
+// admitMu is held for the whole call. Without it, two Serve calls arriving
+// before any session exists can both pass the nil check before either has
+// set s.session, and both call Start — opening two database connections and
+// orphaning one that nothing will ever close. admit runs once per incoming
+// connection, not per frame, so serialising all of it costs nothing against
+// the throughput this package actually protects (frame delivery, which does
+// not go through this lock).
 func (s *Server) admit(h proto.Hello, rwc io.ReadWriteCloser) (*conn, []string, error) {
+	s.admitMu.Lock()
+	defer s.admitMu.Unlock()
+
 	s.mu.Lock()
 
 	if s.session == nil {
@@ -204,7 +215,21 @@ func (s *Server) admit(h proto.Hello, rwc io.ReadWriteCloser) (*conn, []string, 
 	s.mu.Unlock()
 
 	if old != nil {
-		old.send(proto.ToClient{Kind: proto.KindBye, Bye: &proto.Bye{Reason: proto.ByeReplaced}})
+		// old.send is a write with no deadline; if the old terminal is alive
+		// but has stopped draining its socket, that write blocks forever. It
+		// must not do so on this goroutine, which the new client's whole
+		// handshake is waiting on. Launch it detached and close old right
+		// behind it, without waiting: closing old.rwc while the write is in
+		// flight on the same conn value unblocks it with an error, for both
+		// a real socket and net.Pipe (what this package's tests use).
+		//
+		// If some future io.ReadWriteCloser implementation does not unblock
+		// a concurrent Write on Close, this goroutine leaks rather than
+		// hanging the caller — the failure mode this fix removes moves from
+		// "every future reconnect hangs" to "one goroutine per such client
+		// never exits," which is the trade this package can make since it
+		// only knows the rwc as an io.ReadWriteCloser, not as a socket.
+		go old.send(proto.ToClient{Kind: proto.KindBye, Bye: &proto.Bye{Reason: proto.ByeReplaced}})
 		old.close()
 	}
 

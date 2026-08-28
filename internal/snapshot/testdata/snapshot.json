@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "dv": "",
+  "server": {
+    "pid": 12345,
+    "started_at": "2026-08-27T09:12:03Z",
+    "uptime_seconds": 3600,
+    "client_attached": true
+  },
+  "session": {
+    "datasource": {
+      "name": "prod-ro",
+      "env": "production",
+      "host": "db.internal",
+      "port": 3306,
+      "user": "reader",
+      "database": "app",
+      "tunnel": true,
+      "server_version": "8.0.36"
+    },
+    "schema": "app",
+    "statement": {
+      "running": true,
+      "elapsed_ms": 4210,
+      "sql": "SELECT id, customer, total FROM orders",
+      "injected_limit": 1000,
+      "truncated": false
+    },
+    "result": {
+      "columns": [
+        "id",
+        "customer",
+        "total"
+      ],
+      "row_count": 4213
+    },
+    "batch": {
+      "running": false,
+      "completed": 0,
+      "total": 0
+    },
+    "worktree": {
+      "path": "/home/x/reports",
+      "branch": "main",
+      "open_file": "monthly.sql",
+      "modified": true
+    },
+    "editor": {
+      "lines": 42,
+      "modified": true
+    },
+    "mode": "NORMAL",
+    "writes_enabled": false,
+    "in_transaction": false
+  }
+}

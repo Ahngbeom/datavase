@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"strconv"
@@ -210,6 +211,40 @@ func (a sessionAdapter) State(ctx context.Context) (daemon.State, error) {
 	return daemon.State{DataSource: s.DataSource, Busy: s.Busy}, err
 }
 
+// statefulSession is what closingSession wraps: sessionAdapter satisfies it,
+// and so does any fake standing in for one in a test — a named interface
+// rather than embedding sessionAdapter's concrete *ui.App is what makes
+// closingSession testable without a terminal or a database behind it.
+type statefulSession interface {
+	daemon.Session
+	daemon.Stateful
+	daemon.Switcher
+}
+
+// closingSession closes the SQLite handles buildSession opened, once the
+// session that used them actually stops running.
+//
+// openUI can defer Close inside the function that calls Run: Run there is
+// synchronous, so the defers fire when the terminal exits. buildSession
+// cannot do that — Run executes later, on a goroutine daemon.Server.admit
+// starts, so a defer here would close the cache and history out from under
+// a session that had not yet used them. Closing instead belongs to the one
+// moment that means "this session stopped needing them": Run returning.
+// Without this, the handles stayed open for the life of the dv server
+// process, reclaimed only by exit.
+type closingSession struct {
+	statefulSession
+	closers []io.Closer
+}
+
+func (s closingSession) Run() error {
+	err := s.statefulSession.Run()
+	for _, c := range s.closers {
+		c.Close()
+	}
+	return err
+}
+
 // buildSession is what the server calls when the first client arrives.
 //
 // It is openUI's wiring with two differences. The warnings go back to the
@@ -289,16 +324,29 @@ func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon
 		return nil, nil, err
 	}
 
-	return sessionAdapter{ui.New(sess, cfg, ui.Deps{
-		Keys:      keys,
-		Cache:     cache,
-		History:   hist,
-		Worktree:  wt,
-		Recent:    recents,
-		IntroPath: introPath,
-		Connect:   connectTo,
-		Detach:    srv.Detach,
-	})}, warnings, nil
+	// cache and hist are each individually optional, exactly like openUI's —
+	// only the ones that actually opened need closing.
+	var closers []io.Closer
+	if cache != nil {
+		closers = append(closers, cache)
+	}
+	if hist != nil {
+		closers = append(closers, hist)
+	}
+
+	return closingSession{
+		statefulSession: sessionAdapter{ui.New(sess, cfg, ui.Deps{
+			Keys:      keys,
+			Cache:     cache,
+			History:   hist,
+			Worktree:  wt,
+			Recent:    recents,
+			IntroPath: introPath,
+			Connect:   connectTo,
+			Detach:    srv.Detach,
+		})},
+		closers: closers,
+	}, warnings, nil
 }
 
 // lookupDataSource resolves the name a client asked for, defaulting to the

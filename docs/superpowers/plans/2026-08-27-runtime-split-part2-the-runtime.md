@@ -1844,6 +1844,7 @@ wrong: a spawned server that dies while starting has no client to tell."
 
 **Files:**
 - Modify: `internal/cli/cli.go`
+- Modify: `internal/proto/proto.go` (add `KindStop`), `internal/daemon/serve.go` (handle it in `Serve` before the hello check)
 - Create: `cmd/dv/runtime.go`, `cmd/dv/spawn_unix.go`, `cmd/dv/spawn_windows.go`
 - Modify: `cmd/dv/main.go`
 - Test: `internal/cli/cli_test.go`
@@ -2284,6 +2285,29 @@ In `cmd/dv/main.go`, `openUI`'s body becomes two functions. Keep `openUI`
 exactly as it is for the monolithic path, and add beside it:
 
 ```go
+// sessionAdapter makes *ui.App satisfy daemon.Stateful.
+//
+// ui.App.State returns ui.RuntimeState, a type internal/ui owns so that
+// package never has to import internal/daemon — the two are independent on
+// purpose, App is built and tested in Task 1 before internal/daemon exists.
+// daemon.Stateful requires daemon.State by name, and Go's interface
+// satisfaction is exact on return types: a *ui.App handed to the daemon
+// directly does not satisfy Stateful, and session.(Stateful) fails silently
+// at runtime. The daemon then treats every session as busy — indistinguishable
+// from a broken build, since nothing refuses to compile. This adapter is the
+// one place that conversion belongs: cmd/dv already imports both packages to
+// wire them together.
+//
+// SetScreen, Run, Stop and SwitchTo are unaffected — SwitchTo's signature
+// matches daemon.Switcher exactly, so embedding satisfies it without a method
+// here.
+type sessionAdapter struct{ *ui.App }
+
+func (a sessionAdapter) State(ctx context.Context) (daemon.State, error) {
+	s, err := a.App.State(ctx)
+	return daemon.State{DataSource: s.DataSource, Busy: s.Busy}, err
+}
+
 // buildSession is what the server calls when the first client arrives.
 //
 // It is openUI's wiring with two differences. The warnings go back to the
@@ -2317,7 +2341,7 @@ func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon
 		return nil, nil, err
 	}
 
-	return ui.New(sess, cfg, ui.Deps{
+	return sessionAdapter{ui.New(sess, cfg, ui.Deps{
 		Keys:      keys,
 		Cache:     cache,
 		History:   hist,
@@ -2326,7 +2350,7 @@ func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon
 		IntroPath: introPath,
 		Connect:   connectTo,
 		Detach:    srv.Detach,
-	}), warnings, nil
+	})}, warnings, nil
 }
 
 // lookupDataSource resolves the name a client asked for, defaulting to the
@@ -2472,6 +2496,20 @@ import (
 
 const testVersion = "test"
 
+// sessionAdapter makes *ui.App satisfy daemon.Stateful, the same conversion
+// cmd/dv's buildSession does in production. Without it session.(Stateful)
+// fails silently at runtime and every session looks busy regardless of
+// whether a statement is running — which would make
+// TestAnotherDataSourceIsRefusedWhileAStatementRuns pass for the wrong
+// reason: refusing because Stateful is broken, not because the daemon read a
+// real statement in flight.
+type sessionAdapter struct{ *ui.App }
+
+func (a sessionAdapter) State(ctx context.Context) (daemon.State, error) {
+	s, err := a.App.State(ctx)
+	return daemon.State{DataSource: s.DataSource, Busy: s.Busy}, err
+}
+
 // realSession opens the integration datasource and builds the interface on
 // it, the way the server does when the first client arrives.
 func realSession(t *testing.T, cfg *config.Config) daemon.Session {
@@ -2488,7 +2526,7 @@ func realSession(t *testing.T, cfg *config.Config) daemon.Session {
 	if err != nil {
 		t.Fatalf("keymap: %v", err)
 	}
-	return ui.New(sess, cfg, ui.Deps{Keys: keys})
+	return sessionAdapter{ui.New(sess, cfg, ui.Deps{Keys: keys})}
 }
 
 func integrationConfig(t *testing.T) *config.Config {

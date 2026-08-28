@@ -15,9 +15,11 @@ import (
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/daemon"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/intro"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/proto"
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
@@ -39,6 +41,7 @@ func run() int {
 	}
 
 	configPath := flag.String("c", "", "path to config.yaml (default: $XDG_CONFIG_HOME/datavase/config.yaml)")
+	noSession := flag.Bool("no-session", false, "run without a session server")
 	flag.Parse()
 
 	path := *configPath
@@ -94,6 +97,12 @@ func run() int {
 		ReadPassword: readPassword,
 		Probe:        probe,
 		OpenUI:       openUI,
+		RunServer:    func() error { return runServer(cfg) },
+		StopServer:   stopServer,
+		ServerStatus: serverStatus,
+	}
+	if !*noSession {
+		app.Attach = attachSession
 	}
 	return app.Run(flag.Args())
 }
@@ -176,6 +185,137 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		IntroPath: introPath,
 		Connect:   connectTo,
 	}).Run()
+}
+
+// sessionAdapter makes *ui.App satisfy daemon.Stateful.
+//
+// ui.App.State returns ui.RuntimeState, a type internal/ui owns so that
+// package never has to import internal/daemon — the two are independent on
+// purpose, App is built and tested before internal/daemon exists.
+// daemon.Stateful requires daemon.State by name, and Go's interface
+// satisfaction is exact on return types: a *ui.App handed to the daemon
+// directly does not satisfy Stateful, and session.(Stateful) fails silently
+// at runtime. The daemon then treats every session as busy — indistinguishable
+// from a broken build, since nothing refuses to compile. This adapter is the
+// one place that conversion belongs: cmd/dv already imports both packages to
+// wire them together.
+//
+// SetScreen, Run, Stop and SwitchTo are unaffected — SwitchTo's signature
+// matches daemon.Switcher exactly, so embedding satisfies it without a method
+// here.
+type sessionAdapter struct{ *ui.App }
+
+func (a sessionAdapter) State(ctx context.Context) (daemon.State, error) {
+	s, err := a.App.State(ctx)
+	return daemon.State{DataSource: s.DataSource, Busy: s.Busy}, err
+}
+
+// buildSession is what the server calls when the first client arrives.
+//
+// It is openUI's wiring with two differences. The warnings go back to the
+// caller instead of to stderr, because in this process stderr is a log file
+// nobody reads. And the password comes from the keychain and nowhere else:
+// the terminal that could answer a prompt is in another process, which is the
+// same reason a mid-session switch has never prompted.
+func buildSession(h proto.Hello, cfg *config.Config, srv *daemon.Server) (daemon.Session, []string, error) {
+	ds, err := lookupDataSource(cfg, h.DataSource)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	password, err := secrets().Get(ds.Name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("no password for %q; run: dv auth %s — or set %s",
+			ds.Name, ds.Name, secret.EnvVarName(ds.Name))
+	}
+
+	keys, err := keymap.FromConfig(cfg.Keymap.Preset, cfg.Keymap.Actions)
+	if err != nil {
+		return nil, nil, fmt.Errorf("keymap: %w", err)
+	}
+
+	var warnings []string
+
+	// The schema cache is optional: a read-only home directory should cost
+	// completion, not the whole session.
+	var cache *catalog.Cache
+	if path, err := catalog.DefaultCachePath(); err == nil {
+		if opened, err := catalog.OpenCache(path); err == nil {
+			cache = opened
+		} else {
+			warnings = append(warnings, fmt.Sprintf("completion disabled: %v", err))
+		}
+	}
+
+	// History is optional for the same reason as the cache.
+	var hist *history.Store
+	if path, err := history.DefaultPath(); err == nil {
+		if opened, err := history.Open(path); err == nil {
+			hist = opened
+		}
+	}
+
+	// The list of directories attached before, optional for the same reason.
+	var recents *recent.List
+	if path, err := recent.DefaultPath(); err == nil {
+		if opened, err := recent.Open(path); err == nil {
+			recents = opened
+		}
+	}
+
+	// Whether the first-run card has been shown. Optional for the same reason:
+	// a state directory that cannot be written costs the card being shown once
+	// more, not the session.
+	var introPath string
+	if path, err := intro.DefaultPath(); err == nil {
+		introPath = path
+	}
+
+	// The worktree is optional in the same way: a path that no longer exists —
+	// a branch cleaned up since the command was last run — should cost the
+	// file list, not the session the client is trying to start.
+	var wt *worktree.Worktree
+	if h.WorkDir != "" {
+		opened, err := worktree.Open(h.WorkDir)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("no worktree attached: %v", err))
+		} else {
+			wt = opened
+		}
+	}
+
+	sess, err := session.Open(context.Background(), ds, password)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return sessionAdapter{ui.New(sess, cfg, ui.Deps{
+		Keys:      keys,
+		Cache:     cache,
+		History:   hist,
+		Worktree:  wt,
+		Recent:    recents,
+		IntroPath: introPath,
+		Connect:   connectTo,
+		Detach:    srv.Detach,
+	})}, warnings, nil
+}
+
+// lookupDataSource resolves the name a client asked for, defaulting to the
+// first configured datasource when it asked for none.
+func lookupDataSource(cfg *config.Config, name string) (*config.DataSource, error) {
+	if len(cfg.DataSources) == 0 {
+		return nil, errors.New("no datasources are configured; run: dv init")
+	}
+	if name == "" {
+		return &cfg.DataSources[0], nil
+	}
+	for i := range cfg.DataSources {
+		if cfg.DataSources[i].Name == name {
+			return &cfg.DataSources[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no datasource named %q", name)
 }
 
 // secrets is where every password is read and written.

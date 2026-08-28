@@ -112,6 +112,13 @@ func (s *Server) Serve(rwc io.ReadWriteCloser) {
 		_ = rwc.Close()
 		return
 	}
+	if first.Kind == proto.KindStop {
+		// A stop request is not a client attaching, so answering it with
+		// "the first message was not a hello" would be wrong.
+		_ = rwc.Close()
+		s.Stop()
+		return
+	}
 	if first.Kind != proto.KindHello || first.Hello == nil {
 		reject(rwc, "the first message was not a hello")
 		return

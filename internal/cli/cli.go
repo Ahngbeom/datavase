@@ -43,6 +43,20 @@ type App struct {
 	// OpenUI connects and runs the terminal interface. It is a field so the
 	// dispatch logic can be tested without starting a terminal.
 	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config, opt UIOptions) error
+
+	// Attach hands the datasource to a session running elsewhere. It is nil
+	// for a monolithic run, which is when OpenUI is used instead.
+	//
+	// It takes no password: the process that opens the connection reads the
+	// keychain itself, the way a mid-session switch already does.
+	Attach func(ctx context.Context, ds *config.DataSource, cfg *config.Config, opt UIOptions) error
+
+	// RunServer runs the headless server in the foreground.
+	RunServer func() error
+	// StopServer ends a running server.
+	StopServer func() error
+	// ServerStatus describes what is running, in one paragraph for a person.
+	ServerStatus func() (string, error)
 }
 
 // UIOptions are the choices that belong to one invocation rather than to the
@@ -92,6 +106,10 @@ func (a *App) Run(args []string) int {
 		return a.check(args[1:])
 	case "keys":
 		return a.keys(args[1:])
+	case "server":
+		return a.server(args[1:])
+	case "status":
+		return a.serverStatus()
 	case "help", "-h", "--help":
 		a.usage()
 		return exitOK
@@ -120,7 +138,13 @@ usage:
   dv keys --iterm2      explain the equivalent iTerm2 settings
   dv keys --tmux        print tmux settings for modified keys
   dv keys --debug       report what this terminal sends for each key
+  dv status             say whether a session is running, and on what
+  dv --no-session       run without a session server
   dv help               show this message
+
+advanced:
+  dv server             run the session server in the foreground
+  dv server stop        end a running session
 `)
 }
 
@@ -192,6 +216,20 @@ func (a *App) open(name string, opt UIOptions) int {
 		return exitError
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), CheckTimeout)
+	defer cancel()
+
+	// A running session is reached without a password: the process that
+	// opens the connection reads the keychain itself, on the other side of
+	// this call, the same way a mid-session switch already does.
+	if a.Attach != nil {
+		if err := a.Attach(ctx, ds, a.Config, opt); err != nil {
+			fmt.Fprintf(a.Err, "%v\n", err)
+			return exitError
+		}
+		return exitOK
+	}
+
 	password, err := a.Secrets.Get(ds.Name)
 	if errors.Is(err, secret.ErrNotFound) {
 		fmt.Fprintf(a.Err, "no password stored for %q; run: dv auth %s\n", ds.Name, ds.Name)
@@ -201,9 +239,6 @@ func (a *App) open(name string, opt UIOptions) int {
 		fmt.Fprintf(a.Err, "%v\n", err)
 		return exitError
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), CheckTimeout)
-	defer cancel()
 
 	if err := a.OpenUI(ctx, ds, password, a.Config, opt); err != nil {
 		fmt.Fprintf(a.Err, "%v\n", err)
@@ -246,6 +281,49 @@ func (a *App) check(args []string) int {
 	}
 
 	fmt.Fprintf(a.Out, "%s (%s) is reachable — server %s\n", ds.Name, ds.Env, version)
+	return exitOK
+}
+
+// server is `dv server` and `dv server stop`.
+func (a *App) server(args []string) int {
+	if len(args) > 0 && args[0] == "stop" {
+		if a.StopServer == nil {
+			fmt.Fprintln(a.Err, "this build cannot stop a server")
+			return exitUsage
+		}
+		if err := a.StopServer(); err != nil {
+			fmt.Fprintf(a.Err, "%v\n", err)
+			return exitError
+		}
+		return exitOK
+	}
+	if len(args) > 0 {
+		fmt.Fprintf(a.Err, "unknown command %q\n", "server "+args[0])
+		return exitUsage
+	}
+	if a.RunServer == nil {
+		fmt.Fprintln(a.Err, "this build has no server")
+		return exitUsage
+	}
+	if err := a.RunServer(); err != nil {
+		fmt.Fprintf(a.Err, "%v\n", err)
+		return exitError
+	}
+	return exitOK
+}
+
+// serverStatus is `dv status`.
+func (a *App) serverStatus() int {
+	if a.ServerStatus == nil {
+		fmt.Fprintln(a.Out, "this build has no server")
+		return exitOK
+	}
+	report, err := a.ServerStatus()
+	if err != nil {
+		fmt.Fprintf(a.Err, "%v\n", err)
+		return exitError
+	}
+	fmt.Fprintln(a.Out, report)
 	return exitOK
 }
 

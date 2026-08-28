@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
@@ -101,6 +102,7 @@ func run() int {
 		RunServer:    func() error { return runServer(cfg) },
 		StopServer:   stopServer,
 		ServerStatus: serverStatus,
+		APISnapshot:  apiSnapshot,
 	}
 	if !*noSession {
 		// The resolved path, not the flag as typed: a server spawned from
@@ -255,6 +257,14 @@ func (s closingSession) Run() error {
 	return s.statefulSession.Run()
 }
 
+// live is the interface the server is holding, for the observation socket to
+// ask. It is written once, when the first client arrives, and read by the API
+// goroutine; the mutex is for that and nothing else.
+var (
+	liveMu sync.Mutex
+	live   *ui.App
+)
+
 // buildSession is what the server calls when the first client arrives.
 //
 // It is openUI's wiring with two differences. The warnings go back to the
@@ -348,18 +358,24 @@ func buildSession(ctx context.Context, h proto.Hello, cfg *config.Config, srv *d
 		closers = append(closers, hist)
 	}
 
+	app := ui.New(sess, cfg, ui.Deps{
+		Keys:      keys,
+		Cache:     cache,
+		History:   hist,
+		Worktree:  wt,
+		Recent:    recents,
+		IntroPath: introPath,
+		Connect:   connectTo,
+		Detach:    srv.Detach,
+	})
+
+	liveMu.Lock()
+	live = app
+	liveMu.Unlock()
+
 	return closingSession{
-		statefulSession: sessionAdapter{ui.New(sess, cfg, ui.Deps{
-			Keys:      keys,
-			Cache:     cache,
-			History:   hist,
-			Worktree:  wt,
-			Recent:    recents,
-			IntroPath: introPath,
-			Connect:   connectTo,
-			Detach:    srv.Detach,
-		})},
-		closers: closers,
+		statefulSession: sessionAdapter{app},
+		closers:         closers,
 	}, warnings, nil
 }
 

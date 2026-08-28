@@ -12,11 +12,13 @@ package daemon
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/proto"
 	"github.com/Ahngbeom/datavase/internal/screen"
+	"github.com/Ahngbeom/datavase/internal/snapshot"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -191,6 +193,22 @@ func (s *Server) state(session Session, known string) State {
 		return State{DataSource: known, Busy: true}
 	}
 	return got
+}
+
+// Info is the tier of a snapshot that comes from this process. It cannot
+// fail, which is what lets dv status answer whatever the session is doing.
+func (s *Server) Info(dv string, started, now time.Time) snapshot.Server {
+	s.mu.Lock()
+	attached := s.client != nil
+	s.mu.Unlock()
+
+	return snapshot.Server{
+		PID:            os.Getpid(),
+		StartedAt:      started.UTC().Format(time.RFC3339),
+		UptimeSeconds:  int(now.Sub(started).Seconds()),
+		ClientAttached: attached,
+		DV:             dv,
+	}
 }
 
 // contextDone is a context that ends when ch closes.

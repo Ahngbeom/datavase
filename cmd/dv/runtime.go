@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -16,6 +18,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/daemon"
 	"github.com/Ahngbeom/datavase/internal/proto"
 	"github.com/Ahngbeom/datavase/internal/secret"
+	"github.com/Ahngbeom/datavase/internal/snapshot"
 	"github.com/Ahngbeom/datavase/internal/version"
 )
 
@@ -160,12 +163,29 @@ func runServer(cfg *config.Config) error {
 	defer os.Remove(path)
 	defer ln.Close()
 
+	apiPath, err := daemon.APISocketPath()
+	if err != nil {
+		return err
+	}
+	apiLn, err := daemon.Listen(apiPath)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(apiPath)
+	defer apiLn.Close()
+
 	var srv *daemon.Server
 	srv = daemon.New(daemon.Options{
 		Version: version.String(),
 		Start: func(ctx context.Context, h proto.Hello) (daemon.Session, []string, error) {
 			return buildSession(ctx, h, cfg, srv)
 		},
+	})
+
+	started := time.Now()
+	go daemon.ServeAPI(apiLn, snapshot.Source{
+		Server:  func() snapshot.Server { return srv.Info(version.String(), started, time.Now()) },
+		Session: sessionSnapshot,
 	})
 
 	go srv.Accept(ln)
@@ -187,16 +207,61 @@ func stopServer() error {
 	return proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
 }
 
-// serverStatus is `dv status`.
-func serverStatus() (string, error) {
-	path, err := daemon.SocketPath()
+// apiSnapshot asks the running server what it is doing.
+func apiSnapshot() ([]byte, error) {
+	path, err := daemon.APISocketPath()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	conn, err := daemon.Dial(path)
 	if err != nil {
+		return nil, errors.New("no dv server is running")
+	}
+	defer conn.Close()
+
+	return io.ReadAll(conn)
+}
+
+// serverStatus is dv status: one paragraph for a person, from the same
+// snapshot the API serves.
+func serverStatus() (string, error) {
+	raw, err := apiSnapshot()
+	if err != nil {
 		return "no dv server is running", nil
 	}
-	conn.Close()
-	return fmt.Sprintf("a dv server is running (%s)", path), nil
+
+	var s snapshot.Snapshot
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", fmt.Errorf("the server answered with something unreadable: %w", err)
+	}
+
+	if s.Session == nil {
+		return fmt.Sprintf("a dv server is running (pid %d), but the session did not answer: %s",
+			s.Server.PID, s.SessionError), nil
+	}
+
+	line := fmt.Sprintf("%s on %s (%s), up %ds",
+		s.Session.DataSource.Name, s.Session.DataSource.Host,
+		s.Session.DataSource.Env, s.Server.UptimeSeconds)
+	if !s.Server.ClientAttached {
+		line += ", detached"
+	}
+	if s.Session.Statement.Running {
+		line += fmt.Sprintf("\nrunning for %dms: %s",
+			s.Session.Statement.ElapsedMS, s.Session.Statement.SQL)
+	}
+	return line, nil
+}
+
+// sessionSnapshot reaches the *ui.App the server built, for the observation
+// socket to ask.
+func sessionSnapshot(ctx context.Context) (*snapshot.Session, error) {
+	liveMu.Lock()
+	app := live
+	liveMu.Unlock()
+
+	if app == nil {
+		return nil, nil
+	}
+	return app.Snapshot(ctx)
 }

@@ -53,9 +53,9 @@ func (a *App) remember(path string) {
 	_ = a.recentDirs.Save()
 }
 
-// detach forgets the worktree. The buffer stays: the text on screen is the
-// user's work whether or not it still has a file behind it.
-func (a *App) detach() {
+// detachWorktree forgets the worktree. The buffer stays: the text on screen
+// is the user's work whether or not it still has a file behind it.
+func (a *App) detachWorktree() {
 	if a.wt == nil {
 		a.notice("no worktree is attached")
 		return

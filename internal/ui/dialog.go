@@ -250,7 +250,7 @@ var helpGroups = []struct {
 	},
 	{
 		title:   "Other",
-		actions: []keymap.Action{keymap.ActionHelp, keymap.ActionQuit},
+		actions: []keymap.Action{keymap.ActionHelp, keymap.ActionDetach, keymap.ActionQuit},
 	},
 }
 

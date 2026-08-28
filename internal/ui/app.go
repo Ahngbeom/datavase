@@ -46,6 +46,10 @@ type App struct {
 	// switch without a keychain.
 	connect func(context.Context, *config.DataSource) (*session.Session, error)
 
+	// detach leaves the terminal to whatever is holding the session. Nil in a
+	// monolithic run.
+	detachFn func()
+
 	// spine is the environment colour down the left. Held because it is the
 	// one piece of the frame that has to be repainted when the datasource
 	// changes, and a stale one is worse than none.
@@ -224,6 +228,10 @@ type Deps struct {
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
+	// Detach leaves the terminal without ending the session. Nil means there
+	// is no server holding one — a monolithic run — and the action says so
+	// rather than appearing dead.
+	Detach func()
 	// IntroPath is where "the first-run card has been shown" is recorded.
 	// Empty means never show it, which is what a session with no usable state
 	// directory gets — and what every test that is not about the card gets.
@@ -249,6 +257,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		sess:            sess,
 		conn:            conn,
 		connect:         deps.Connect,
+		detachFn:        deps.Detach,
 		cfg:             cfg,
 		keys:            keys,
 		cache:           deps.Cache,
@@ -808,6 +817,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 
 	case keymap.ActionHelp:
 		a.showHelp()
+	case keymap.ActionDetach:
+		a.detach()
 	case keymap.ActionQuit:
 		a.quit()
 
@@ -835,6 +846,19 @@ func (a *App) cycleFocus(delta int) {
 		}
 	}
 	a.app.SetFocus(order[0])
+}
+
+// detach leaves the terminal and keeps the session.
+//
+// It asks about nothing. Quitting asks about an open transaction and an
+// unsaved buffer because quitting destroys them; detaching destroys nothing,
+// and a session left running is exactly what the person pressing this wants.
+func (a *App) detach() {
+	if a.detachFn == nil {
+		a.notice("this session has no server to leave; it was started with --no-session")
+		return
+	}
+	a.detachFn()
 }
 
 // quit leaves, asking first when the buffer holds unsaved file changes.
@@ -1343,4 +1367,58 @@ func (a *App) inspect() {
 		return
 	}
 	a.inspectTable()
+}
+
+// RuntimeState is what something outside the interface may need to know
+// before it changes the session underneath it.
+type RuntimeState struct {
+	DataSource string
+	Busy       bool
+}
+
+// State reports the session's datasource and whether a statement is in
+// flight.
+//
+// It goes through the interface's own goroutine because that is who owns
+// a.running and the connection; reading them from anywhere else is a race.
+// The context bounds the wait: a caller deciding whether it may take the
+// session somewhere else must be able to give up and refuse, which is the
+// safe answer when the interface is not talking.
+func (a *App) State(ctx context.Context) (RuntimeState, error) {
+	out := make(chan RuntimeState, 1)
+
+	// The goroutine outlives this call if the interface never runs the
+	// update. That is a wedged application, and one leaked goroutine is not
+	// the problem worth solving in that situation.
+	go a.app.QueueUpdate(func() {
+		out <- RuntimeState{
+			DataSource: a.conn.DataSource().Name,
+			Busy:       a.running != nil,
+		}
+	})
+
+	select {
+	case s := <-out:
+		return s, nil
+	case <-ctx.Done():
+		return RuntimeState{}, ctx.Err()
+	}
+}
+
+// SwitchTo moves the session to a configured datasource by name.
+//
+// It hands off to the same switch the keyboard reaches, so an open
+// transaction is asked about and a running statement is refused, in front of
+// the person who will see the answer. Nothing is reported back: the interface
+// is where the outcome belongs.
+func (a *App) SwitchTo(name string) {
+	go a.app.QueueUpdate(func() {
+		for i := range a.cfg.DataSources {
+			if a.cfg.DataSources[i].Name == name {
+				a.switchTo(&a.cfg.DataSources[i])
+				return
+			}
+		}
+		a.notice(fmt.Sprintf("no datasource named %q", name))
+	})
 }

@@ -349,7 +349,7 @@ func TestDetachingKeepsTheBufferButForgetsTheFile(t *testing.T) {
 	h.openMigration(t)
 
 	text := h.editorText()
-	h.app.app.QueueUpdateDraw(func() { h.app.detach() })
+	h.app.app.QueueUpdateDraw(func() { h.app.detachWorktree() })
 	h.settle()
 
 	if got := h.editorText(); got != text {

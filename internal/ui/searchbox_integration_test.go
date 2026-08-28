@@ -102,7 +102,7 @@ func TestADirectoryAttachedBeforeIsOfferedWithNothingTyped(t *testing.T) {
 	root := newWorktree(t)
 
 	h.attachWorktree(root)
-	h.app.app.QueueUpdateDraw(func() { h.app.detach() })
+	h.app.app.QueueUpdateDraw(func() { h.app.detachWorktree() })
 	h.settle()
 
 	h.openAttach()

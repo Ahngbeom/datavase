@@ -92,6 +92,41 @@ func TestVersionMismatchIsRefused(t *testing.T) {
 	}
 }
 
+// dv server stop must end the session even from a connection that never
+// sends a Hello — a stop request is not a client attaching, and treating it
+// as one would mean it can only reach a session that is already free to
+// accept a new client, which is exactly the case a stuck session needs it
+// to work for.
+func TestStopEndsTheSessionWithoutAHello(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	srv := daemon.New(daemon.Options{
+		Version: "0.7.0",
+		Start: func(proto.Hello) (daemon.Session, []string, error) {
+			t.Error("a stop request waited for a Hello before it was honoured")
+			return newEchoSession(), nil, nil
+		},
+	})
+	go srv.Serve(server)
+
+	if err := proto.NewEncoder(client).ToServer(proto.ToServer{Kind: proto.KindStop}); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- srv.Wait() }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Wait() = %v, want nil", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait never returned after a stop request")
+	}
+}
+
 // Whatever the server could not set up while starting the session would
 // otherwise land in a log nobody reads, and completion would simply look
 // broken.

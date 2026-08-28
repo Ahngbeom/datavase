@@ -50,6 +50,12 @@ func testCaps() screen.Caps {
 	}
 }
 
+// screenCaps is testCaps with a caller-chosen size, for a test that attaches
+// a simulation screen sized to match.
+func screenCaps(w, h int) screen.Caps {
+	return screen.Caps{Width: w, Height: h, Colors: 256, CharacterSet: "UTF-8"}
+}
+
 func hello(version string) proto.ToServer {
 	return proto.ToServer{
 		Kind: proto.KindHello,

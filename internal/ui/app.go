@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
@@ -24,6 +25,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
+	"github.com/Ahngbeom/datavase/internal/snapshot"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/Ahngbeom/datavase/internal/worktree"
@@ -162,6 +164,10 @@ type App struct {
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
+	// runningSQL is the statement a.running is executing. Held because the
+	// stream does not carry it and something outside the interface has to be
+	// able to say what the database is being asked to do.
+	runningSQL string
 
 	// lastChange is what "." repeats.
 	lastChange change
@@ -1118,6 +1124,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 		Exec: !stmt.Kind().ReturnsRows(),
 	})
 	a.running = stream
+	a.runningSQL = sql
 
 	// Whether the answer is a plan is settled here, from the statement that
 	// was sent, rather than remembered from the key that asked: a confirmation
@@ -1156,6 +1163,7 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plan
 
 	a.app.QueueUpdateDraw(func() {
 		a.running = nil
+		a.runningSQL = ""
 		a.status.rows = rows
 		a.status.elapsed = elapsed
 		a.status.truncated = truncated
@@ -1403,6 +1411,79 @@ func (a *App) State(ctx context.Context) (RuntimeState, error) {
 	case <-ctx.Done():
 		return RuntimeState{}, ctx.Err()
 	}
+}
+
+// Snapshot describes the session for something outside it.
+//
+// Like State, it runs on the interface's own goroutine: a.running, the
+// connection, the buffer and the vim state all belong to it, and reading them
+// from anywhere else is a race. The context bounds the wait, because whatever
+// asked has to be able to give up and say so.
+func (a *App) Snapshot(ctx context.Context) (*snapshot.Session, error) {
+	out := make(chan *snapshot.Session, 1)
+
+	go a.app.QueueUpdate(func() { out <- a.snapshot() })
+
+	select {
+	case s := <-out:
+		return s, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// snapshot reads the session. Only the interface's goroutine may call it.
+func (a *App) snapshot() *snapshot.Session {
+	ds := a.conn.DataSource()
+
+	s := &snapshot.Session{
+		DataSource: snapshot.DataSource{
+			Name:          ds.Name,
+			Env:           string(ds.Env),
+			Host:          ds.Host,
+			Port:          ds.Port,
+			User:          ds.User,
+			Database:      ds.Database,
+			Tunnel:        ds.Tunnel != nil,
+			ServerVersion: a.conn.ServerVersion(),
+		},
+		Schema: a.selectedSchema,
+		Statement: snapshot.Statement{
+			Running:       a.running != nil,
+			ElapsedMS:     a.status.elapsed.Milliseconds(),
+			SQL:           a.runningSQL,
+			InjectedLimit: a.status.limitInjected,
+			Truncated:     a.status.truncated,
+		},
+		Result: snapshot.Result{
+			Columns:  a.buf.Columns(),
+			RowCount: a.buf.RowCount(),
+		},
+		Batch:         snapshot.Batch{},
+		Editor:        snapshot.Editor{Lines: strings.Count(a.editor.GetText(), "\n") + 1, Modified: a.fileDirty()},
+		Mode:          a.vim.Mode().String(),
+		WritesEnabled: a.status.writesEnabled,
+		InTransaction: a.conn.InTransaction(),
+	}
+
+	if a.status.err != nil {
+		s.Statement.Error = a.status.err.Error()
+	}
+
+	if a.batch != nil {
+		s.Batch = snapshot.Batch{Running: true, Completed: a.batch.ran, Total: len(a.batch.stmts)}
+	}
+
+	if a.wt != nil {
+		s.Worktree = &snapshot.Worktree{
+			Path:     a.wt.Root,
+			Branch:   a.wtSnap.Branch,
+			OpenFile: a.openFile.rel,
+			Modified: a.fileDirty(),
+		}
+	}
+
+	return s
 }
 
 // SwitchTo moves the session to a configured datasource by name.

@@ -659,7 +659,7 @@ is the first thing anyone observing wants to know."
 - Produces:
   - `func APISocketPath() (string, error)`
   - `func ServeAPI(ln net.Listener, src snapshot.Source)`
-  - `func (s *Server) Info() snapshot.Server`
+  - `func (s *Server) Info(dv string, started, now time.Time) snapshot.Server`
   - `dv api snapshot`; `dv status` from the session
 
 - [ ] **Step 1: Write the failing test**
@@ -905,7 +905,7 @@ And in `runServer`, open the second socket beside the first:
 
 	started := time.Now()
 	go daemon.ServeAPI(apiLn, snapshot.Source{
-		Server:  func() snapshot.Server { return srv.Info(version.Version(), started, time.Now()) },
+		Server:  func() snapshot.Server { return srv.Info(version.String(), started, time.Now()) },
 		Session: sessionSnapshot,
 	})
 ```

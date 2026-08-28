@@ -142,7 +142,7 @@ usage:
   dv keys --iterm2      explain the equivalent iTerm2 settings
   dv keys --tmux        print tmux settings for modified keys
   dv keys --debug       report what this terminal sends for each key
-  dv status             say whether a session is running, and on what
+  dv status             say whether a session is running, and what it is doing
   dv api snapshot       print what the running session is doing, as JSON
   dv --no-session       run without a session server
   dv help               show this message

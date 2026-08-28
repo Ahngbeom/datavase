@@ -168,6 +168,11 @@ type App struct {
 	// stream does not carry it and something outside the interface has to be
 	// able to say what the database is being asked to do.
 	runningSQL string
+	// startedAt is when a.running was sent. status.elapsed only advances as
+	// row batches land, so a statement that has produced no rows yet — a long
+	// ALTER, an Exec, a SELECT before its first chunk — would otherwise be
+	// reported as taking however long the previous one did.
+	startedAt time.Time
 
 	// lastChange is what "." repeats.
 	lastChange change
@@ -1125,6 +1130,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	})
 	a.running = stream
 	a.runningSQL = sql
+	a.startedAt = started
 
 	// Whether the answer is a plan is settled here, from the statement that
 	// was sent, rather than remembered from the key that asked: a confirmation
@@ -1164,6 +1170,7 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plan
 	a.app.QueueUpdateDraw(func() {
 		a.running = nil
 		a.runningSQL = ""
+		a.startedAt = time.Time{}
 		a.status.rows = rows
 		a.status.elapsed = elapsed
 		a.status.truncated = truncated
@@ -1436,6 +1443,15 @@ func (a *App) Snapshot(ctx context.Context) (*snapshot.Session, error) {
 func (a *App) snapshot() *snapshot.Session {
 	ds := a.conn.DataSource()
 
+	// While a statement is in flight the question being asked is "how long has
+	// this been going", which status.elapsed only answers once rows have
+	// arrived. Once it has finished, status.elapsed is the total and this
+	// clock has stopped.
+	elapsed := a.status.elapsed
+	if a.running != nil {
+		elapsed = time.Since(a.startedAt)
+	}
+
 	s := &snapshot.Session{
 		DataSource: snapshot.DataSource{
 			Name:          ds.Name,
@@ -1450,7 +1466,7 @@ func (a *App) snapshot() *snapshot.Session {
 		Schema: a.selectedSchema,
 		Statement: snapshot.Statement{
 			Running:       a.running != nil,
-			ElapsedMS:     a.status.elapsed.Milliseconds(),
+			ElapsedMS:     elapsed.Milliseconds(),
 			SQL:           a.runningSQL,
 			InjectedLimit: a.status.limitInjected,
 			Truncated:     a.status.truncated,

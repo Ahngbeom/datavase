@@ -4,7 +4,11 @@ package daemon_test
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +20,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/proto"
 	"github.com/Ahngbeom/datavase/internal/session"
+	"github.com/Ahngbeom/datavase/internal/snapshot"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/Ahngbeom/datavase/internal/ui"
 	"github.com/gdamore/tcell/v2"
@@ -273,5 +278,140 @@ func TestAnotherDataSourceIsRefusedWhileAStatementRuns(t *testing.T) {
 	}
 	if !strings.Contains(got.Reject.Reason, "dv server stop") {
 		t.Errorf("the refusal does not say what to do instead: %q", got.Reject.Reason)
+	}
+}
+
+// takeSnapshot asks the observation socket the one question it answers.
+func takeSnapshot(t *testing.T, path string) snapshot.Snapshot {
+	t.Helper()
+
+	conn, err := daemon.Dial(path)
+	if err != nil {
+		t.Fatalf("dialling the observation socket: %v", err)
+	}
+	defer conn.Close()
+
+	raw, err := io.ReadAll(conn)
+	if err != nil {
+		t.Fatalf("reading the snapshot: %v", err)
+	}
+	var got snapshot.Snapshot
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("the server answered with something unreadable: %v\n%s", err, raw)
+	}
+	return got
+}
+
+// waitForAttached polls until the socket reports the terminal as attached or
+// gone. A client leaving is noticed when its socket read fails, which happens
+// on the server's own goroutine some moments after the close.
+func waitForAttached(t *testing.T, path string, want bool) snapshot.Snapshot {
+	t.Helper()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		got := takeSnapshot(t, path)
+		if got.Server.ClientAttached == want {
+			return got
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("client_attached never became %v", want)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// A detached session is the state dv status exists to describe, and the only
+// thing that says a terminal has gone away is what the observation socket
+// reports. Attach, run something long, leave, come back — and the answer has
+// to follow.
+func TestTheObservationSocketFollowsAClientComingAndGoing(t *testing.T) {
+	cfg := integrationConfig(t)
+
+	// The interface the server built, reached the way cmd/dv reaches it.
+	var mu sync.Mutex
+	var app *ui.App
+
+	srv := daemon.New(daemon.Options{
+		Version: testVersion,
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
+			sess := realSession(t, cfg)
+			mu.Lock()
+			app = sess.(sessionAdapter).App
+			mu.Unlock()
+			return sess, nil, nil
+		},
+	})
+	t.Cleanup(srv.Stop)
+
+	// A short directory of its own: a unix socket path is limited to about a
+	// hundred bytes, which t.TempDir plus this test's name would spend.
+	dir, err := os.MkdirTemp("", "dvapi")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	apiPath := filepath.Join(dir, "api.sock")
+	apiLn, err := daemon.Listen(apiPath)
+	if err != nil {
+		t.Fatalf("listening on the observation socket: %v", err)
+	}
+	t.Cleanup(func() { apiLn.Close() })
+
+	started := time.Now()
+	go daemon.ServeAPI(apiLn, snapshot.Source{
+		Server: func() snapshot.Server { return srv.Info(testVersion, started, time.Now()) },
+		Session: func(ctx context.Context) (*snapshot.Session, error) {
+			mu.Lock()
+			a := app
+			mu.Unlock()
+			if a == nil {
+				return nil, nil
+			}
+			return a.Snapshot(ctx)
+		},
+	})
+
+	sim, leave := attachTo(t, srv, 100, 30)
+	typeInto(sim, "SELECT SLEEP(10)")
+	press(t, sim, keymap.ActionRun)
+	waitForScreen(t, sim, "running", 10*time.Second)
+
+	// SLEEP returns its row only at the end, so the elapsed time here can
+	// only have come from when the statement was sent.
+	const ran = 600 * time.Millisecond
+	time.Sleep(ran)
+
+	got := waitForAttached(t, apiPath, true)
+	if got.Session == nil {
+		t.Fatalf("the session did not answer: %s", got.SessionError)
+	}
+	if !got.Session.Statement.Running {
+		t.Errorf("the socket does not report the statement as running: %+v", got.Session.Statement)
+	}
+	if want := (ran / 2).Milliseconds(); got.Session.Statement.ElapsedMS < want {
+		t.Errorf("elapsed_ms = %d after %v of running, want at least %d",
+			got.Session.Statement.ElapsedMS, ran, want)
+	}
+
+	// The terminal goes away, the way it does when a window closes.
+	leave()
+
+	got = waitForAttached(t, apiPath, false)
+	if got.Session == nil {
+		t.Fatalf("a detached session stopped answering: %s", got.SessionError)
+	}
+	if got.Session.DataSource.Name != cfg.DataSources[0].Name {
+		t.Errorf("datasource = %q, want %q", got.Session.DataSource.Name, cfg.DataSources[0].Name)
+	}
+
+	again, leaveAgain := attachTo(t, srv, 100, 30)
+	defer leaveAgain()
+	waitForScreen(t, again, cfg.DataSources[0].Name, 10*time.Second)
+
+	if got := waitForAttached(t, apiPath, true); got.Session == nil {
+		t.Fatalf("the session did not answer after reattaching: %s", got.SessionError)
 	}
 }

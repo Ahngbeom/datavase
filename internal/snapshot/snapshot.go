@@ -152,7 +152,7 @@ func (s Source) Take(ctx context.Context) Snapshot {
 	return out
 }
 
-// Handle writes one snapshot as one line of JSON.
+// Handle writes one snapshot as one indented JSON document.
 func Handle(w io.Writer, src Source, ctx context.Context) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

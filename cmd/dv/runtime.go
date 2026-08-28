@@ -207,6 +207,15 @@ func stopServer() error {
 	return proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
 }
 
+// apiReadTimeout bounds the wait for the observation socket to answer.
+//
+// snapshot.SessionTimeout bounds the server's wait for the interface, so a
+// healthy but slow answer arrives well inside this; what this catches is the
+// server process itself being wedged — stopped, or holding a socket whose
+// peer will never write — where the alternative is dv status hanging with no
+// way out.
+const apiReadTimeout = 5 * time.Second
+
 // apiSnapshot asks the running server what it is doing.
 func apiSnapshot() ([]byte, error) {
 	path, err := daemon.APISocketPath()
@@ -215,11 +224,32 @@ func apiSnapshot() ([]byte, error) {
 	}
 	conn, err := daemon.Dial(path)
 	if err != nil {
-		return nil, errors.New("no dv server is running")
+		return nil, err
 	}
 	defer conn.Close()
 
+	if err := conn.SetReadDeadline(time.Now().Add(apiReadTimeout)); err != nil {
+		return nil, err
+	}
 	return io.ReadAll(conn)
+}
+
+// serverRunning reports whether the socket a client attaches on answers.
+//
+// It is the second opinion dv status needs: the observation socket failing
+// says nothing about whether a session exists, and a server that dv itself
+// and dv server stop can both reach must not be reported as absent.
+func serverRunning() bool {
+	path, err := daemon.SocketPath()
+	if err != nil {
+		return false
+	}
+	conn, err := daemon.Dial(path)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // serverStatus is dv status: one paragraph for a person, from the same
@@ -227,6 +257,9 @@ func apiSnapshot() ([]byte, error) {
 func serverStatus() (string, error) {
 	raw, err := apiSnapshot()
 	if err != nil {
+		if serverRunning() {
+			return fmt.Sprintf("a dv server is running, but its observation socket did not answer: %v", err), nil
+		}
 		return "no dv server is running", nil
 	}
 

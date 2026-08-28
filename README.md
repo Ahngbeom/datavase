@@ -416,7 +416,7 @@ been up, and whether a terminal is currently attached, and adds a second line
 when a statement is running:
 
 ```
-local on db.internal (production), up 3612s, detached
+prod-ro on db.internal (production), up 3612s, detached
 running for 4210ms: SELECT id, customer, total FROM orders
 ```
 

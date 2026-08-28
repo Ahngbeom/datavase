@@ -407,8 +407,28 @@ replaces is told why rather than left looking frozen.
 
 ```sh
 dv                    # attach to the running session, or start one
-dv status             # say whether a session is running, and where
+dv status             # say whether a session is running, and what it is doing
 dv server stop        # end the session and the process holding it
+```
+
+`dv status` names the datasource, the environment, how long the session has
+been up, and whether a terminal is currently attached, and adds a second line
+when a statement is running:
+
+```
+local on db.internal (production), up 3612s, detached
+running for 4210ms: SELECT id, customer, total FROM orders
+```
+
+`dv api snapshot` is the same document as JSON, for anything other than a
+person to read — a script, a status bar, a second terminal that would rather
+parse than read a sentence. It answers on a socket of its own, separate from
+the one a client attaches on, so any number of readers can ask at once without
+taking a turn. Nothing it returns can change the session: there is no row
+data in it, and no command it accepts.
+
+```sh
+dv api snapshot | jq .
 ```
 
 `⌘Q` still quits for good: the session ends, the background process exits, and

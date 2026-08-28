@@ -57,6 +57,8 @@ type App struct {
 	StopServer func() error
 	// ServerStatus describes what is running, in one paragraph for a person.
 	ServerStatus func() (string, error)
+	// APISnapshot fetches the observation snapshot as JSON.
+	APISnapshot func() ([]byte, error)
 }
 
 // UIOptions are the choices that belong to one invocation rather than to the
@@ -110,6 +112,8 @@ func (a *App) Run(args []string) int {
 		return a.server(args[1:])
 	case "status":
 		return a.serverStatus()
+	case "api":
+		return a.api(args[1:])
 	case "help", "-h", "--help":
 		a.usage()
 		return exitOK
@@ -139,6 +143,7 @@ usage:
   dv keys --tmux        print tmux settings for modified keys
   dv keys --debug       report what this terminal sends for each key
   dv status             say whether a session is running, and on what
+  dv api snapshot       print what the running session is doing, as JSON
   dv --no-session       run without a session server
   dv help               show this message
 
@@ -324,6 +329,25 @@ func (a *App) serverStatus() int {
 		return exitError
 	}
 	fmt.Fprintln(a.Out, report)
+	return exitOK
+}
+
+// api is `dv api snapshot`.
+func (a *App) api(args []string) int {
+	if len(args) != 1 || args[0] != "snapshot" {
+		fmt.Fprintln(a.Err, "usage: dv api snapshot")
+		return exitUsage
+	}
+	if a.APISnapshot == nil {
+		fmt.Fprintln(a.Err, "this build has no observation socket")
+		return exitUsage
+	}
+	out, err := a.APISnapshot()
+	if err != nil {
+		fmt.Fprintf(a.Err, "%v\n", err)
+		return exitError
+	}
+	a.Out.Write(out)
 	return exitOK
 }
 

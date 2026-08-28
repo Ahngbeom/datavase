@@ -1,12 +1,15 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
+
+	"github.com/Ahngbeom/datavase/internal/snapshot"
 )
 
 // ErrAlreadyRunning reports that something answered on the socket already.
@@ -80,5 +83,33 @@ func (s *Server) Accept(ln net.Listener) {
 			return
 		}
 		go s.Serve(c)
+	}
+}
+
+// APISocketPath is where the observation socket lives.
+//
+// A second socket rather than a second message on the first one: the client
+// protocol is private, binary and high-frequency, and this is public,
+// textual and rare. One socket carrying both would make each worse, and only
+// this one may have several readers at a time.
+func APISocketPath() (string, error) { return statePath("dv-api.sock") }
+
+// ServeAPI answers snapshot requests until the listener closes.
+//
+// One response per connection: there is one question, and a connection that
+// asked it has nothing more to say. Readers are unlimited because none of
+// them can change anything.
+func ServeAPI(ln net.Listener, src snapshot.Source) {
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), snapshot.SessionTimeout)
+			defer cancel()
+			_ = snapshot.Handle(c, src, ctx)
+		}(c)
 	}
 }

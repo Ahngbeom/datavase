@@ -5,6 +5,50 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.7.0 — 2026-08-28
+
+**Nothing to do before upgrading.** No configuration file changes, no keys
+moved, and every datasource behaves exactly as it did — this release adds a
+background process that a session now runs in, on top of the interface
+that was already there.
+
+### Added
+
+**Closing the terminal no longer ends what is running in it.** The interface
+and the connection it holds now run in a background process; the terminal is
+a client that can leave and come back. A `SELECT` streaming ten million rows,
+an open transaction, an `ALTER` that has been going for twenty minutes — none
+of them care that the SSH connection dropped or that the laptop lid closed.
+
+`⌘\` / `Ctrl+\` (`Shift+F10` where the modified key does not survive the
+terminal) detaches without asking anything, because detaching destroys
+neither an open transaction nor an unsaved buffer the way quitting does.
+Running `dv` again attaches to the same session, on the same buffer, with the
+same results still there — from a different terminal, a different SSH
+connection, or a different machine on the same account. There is only ever
+one session per account; the newest terminal wins it, and the one it replaces
+is told why rather than left looking frozen. `⌘Q` still quits for good.
+
+**`dv status` and `dv api snapshot` say what a session is doing without
+touching it.** `dv status` names the datasource, the environment, how long
+the session has been up, whether a terminal is attached, and how long a
+running statement has been running. `dv api snapshot` is the same document as
+JSON, answered on a socket of its own so any number of readers can ask at
+once without taking a turn from the terminal that is actually attached.
+Neither can change what the session is doing: there is no row data in the
+document, and no command the socket accepts.
+
+**New commands and flags**: `dv server` runs the session in the foreground
+instead of the background, for watching what it is doing; `dv server stop`
+ends the session and the process holding it; `dv --no-session` runs exactly
+as every earlier release did, with no background process to detach from.
+
+Switching datasources while a statement is running is refused rather than
+obeyed, because switching would close the connection the statement needs.
+When the background process cannot be started at all — a read-only state
+directory, a machine where the socket cannot be made — `dv` says so in one
+line and runs the session in the terminal the way it always did.
+
 ## v0.6.3 — 2026-08-05
 
 **Nothing to do before upgrading, and nothing you can do that you could not

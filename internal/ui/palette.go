@@ -677,6 +677,15 @@ func (a *App) disableWrites() {
 	a.notice("writes locked")
 }
 
+// showKeyboardChooser opens the palette a click on the mode field asks for.
+//
+// The palette has no entry point filtered to one category, and building one
+// for a single click is scope this did not need: the "keymap …" commands are
+// already one search away.
+func (a *App) showKeyboardChooser() {
+	a.showCommandPalette()
+}
+
 // exportFormat selects the writer.
 type exportFormat int
 

@@ -122,6 +122,20 @@ type App struct {
 	// the same reason.
 	paneRows map[int]*tabbed
 
+	// visitedRegions is which menuContexts the keyboard has already been
+	// offered a hint for this session. In memory only, unlike intro's marker
+	// file: that one has to survive a restart, and a beginner who restarts is
+	// a beginner again.
+	visitedRegions map[menuContext]bool
+	// hintBoundary is how many leading entries of status.hints are the
+	// greeting rather than some region's. refreshHints trims back to this
+	// boundary before adding the newly focused region's own clauses, so a
+	// region that has been left behind cannot go on describing where the
+	// keyboard used to be. notice() resets it to zero along with hints
+	// itself: once the greeting has been displaced there is nothing left of
+	// it to preserve.
+	hintBoundary int
+
 	// selectionAnchor and selectionCaret track which end of a selection the
 	// user is dragging. tview normalises both ends, so the direction cannot
 	// be read back from the widget.
@@ -306,7 +320,11 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
 	}
-	a.status.opening = a.openingClauses(conn.ServerVersion())
+	a.status.hints = a.openingClauses(conn.ServerVersion())
+	// hintBoundary marks where the greeting ends, so the first region a
+	// visit adds to it can be told apart from the greeting later, when a
+	// second region's visit needs to trim the first one's back off.
+	a.hintBoundary = len(a.status.hints)
 
 	// Before any widget is built: tview copies its palette into each one as it
 	// is created, so a default claimed afterwards would reach nothing.
@@ -542,6 +560,7 @@ func (a *App) buildWidgets() {
 	a.topBar = newTopBar(a.currentTopBar)
 	a.topBar.record = a.hits.set
 	a.statusBar = newStatusBar(a.currentStatus)
+	a.statusBar.record = a.hits.set
 }
 
 // editorDetail names the file the buffer came from, and whether it has
@@ -793,6 +812,29 @@ func (a *App) schemaHasFocus() bool {
 	return focus == a.tree || focus == a.tableFilter || focus == a.tableList
 }
 
+// focusedContext maps the focused primitive to a menuContext, answering the
+// same question contextAt (menu.go) answers from a screen position rather
+// than from focus. Both gate the grid, the tree and the tables list on
+// which tab is actually current for the reason contextAt's own comment
+// gives — a hidden tab keeps the rect and the focus of whichever widget was
+// on top last — so the two cannot disagree about what a region is.
+//
+// false means the focus is on something a hint would be meaningless for: a
+// dialog, a menu, or any widget this session added since.
+func (a *App) focusedContext() (menuContext, bool) {
+	switch focus := a.app.GetFocus(); {
+	case focus == a.editor:
+		return ctxEditor, true
+	case focus == a.grid && a.resultTabs.current() == tabResults:
+		return ctxResult, true
+	case focus == a.tree && a.schemaTabs.current() == tabTree:
+		return ctxTree, true
+	case (focus == a.tableList || focus == a.tableFilter) && a.schemaTabs.current() == tabTables:
+		return ctxTables, true
+	}
+	return ctxEditor, false
+}
+
 func (a *App) bindKeys() {
 	a.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		// While a dialog is open it owns the keyboard.
@@ -902,11 +944,73 @@ func (a *App) cycleFocus(delta int) {
 		if p == current {
 			next := (i + delta + len(order)) % len(order)
 			a.app.SetFocus(order[next])
+			a.refreshHints()
 			return
 		}
 	}
 	a.app.SetFocus(order[0])
+	a.refreshHints()
 }
+
+// refreshHints offers the commands for wherever the keyboard is now, the
+// first time this session it goes there.
+//
+// A beginner meets each region once and is told what is in it; someone
+// working never sees these, because after the first statement the bar
+// always has a row count or an error to carry instead — fields() withholds
+// every hint the moment the phase, the message or the error stops being
+// idle. The visited bit is per-region and in memory: intro keeps its
+// equivalent on disk because it must survive a restart, and this one must
+// not.
+func (a *App) refreshHints() {
+	ctx, ok := a.focusedContext()
+	if !ok {
+		return
+	}
+
+	// Whatever the previously focused region added no longer describes where
+	// the keyboard is; only the greeting, if it is still unread, survives a
+	// move. Without this a region left days ago — or one second ago — would
+	// go on being read as "here" by anyone glancing at the bar, and the
+	// shedding order would rank it above the region actually in use, because
+	// rank follows position in this slice and a stale entry sits earlier in
+	// it than a fresh one appended after.
+	if len(a.status.hints) > a.hintBoundary {
+		a.status.hints = a.status.hints[:a.hintBoundary]
+	}
+
+	if a.visitedRegions[ctx] {
+		return
+	}
+	if a.visitedRegions == nil {
+		a.visitedRegions = make(map[menuContext]bool)
+	}
+	a.visitedRegions[ctx] = true
+
+	entries := menuEntries(paletteCommands(), ctx, a.keyLabel)
+
+	// An entry with no key covers no action a beginner can reach directly —
+	// finding it again means opening the menu regardless, so it does not
+	// spend one of the region's three slots.
+	clauses := make([]string, 0, hintsShown)
+	for _, e := range entries {
+		if e.key == "" {
+			continue
+		}
+		clauses = append(clauses, fmt.Sprintf("%s %s", e.key, e.name))
+		if len(clauses) == hintsShown {
+			break
+		}
+	}
+
+	// Appended after the trim above, not assigned: the greeting — if any is
+	// still standing — is what this joins onto, not what it replaces.
+	a.status.hints = append(a.status.hints, clauses...)
+}
+
+// hintsShown is how many commands a region offers on the bar. Three is what
+// fits beside a schema name on a narrow terminal; the menu holds the rest.
+const hintsShown = 3
 
 // detach leaves the terminal and keeps the session.
 //
@@ -1278,10 +1382,17 @@ func (a *App) cancelRunning() {
 // value itself on the next draw, so setting the field is the whole job.
 func (a *App) notice(msg string) {
 	a.status.message = msg
-	// The greeting is what the bar says until something happens; once
-	// something has, keeping it would leave the opening advice competing for
-	// room with the answer the user was waiting for.
-	a.status.opening = nil
+	// The greeting and every region's hint are what the bar says until
+	// something happens; once something has, keeping them would leave them
+	// competing for room with the answer the user was waiting for. fields()
+	// already withholds them whenever message is set, so this is belt and
+	// braces — it also means a visited region's hint cannot resurface later
+	// stitched onto some unrelated notice.
+	a.status.hints = nil
+	// The greeting just cleared is the one hintBoundary was counting; once it
+	// is gone there is nothing left of it for refreshHints to preserve, so
+	// the next region's visit should not go looking for it.
+	a.hintBoundary = 0
 }
 
 func (a *App) refreshStatus() {

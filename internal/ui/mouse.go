@@ -136,6 +136,7 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	// be if the row had been reached from the keyboard.
 	a.grid.Select(row, col)
 	a.app.SetFocus(a.grid)
+	a.refreshHints()
 	a.dispatch(keymap.ActionInspect)
 	return nil, action
 }
@@ -257,13 +258,21 @@ func (a *App) mouseAction(z zone, row int) bool {
 		if pane := a.paneFor(row); pane != nil && z.index >= 0 && z.index < len(pane.names) {
 			pane.show(pane.names[z.index])
 			a.app.SetFocus(pane)
+			a.refreshHints()
 			return true
 		}
 	case zoneRegionName:
 		if pane := a.paneFor(row); pane != nil {
 			a.app.SetFocus(pane)
+			a.refreshHints()
 			return true
 		}
+	case zoneStatusMode:
+		a.showKeyboardChooser()
+		return true
+	case zoneStatusWrites:
+		a.disableWrites()
+		return true
 	}
 	return false
 }

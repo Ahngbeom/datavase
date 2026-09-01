@@ -27,7 +27,7 @@ func TestStatusDropsExpendableFieldsBeforeWarnings(t *testing.T) {
 	s.truncated = true
 
 	for _, width := range []int{120, 100, 80, 60, 50, 40} {
-		got := s.renderWidth(width)
+		got, _ := s.renderWidth(width)
 
 		if w := visibleWidth(got); w > width {
 			t.Errorf("width %d: status is %d cells: %q", width, w, got)
@@ -49,7 +49,7 @@ func TestStatusKeepsTheErrorAtAnyWidth(t *testing.T) {
 	s.err = errors.New("Error 1064: syntax")
 
 	for _, width := range []int{120, 80, 50, 40} {
-		got := s.renderWidth(width)
+		got, _ := s.renderWidth(width)
 		if !strings.Contains(got, "1064") {
 			t.Errorf("width %d: the server error was dropped: %q", width, got)
 		}
@@ -208,7 +208,7 @@ func TestStatusShowsTheVimMode(t *testing.T) {
 	}
 
 	for _, width := range []int{120, 80, 40, 20} {
-		if narrow := s.renderWidth(width); !strings.Contains(narrow, "NORMAL") {
+		if narrow, _ := s.renderWidth(width); !strings.Contains(narrow, "NORMAL") {
 			t.Errorf("width %d: the mode was dropped: %q", width, narrow)
 		}
 	}
@@ -227,7 +227,7 @@ func TestStatusShowsAPendingSequence(t *testing.T) {
 	}
 
 	for _, width := range []int{120, 60, 30} {
-		if narrow := s.renderWidth(width); !strings.Contains(narrow, "NORMAL") {
+		if narrow, _ := s.renderWidth(width); !strings.Contains(narrow, "NORMAL") {
 			t.Errorf("width %d: the mode was dropped: %q", width, narrow)
 		}
 	}
@@ -330,7 +330,7 @@ func TestAWriteReportsWhatItChangedRatherThanARowCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			written := tt.written
 			s := status{phase: phaseDone, written: &written}
-			got := s.renderWidth(200)
+			got, _ := s.renderWidth(200)
 
 			for _, want := range tt.wantAll {
 				if !strings.Contains(got, want) {
@@ -351,7 +351,7 @@ func TestAWriteReportsWhatItChangedRatherThanARowCount(t *testing.T) {
 func TestAQueryStillReportsItsRowCount(t *testing.T) {
 	s := status{phase: phaseDone, rows: 7}
 
-	got := s.renderWidth(200)
+	got, _ := s.renderWidth(200)
 	if !strings.Contains(got, "7 rows") {
 		t.Errorf("status = %q, want the row count", got)
 	}
@@ -372,7 +372,7 @@ func TestAWarningReachesTheBarWithItsMessage(t *testing.T) {
 		},
 	}
 
-	got := s.renderWidth(200)
+	got, _ := s.renderWidth(200)
 	if !strings.Contains(got, "1 warning") {
 		t.Errorf("status = %q, want the warning count", got)
 	}
@@ -393,7 +393,7 @@ func TestANarrowBarKeepsTheWarningAndDropsTheTiming(t *testing.T) {
 		},
 	}
 
-	got := s.renderWidth(28)
+	got, _ := s.renderWidth(28)
 	if strings.Contains(got, "1.23s") {
 		t.Fatalf("status = %q is not narrow enough to be dropping anything", got)
 	}
@@ -405,7 +405,7 @@ func TestANarrowBarKeepsTheWarningAndDropsTheTiming(t *testing.T) {
 func TestNoWarningsAddNothingToTheBar(t *testing.T) {
 	s := status{phase: phaseDone, rows: 3}
 
-	if got := s.renderWidth(200); strings.Contains(got, "warning") {
+	if got, _ := s.renderWidth(200); strings.Contains(got, "warning") {
 		t.Errorf("status = %q, want no mention of warnings", got)
 	}
 }
@@ -433,7 +433,7 @@ func TestATruncatedBarSaysItWasTruncated(t *testing.T) {
 	s := baseStatus()
 	s.message = "server 11.4.12-MariaDB · F1 for keys · ^B for the schema tree"
 
-	got := s.renderWidth(30)
+	got, _ := s.renderWidth(30)
 	if !strings.HasSuffix(visibleText(got), "…") {
 		t.Errorf("the cut line does not say it was cut: %q", got)
 	}
@@ -446,7 +446,7 @@ func TestTheEllipsisIsPaidForOutOfTheWidth(t *testing.T) {
 	s.message = strings.Repeat("wide ", 40)
 
 	for _, width := range []int{40, 30, 20, 10, 4, 2, 1} {
-		got := s.renderWidth(width)
+		got, _ := s.renderWidth(width)
 		if w := visibleWidth(got); w > width {
 			t.Errorf("width %d: the cut line is %d cells: %q", width, w, got)
 		}
@@ -458,7 +458,7 @@ func TestALineThatFitsGetsNoEllipsis(t *testing.T) {
 	s := baseStatus()
 	s.message = "committed"
 
-	if got := s.renderWidth(80); strings.Contains(got, "…") {
+	if got, _ := s.renderWidth(80); strings.Contains(got, "…") {
 		t.Errorf("a line that fits was marked as cut: %q", got)
 	}
 }
@@ -469,14 +469,14 @@ func TestALineThatFitsGetsNoEllipsis(t *testing.T) {
 // which is where a default terminal starts — it was the part that got cut.
 func TestTheOpeningLineLeadsWithWhatTheTerminalCannotDeliver(t *testing.T) {
 	s := baseStatus()
-	s.opening = openingClauses(opening{
+	s.hints = openingClauses(opening{
 		serverVersion: "11.4.12-MariaDB-ubu2404",
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 		advice:        "Ctrl+↩ does not work here — use F5",
 	})
 
-	if got := s.renderWidth(80); !strings.Contains(got, "does not work here") {
+	if got, _ := s.renderWidth(80); !strings.Contains(got, "does not work here") {
 		t.Errorf("the terminal advice was the first thing cut at eighty columns: %q", got)
 	}
 }
@@ -485,14 +485,14 @@ func TestTheOpeningLineLeadsWithWhatTheTerminalCannotDeliver(t *testing.T) {
 // it exists. It has to survive the terminal a default one starts at.
 func TestTheOpeningLineKeepsTheSchemaTreeAtEightyColumns(t *testing.T) {
 	s := baseStatus()
-	s.opening = openingClauses(opening{
+	s.hints = openingClauses(opening{
 		serverVersion: "11.4.12-MariaDB-ubu2404",
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 		advice:        "Ctrl+↩ does not work here — use F5",
 	})
 
-	if got := s.renderWidth(80); !strings.Contains(got, "schema tree") {
+	if got, _ := s.renderWidth(80); !strings.Contains(got, "schema tree") {
 		t.Errorf("nothing announced the schema tree at eighty columns: %q", got)
 	}
 }
@@ -501,14 +501,15 @@ func TestTheOpeningLineKeepsTheSchemaTreeAtEightyColumns(t *testing.T) {
 // that is wrong rather than one that was cut.
 func TestTheOpeningLineDropsWholeClausesRatherThanCuttingOne(t *testing.T) {
 	s := baseStatus()
-	s.opening = openingClauses(opening{
+	s.hints = openingClauses(opening{
 		serverVersion: "11.4.12-MariaDB-ubu2404",
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 	})
 
 	for _, width := range []int{80, 60, 40, 30} {
-		got := visibleText(s.renderWidth(width))
+		line, _ := s.renderWidth(width)
+		got := visibleText(line)
 		if strings.Contains(got, "for the s") && !strings.Contains(got, "for the schema tree") {
 			t.Errorf("width %d: a clause was cut rather than dropped: %q", width, got)
 		}
@@ -522,13 +523,13 @@ func TestTheOpeningLineDropsWholeClausesRatherThanCuttingOne(t *testing.T) {
 // next, and still names the server it reached.
 func TestTheOpeningLineWithoutAdvice(t *testing.T) {
 	s := baseStatus()
-	s.opening = openingClauses(opening{
+	s.hints = openingClauses(opening{
 		serverVersion: "11.4.12-MariaDB-ubu2404",
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 	})
 
-	line := s.renderWidth(200)
+	line, _ := s.renderWidth(200)
 	for _, want := range []string{"F1 for keys", "^B for the schema tree", "11.4.12-MariaDB-ubu2404"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the opening line does not mention %q: %q", want, line)
@@ -603,7 +604,7 @@ func TestStatusSaysHowManyColumnsAreOffTheLeft(t *testing.T) {
 	s.rows = 5
 	s.columnsLeft = 3
 
-	got := s.renderWidth(120)
+	got, _ := s.renderWidth(120)
 	if !strings.Contains(got, "3 columns left of view") {
 		t.Errorf("the scrolled-off columns were not reported: %q", got)
 	}
@@ -617,7 +618,7 @@ func TestStatusIsSilentWhenNothingIsOffTheLeft(t *testing.T) {
 	s.phase = phaseDone
 	s.rows = 5
 
-	if got := s.renderWidth(120); strings.Contains(got, "left of view") {
+	if got, _ := s.renderWidth(120); strings.Contains(got, "left of view") {
 		t.Errorf("an unscrolled grid was reported as scrolled: %q", got)
 	}
 }
@@ -632,7 +633,7 @@ func TestStatusKeepsTheColumnNoticeAtAnyWidth(t *testing.T) {
 	s.columnsLeft = 2
 
 	for _, width := range []int{120, 80, 60, 40} {
-		got := s.renderWidth(width)
+		got, _ := s.renderWidth(width)
 		if !strings.Contains(got, "2 columns left of view") {
 			t.Errorf("width %d: the scrolled-off columns were dropped: %q", width, got)
 		}
@@ -645,7 +646,83 @@ func TestStatusCountsASingleScrolledColumnInTheSingular(t *testing.T) {
 	s.phase = phaseDone
 	s.columnsLeft = 1
 
-	if got := s.renderWidth(120); !strings.Contains(got, "1 column left of view") {
+	if got, _ := s.renderWidth(120); !strings.Contains(got, "1 column left of view") {
 		t.Errorf("the singular was not used: %q", got)
 	}
+}
+
+// The bar's job is to say what just happened. A hint that outlived a result
+// would be competing with the answer the user was waiting for.
+func TestHintsGiveWayToAnythingThatActuallyHappened(t *testing.T) {
+	base := status{hints: []string{"click a column to sort"}}
+
+	if got, _ := base.renderWidth(120); !strings.Contains(got, "click a column") {
+		t.Fatal("an idle bar does not show its hints")
+	}
+
+	for name, s := range map[string]status{
+		"a message": {hints: base.hints, message: "cancelling…"},
+		"an error":  {hints: base.hints, err: errors.New("no such table")},
+		"a result":  {hints: base.hints, phase: phaseDone, rows: 3},
+		"running":   {hints: base.hints, phase: phaseRunning},
+	} {
+		if got, _ := s.renderWidth(120); strings.Contains(got, "click a column") {
+			t.Errorf("the hints survived %s", name)
+		}
+	}
+}
+
+// Terminal advice says the primary bindings cannot be delivered at all, which
+// outranks a hint about what is under the pointer.
+func TestTerminalAdviceOutranksAContextHint(t *testing.T) {
+	s := status{hints: []string{
+		"Ctrl+Enter cannot reach this terminal; F5 runs",
+		"click a column to sort",
+	}}
+
+	line, _ := s.renderWidth(46)
+	if !strings.Contains(line, "cannot reach this terminal") {
+		t.Errorf("the narrow bar dropped the advice and kept the hint:\n%s", line)
+	}
+}
+
+// The mode field is where someone reads which keyboard they are on, so it is
+// where they reach to change it — and it is the field a beginner stares at
+// hardest.
+func TestTheModeFieldIsClickable(t *testing.T) {
+	s := status{vimMode: "NORMAL"}
+
+	line, zones := s.renderWidth(120)
+	plain := []rune(visibleText(line))
+
+	var found bool
+	for _, z := range zones {
+		if z.target != zoneStatusMode {
+			continue
+		}
+		found = true
+		if z.from < 0 || z.to > len(plain) || z.from >= z.to {
+			t.Fatalf("the mode zone %+v is outside %q", z, string(plain))
+		}
+		if covered := string(plain[z.from:z.to]); !strings.Contains(covered, "NORMAL") {
+			t.Errorf("the mode zone covers %q", covered)
+		}
+	}
+	if !found {
+		t.Error("the mode field publishes no zone")
+	}
+}
+
+// Unlocked writes is a state someone can forget they are in, and the notice
+// is the only reminder. Being able to click it off is the shortest path back.
+func TestTheUnlockedWritesNoticeIsClickable(t *testing.T) {
+	s := status{writesEnabled: true}
+
+	_, zones := s.renderWidth(120)
+	for _, z := range zones {
+		if z.target == zoneStatusWrites {
+			return
+		}
+	}
+	t.Error("the unlocked-writes notice publishes no zone")
 }

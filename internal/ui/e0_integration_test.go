@@ -102,7 +102,8 @@ func TestAnAssumedKeyboardIsAnnouncedOnce(t *testing.T) {
 	h := newHarnessAssumingPreset(t, config.EnvDev)
 
 	h.waitFor("the opening to name the assumed keyboard", func(a *App) bool {
-		return strings.Contains(a.status.renderWidth(200), "datagrip")
+		line, _ := a.status.renderWidth(200)
+		return strings.Contains(line, "datagrip")
 	})
 
 	h.runCommand("keymap vim")
@@ -112,6 +113,7 @@ func TestAnAssumedKeyboardIsAnnouncedOnce(t *testing.T) {
 	// clause going, not the word "keymap", which setPreset's own confirmation
 	// also uses for an unrelated reason.
 	h.waitFor("the announcement to go once a keyboard is chosen", func(a *App) bool {
-		return !strings.Contains(a.status.renderWidth(200), "in the palette for another")
+		line, _ := a.status.renderWidth(200)
+		return !strings.Contains(line, "in the palette for another")
 	})
 }

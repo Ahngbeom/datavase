@@ -110,6 +110,12 @@ type App struct {
 	// reads are asynchronous and usually refused.
 	clipboard string
 
+	// hits is where the last frame's regions recorded what a click on them
+	// means. Rebuilt every frame in captureScreen's SetBeforeDrawFunc, the
+	// same reason a region's own header is rebuilt every frame rather than
+	// updated: the only way it can be wrong is if a renderer is.
+	hits hitmap
+
 	// selectionAnchor and selectionCaret track which end of a selection the
 	// user is dragging. tview normalises both ends, so the direction cannot
 	// be read back from the widget.
@@ -303,6 +309,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.buildWidgets()
 	a.buildLayout()
 	a.bindKeys()
+	a.bindMouse()
 	a.bindEditor()
 	a.captureScreen()
 	a.loadSchemas()
@@ -321,6 +328,10 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 func (a *App) captureScreen() {
 	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
 		a.screen = screen
+		// The zones of the frame about to be drawn replace the last one's. A
+		// region that is no longer on screen — the sidebar, toggled off —
+		// must not still answer for the rows it used to hold.
+		a.hits.clear()
 		return false
 	})
 }
@@ -507,18 +518,22 @@ func (a *App) buildWidgets() {
 	// saying which file it holds.
 	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
+	a.editorRegion.record = a.hits.set
 
 	a.schemaTabs = newTabbed().watch(a.schemaDetail)
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
+	a.schemaTabs.record = a.hits.set
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 	a.resultTabs.add(tabPlan, a.buildPlanTab())
 	a.resultTabs.add(tabSessions, a.buildSessionsTab())
+	a.resultTabs.record = a.hits.set
 
 	a.topBar = newTopBar(a.currentTopBar)
+	a.topBar.record = a.hits.set
 	a.statusBar = newStatusBar(a.currentStatus)
 }
 

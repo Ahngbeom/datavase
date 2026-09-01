@@ -21,6 +21,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // harness drives the real interface against a simulated terminal, so the
@@ -35,6 +36,9 @@ type harness struct {
 
 	// keysHandled counts the keys the interface has finished processing.
 	keysHandled int64
+	// mouseHandled counts the mouse events the interface has finished
+	// processing.
+	mouseHandled int64
 }
 
 // seedCache replaces the completion cache with a known schema.
@@ -180,6 +184,7 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 
 	h := &harness{app: app, screen: screen, cache: cache, history: hist, t: t}
 	h.countKeys()
+	h.countMouse()
 
 	done := make(chan error, 1)
 	go func() { done <- app.Run() }()
@@ -236,6 +241,81 @@ func (h *harness) awaitKeys(want int64) {
 	}
 	h.t.Fatalf("the interface handled %d of %d injected keys",
 		atomic.LoadInt64(&h.keysHandled), want)
+}
+
+// countMouse makes injected clicks observable, the way countKeys does for
+// keys, and for the same reason: an injected mouse event goes onto the
+// screen's queue while QueueUpdateDraw uses the application's.
+//
+// It wraps the interface's own capture from the outside; nothing here exists
+// in the application because of a test.
+func (h *harness) countMouse() {
+	inner := h.app.app.GetMouseCapture()
+
+	h.app.app.SetMouseCapture(func(ev *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		out, outAction := ev, action
+		if inner != nil {
+			out, outAction = inner(ev, action)
+		}
+		atomic.AddInt64(&h.mouseHandled, 1)
+		return out, outAction
+	})
+}
+
+// click presses and releases the left button at a screen position.
+//
+// tview reports a click on the release, so both halves are needed: injecting
+// only the press leaves the application waiting for the rest of a gesture.
+func (h *harness) click(x, y int) {
+	h.t.Helper()
+
+	before := atomic.LoadInt64(&h.mouseHandled)
+	h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
+	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	h.awaitMouse(before + 1)
+}
+
+// clickZone presses whatever the interface drew for a target, by name.
+//
+// Tests name what they are clicking for the reason h.do names actions rather
+// than keys: a layout change must not invalidate a behavioural test. Only the
+// tests that verify the zone mapping itself use raw coordinates.
+func (h *harness) clickZone(target zoneTarget, index int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		for row, zones := range a.hits.rows {
+			for _, z := range zones {
+				if z.target == target && z.index == index {
+					x, y = z.from, row
+					return true
+				}
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("nothing on screen is a zone for target %v index %d; screen:\n%s",
+			target, index, h.text())
+	}
+	h.click(x, y)
+}
+
+func (h *harness) awaitMouse(want int64) {
+	h.t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt64(&h.mouseHandled) >= want {
+			h.settle()
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	h.t.Fatalf("the interface handled %d of %d injected mouse events",
+		atomic.LoadInt64(&h.mouseHandled), want)
 }
 
 // inject sends keys and waits for all of them to be handled.

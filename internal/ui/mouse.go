@@ -81,6 +81,19 @@ func (a *App) menuOpen() bool {
 	return name == pageMenu
 }
 
+// gridVisible reports whether x, y lands on the grid and the grid is the
+// result pane's own current tab, rather than DDL, plan or sessions sharing
+// its rect.
+//
+// tview does not reset a hidden primitive's rect when it stops being drawn
+// (contextAt's own comment, menu.go), so a.grid.InRect keeps matching a
+// screen position long after the DDL tab has replaced it there. Every
+// caller that would otherwise act on the grid from a screen position has to
+// gate on this, or it acts on a result the user cannot see.
+func (a *App) gridVisible(x, y int) bool {
+	return a.resultTabs.current() == tabResults && a.grid.InRect(x, y)
+}
+
 // zoneAt is the dialog guard and the hitmap lookup together.
 //
 // Task 5 folded both into mouseLeftClick alone. A second per-action handler
@@ -128,7 +141,7 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	}
 
 	x, y := ev.Position()
-	if !a.grid.InRect(x, y) {
+	if !a.gridVisible(x, y) {
 		return ev, action
 	}
 	row, col := a.grid.CellAt(x, y)
@@ -172,7 +185,7 @@ func (a *App) mouseRightClick(ev *tcell.EventMouse, action tview.MouseAction) (*
 // thing that actually knows.
 func (a *App) clickGridHeader(ev *tcell.EventMouse) bool {
 	x, y := ev.Position()
-	if !a.grid.InRect(x, y) {
+	if !a.gridVisible(x, y) {
 		return false
 	}
 	row, col := a.grid.CellAt(x, y)

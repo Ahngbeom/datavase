@@ -399,9 +399,9 @@ type opening struct {
 	// deliver everything.
 	advice string
 	// presetAssumed says the configuration named no keyboard, so this
-	// session is running the default rather than a choice. The default
-	// moved once; a session that assumed it has to say so, or the change
-	// arrives as a key that stopped working.
+	// session is running the default rather than a choice made for it. A
+	// session that assumed its keyboard has to say so, or a default that
+	// ever changes arrives as a key that silently stopped working.
 	presetAssumed bool
 	presetName    string
 }
@@ -738,6 +738,7 @@ func (a *App) cycleTab() {
 	}
 	a.resultTabs.cycle()
 	a.app.SetFocus(a.resultPrimitive())
+	a.refreshHints()
 }
 
 // focusVisibleSchemaTab moves focus onto whatever the newly shown tab holds,
@@ -747,6 +748,7 @@ func (a *App) focusVisibleSchemaTab() {
 		a.renderTables()
 	}
 	a.app.SetFocus(a.schemaPrimitive())
+	a.refreshHints()
 }
 
 func (a *App) toggleSidebar() {

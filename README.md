@@ -160,7 +160,7 @@ defaults:
   auto_limit: 1000        # LIMIT added to unbounded SELECTs
   fetch_chunk: 500        # rows per batch while streaming
   buffer_max: 50000       # rows held in memory before truncating
-  mouse: true              # false turns off clicks; see "The screen"
+  mouse: true             # false turns off clicks; see "The screen"
 ```
 
 Passwords never go in this file. Store them in the OS keychain:

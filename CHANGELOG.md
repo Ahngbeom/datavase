@@ -5,6 +5,39 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+**One thing to check before upgrading: `preset` in your config.** Anyone who
+left it unset was on the modal keyboard, `vim`, without having chosen it —
+the default is `datagrip` now, so typing types. `vim` is still one answer to
+`dv init` away, or one `keymap vim` in the palette. Anyone who already named
+a preset, `vim` included, is unaffected: `preset:` in the config always wins
+over the default, whichever way the default points.
+
+### Changed
+
+**The keyboard nobody chose is no longer the modal one.** The default preset
+was `vim`; it is `datagrip` now. A session that assumed it — no `preset:` in
+the config — says so on the opening line, naming the keyboard it picked and
+the palette command for another.
+
+### Added
+
+**Clicks mean something.** A datasource, a schema or `keys` in the top bar
+does what pressing its key does; a tab or a region name switches focus
+there; a header sorts the grid by that column; and double-clicking a result
+row opens it in full. Right-click anywhere opens a menu of what can be done
+there, filtered to where the pointer landed, each entry naming the key that
+already does it — nothing on it is reachable only by mouse. The status bar
+also offers a region's own commands the first time the keyboard goes there,
+the same commands the right-click menu and the command palette agree on.
+
+Set `mouse: false` under `defaults` to turn all of that off, for anyone who
+selects text by dragging: mouse reporting in a terminal disables its own
+native selection, so a click that means something is a regression rather
+than a feature for them. Everything the mouse could reach stays reachable
+from the keyboard.
+
 ## v0.7.0 — 2026-08-28
 
 **Nothing to do before upgrading.** No configuration file changes, no keys

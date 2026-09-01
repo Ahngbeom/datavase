@@ -350,9 +350,9 @@ func visibleCost(s string) int {
 // visibleText is what the terminal shows, colour tags removed.
 //
 // Separate from visibleCost because callers want different things from the
-// same parse: a zone boundary is a rune offset into this string, and a rune
-// offset into a cell count are not the same number once anything double-width
-// is on the line.
+// same parse: a zone boundary is a count of cells, computed by visibleCost
+// against the string this returns — and a rune count and a cell count are
+// not the same number once anything double-width is on the line.
 func visibleText(s string) string {
 	var (
 		b     strings.Builder

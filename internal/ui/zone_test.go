@@ -20,6 +20,24 @@ func TestAZoneEndsBeforeItsLastColumn(t *testing.T) {
 	}
 }
 
+// Two regions can draw their headers on the same screen row — the sidebar's
+// tab strip and the editor's own header share a row when the sidebar is
+// open (buildLayout puts schemaTabs and rightPane in one horizontal Flex).
+// set used to replace a row's zones wholesale, so whichever region recorded
+// second silently erased the first's.
+func TestTwoRegionsSharingARowBothPublishTheirZones(t *testing.T) {
+	var h hitmap
+	h.set(2, []zone{{from: 1, to: 10, target: zoneTab, index: 0}})
+	h.set(2, []zone{{from: 36, to: 80, target: zoneRegionName, index: -1}})
+
+	if z, ok := h.at(5, 2); !ok || z.target != zoneTab {
+		t.Errorf("the first region's zone is gone: at(5,2) = %+v, %v", z, ok)
+	}
+	if z, ok := h.at(40, 2); !ok || z.target != zoneRegionName {
+		t.Errorf("the second region's zone is gone: at(40,2) = %+v, %v", z, ok)
+	}
+}
+
 // The rows a region draws on are its own; a stale row from a region that has
 // since been hidden would answer for a click somewhere else entirely.
 func TestClearingTheHitmapForgetsEveryRow(t *testing.T) {

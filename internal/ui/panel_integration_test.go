@@ -100,6 +100,47 @@ func TestTablesTabOpensATable(t *testing.T) {
 	}
 }
 
+// buildLayout puts schemaTabs and rightPane in one horizontal Flex, so with
+// the sidebar open their headers can land on the same screen row. The
+// hitmap used to be keyed by row alone and replace whatever a row already
+// held, so whichever region recorded second — the one holding focus, since
+// tview.Flex.Draw defers a focused item's Draw — silently erased the
+// other's zones from the hitmap.
+func TestBothHeadersSharingARowPublishTheirOwnZones(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
+	h.settle()
+
+	var schemaRow, editorRow int
+	var zones []zone
+	h.inspect(func(a *App) bool {
+		schemaRow = a.schemaTabs.headerRow
+		editorRow = a.editorRegion.headerRow
+		zones = a.hits.rows[editorRow]
+		return true
+	})
+
+	if schemaRow != editorRow {
+		t.Fatalf("schemaTabs and editorRegion drew their headers on rows %d and %d; this test needs them shared", schemaRow, editorRow)
+	}
+
+	var haveTab, haveRegionName bool
+	for _, z := range zones {
+		if z.target == zoneTab {
+			haveTab = true
+		}
+		if z.target == zoneRegionName {
+			haveRegionName = true
+		}
+	}
+	if !haveTab {
+		t.Errorf("row %d holds no zoneTab zone; the sidebar's tab strip is gone: %+v", editorRow, zones)
+	}
+	if !haveRegionName {
+		t.Errorf("row %d holds no zoneRegionName zone; the editor header's zone is gone: %+v", editorRow, zones)
+	}
+}
+
 // Cycling affects the focused pane only; otherwise one key would move two
 // panes at once and neither would be predictable.
 func TestCycleTabAffectsTheFocusedPaneOnly(t *testing.T) {

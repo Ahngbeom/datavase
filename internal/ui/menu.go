@@ -137,7 +137,7 @@ func (a *App) menuContentWidth() int {
 // position falls in, is what a stale rect from a sibling tab cannot fool.
 func (a *App) contextAt(x, y int) menuContext {
 	switch {
-	case a.resultTabs.current() == tabResults && a.grid.InRect(x, y):
+	case a.gridVisible(x, y):
 		return ctxResult
 	case a.schemaTabs.current() == tabTree && a.tree.InRect(x, y):
 		return ctxTree
@@ -227,9 +227,13 @@ func (a *App) showMenu(ctx menuContext, x, y int) {
 	list.SetBorder(true)
 	list.SetBackgroundColor(tcell.ColorBlack)
 
-	// +2 on each axis for the border. There is no height cap: a context menu
-	// is at most a handful of rows, unlike the browsable dialogs that need
-	// one to keep from running off a small terminal.
+	// +2 on each axis for the border, and len(entries) is the requested
+	// height rather than the drawn one — ctxEditor alone offers 14 entries,
+	// more than fits under a short terminal. No cap is needed here the way
+	// the browsable dialogs need one: newMenu.Draw already clamps both axes
+	// to the screen's own size, and tview.List scrolls within whatever rect
+	// it is given, so a request taller than the screen degrades to a
+	// scrollable menu rather than one that runs off it.
 	a.pages.AddPage(pageMenu, newMenu(list, x, y, width+2, len(entries)+2), true, true)
 	a.app.SetFocus(list)
 }

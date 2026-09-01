@@ -16,9 +16,10 @@ type Keymap struct {
 	Preset string `yaml:"preset"`
 	// PresetSet says the configuration named a preset at all.
 	//
-	// The default changed once. Anyone who wrote a config without this key
-	// would otherwise have had their keyboard swapped with no announcement,
-	// which is the one thing a changed default must not do.
+	// Without it, a config that never mentioned a keyboard could not be told
+	// apart from one that chose the default on purpose — and telling the two
+	// apart is what lets a session that assumed its keyboard say so, rather
+	// than silently swapping keys under someone who never asked for it.
 	PresetSet bool `yaml:"-"`
 	// Actions overrides individual bindings by action name.
 	Actions map[string][]string `yaml:"actions"`

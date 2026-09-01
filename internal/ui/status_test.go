@@ -718,11 +718,23 @@ func TestTheModeFieldIsClickable(t *testing.T) {
 func TestTheUnlockedWritesNoticeIsClickable(t *testing.T) {
 	s := status{writesEnabled: true}
 
-	_, zones := s.renderWidth(120)
+	line, zones := s.renderWidth(120)
+	plain := []rune(visibleText(line))
+
+	var found bool
 	for _, z := range zones {
-		if z.target == zoneStatusWrites {
-			return
+		if z.target != zoneStatusWrites {
+			continue
+		}
+		found = true
+		if z.from < 0 || z.to > len(plain) || z.from >= z.to {
+			t.Fatalf("the writes zone %+v is outside %q", z, string(plain))
+		}
+		if covered := string(plain[z.from:z.to]); !strings.Contains(covered, "writes on") {
+			t.Errorf("the writes zone covers %q", covered)
 		}
 	}
-	t.Error("the unlocked-writes notice publishes no zone")
+	if !found {
+		t.Error("the unlocked-writes notice publishes no zone")
+	}
 }

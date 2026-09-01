@@ -41,19 +41,43 @@ const (
 // It is rebuilt every frame rather than updated, for the reason the region
 // headers are: the only way it can be wrong is if a renderer is, and there is
 // no update to forget.
+//
+// Nothing here takes a lock, which is safe only because tview never draws
+// off the goroutine running Application.Run — and that is a narrower
+// guarantee than it sounds: tview's own poll goroutine draws directly,
+// bypassing the event loop, if SetScreen is called again on an already-
+// running Application. dv never takes that path. daemon/serve.go calls
+// SetScreen exactly once, before the session's Run starts; a re-attach
+// reuses that same screen through Screen.Attach and Screen.Detach rather
+// than handing tview a new one. A future change that replaces the screen on
+// re-attach — an obvious thing to reach for — would put a draw on a second
+// goroutine and make every read and write here a race, silently rather than
+// loudly, since a race like this one shows up as an occasional wrong click
+// rather than a crash.
 type hitmap struct {
 	rows map[int][]zone
 }
 
+// set adds a region's zones to a row, rather than replacing whatever another
+// region already recorded there this frame.
+//
+// buildLayout can put two regions' headers on the same screen row — the
+// sidebar's tab strip and the editor's own header both land on the body's
+// first row when the sidebar is open — and each records independently of
+// the other. Replacing wholesale meant only the last of the two to draw
+// published anything at all; appending keeps both, in the order they were
+// recorded, which is what at's first-match scan relies on. This is safe
+// only because clear wipes every row once per frame (captureScreen's
+// SetBeforeDrawFunc) before any region records again — appending within
+// that single frame cannot accumulate a stale zone from the one before.
 func (h *hitmap) set(row int, zones []zone) {
+	if len(zones) == 0 {
+		return
+	}
 	if h.rows == nil {
 		h.rows = make(map[int][]zone)
 	}
-	if len(zones) == 0 {
-		delete(h.rows, row)
-		return
-	}
-	h.rows[row] = zones
+	h.rows[row] = append(h.rows[row], zones...)
 }
 
 func (h *hitmap) clear() { h.rows = nil }

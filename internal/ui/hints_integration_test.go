@@ -86,3 +86,40 @@ func TestARegionsHintReplacesThePreviousRegionsRatherThanJoiningIt(t *testing.T)
 		t.Error("the bar still carries a region's hint after the keyboard left it")
 	}
 }
+
+// cycleTab moves the keyboard between the tree and the tables tab — and
+// between the results tab and its siblings — without going through
+// cycleFocus, so it needs its own call to refreshHints. Without it, cycling
+// to the tables tab leaves the bar naming the tree's commands, while
+// focusedContext already reports ctxTables.
+func TestCyclingToTheTablesTabOffersItsOwnCommandsNotTheTrees(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
+
+	h.do(keymap.ActionNextPane) // editor -> grid
+	h.do(keymap.ActionNextPane) // grid -> tree: ctxTree's first visit
+	h.waitFor("the tree to offer its commands", func(a *App) bool {
+		line, _ := a.status.renderWidth(200)
+		return strings.Contains(line, a.keyLabel(keymap.ActionGoToTable))
+	})
+
+	h.do(keymap.ActionCycleTab) // tree -> tables
+
+	h.waitFor("the tables tab to become current", func(a *App) bool {
+		return a.schemaTabs.current() == tabTables
+	})
+
+	if !h.inspect(func(a *App) bool {
+		ctx, ok := a.focusedContext()
+		if !ok || ctx != ctxTables {
+			return false
+		}
+		// "go to table" is offered in ctxTree and not in ctxTables — the
+		// tree-specific clause that must be gone once the bar describes
+		// ctxTables instead.
+		line, _ := a.status.renderWidth(200)
+		return !strings.Contains(line, a.keyLabel(keymap.ActionGoToTable))
+	}) {
+		t.Error("the bar still carries the tree's \"go to table\" hint after cycling to the tables tab")
+	}
+}

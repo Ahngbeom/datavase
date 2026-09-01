@@ -302,6 +302,19 @@ func (h *harness) click(x, y int) {
 	h.awaitMouseAction(tview.MouseLeftClick, before+1)
 }
 
+// rightClick presses and releases the secondary button at a screen position,
+// the same shape as click. tview maps tcell.ButtonSecondary to
+// MouseRightClick (application.go's button table), which is the action a
+// context menu opens on.
+func (h *harness) rightClick(x, y int) {
+	h.t.Helper()
+
+	before := h.mouseActionCount(tview.MouseRightClick)
+	h.screen.InjectMouse(x, y, tcell.ButtonSecondary, tcell.ModNone)
+	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	h.awaitMouseAction(tview.MouseRightClick, before+1)
+}
+
 // doubleClick presses twice inside tview's own double-click interval.
 //
 // The interval is tview's and not configurable, so this does not sleep
@@ -416,6 +429,20 @@ func (h *harness) treeNodePosition(offset int) (int, int) {
 	h.inspect(func(a *App) bool {
 		rx, ry, _, _ := a.tree.GetInnerRect()
 		x, y = rx+2, ry+offset
+		return true
+	})
+	return x, y
+}
+
+// tableItemPosition is a screen position on the tables tab's Nth item.
+func (h *harness) tableItemPosition(index int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		rx, ry, _, _ := a.tableList.GetInnerRect()
+		x, y = rx+2, ry+index
 		return true
 	})
 	return x, y

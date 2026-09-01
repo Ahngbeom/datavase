@@ -758,6 +758,7 @@ const (
 	pageDataSource = "datasource"
 	pageKill       = "kill"
 	pageIntro      = "intro"
+	pageMenu       = "menu"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than

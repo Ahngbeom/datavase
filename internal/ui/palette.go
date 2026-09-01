@@ -100,6 +100,11 @@ type command struct {
 	// in at all, since ⌘B and Ctrl+B were the only two ways to ask for it.
 	covers keymap.Action
 
+	// contexts names the places this command is offered on right-click.
+	// Empty means the palette only: a command that makes sense everywhere
+	// makes a menu longer without making it more useful.
+	contexts []menuContext
+
 	run func(a *App)
 }
 
@@ -154,36 +159,42 @@ func paletteCommands() []command {
 			name:     cmdDisableWrites,
 			category: catWrites,
 			summary:  "refuse them again",
+			contexts: []menuContext{ctxStatusBar},
 			run:      (*App).disableWrites,
 		},
 		{
 			name:     "begin",
 			category: catWrites,
 			summary:  "open a transaction — work stays undoable until you commit",
+			contexts: []menuContext{ctxStatusBar},
 			run:      func(a *App) { a.transactionControl("BEGIN") },
 		},
 		{
 			name:     "commit",
 			category: catWrites,
 			summary:  "keep the open transaction's work",
+			contexts: []menuContext{ctxStatusBar},
 			run:      func(a *App) { a.transactionControl("COMMIT") },
 		},
 		{
 			name:     "rollback",
 			category: catWrites,
 			summary:  "discard the open transaction's work",
+			contexts: []menuContext{ctxStatusBar},
 			run:      func(a *App) { a.transactionControl("ROLLBACK") },
 		},
 		{
 			name:     "export csv",
 			category: catResults,
 			summary:  "write the current result to a CSV file",
+			contexts: []menuContext{ctxResult},
 			run:      func(a *App) { a.exportResult(formatCSV) },
 		},
 		{
 			name:     "export json",
 			category: catResults,
 			summary:  "write the current result to a JSON file",
+			contexts: []menuContext{ctxResult},
 			run:      func(a *App) { a.exportResult(formatJSON) },
 		},
 		{
@@ -191,6 +202,7 @@ func paletteCommands() []command {
 			category: catRunning,
 			summary:  "stop the running statement",
 			covers:   keymap.ActionCancel,
+			contexts: []menuContext{ctxStatusBar},
 			run:      (*App).cancelRunning,
 		},
 		{
@@ -198,6 +210,7 @@ func paletteCommands() []command {
 			category: catFinding,
 			summary:  "search the editor, or the results when they have focus",
 			covers:   keymap.ActionFind,
+			contexts: []menuContext{ctxEditor, ctxResult},
 			run:      func(a *App) { a.showTextSearch(false) },
 		},
 		{
@@ -219,6 +232,7 @@ func paletteCommands() []command {
 			category: catFinding,
 			summary:  "search previously run statements",
 			covers:   keymap.ActionSearchHistory,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).showHistory,
 		},
 		{
@@ -226,6 +240,7 @@ func paletteCommands() []command {
 			category: catRunning,
 			summary:  "show how the server would run the statement under the cursor",
 			covers:   keymap.ActionExplain,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).explainStatement,
 		},
 		{
@@ -233,6 +248,7 @@ func paletteCommands() []command {
 			category: catRunning,
 			summary:  "run the statement under the cursor and show what it actually did",
 			covers:   keymap.ActionAnalyze,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).analyzeStatement,
 		},
 		{
@@ -240,6 +256,7 @@ func paletteCommands() []command {
 			category: catServer,
 			summary:  "list what else is running on the server",
 			covers:   keymap.ActionSessions,
+			contexts: []menuContext{ctxStatusBar},
 			run:      (*App).showSessions,
 		},
 		{
@@ -247,6 +264,7 @@ func paletteCommands() []command {
 			category: catServer,
 			summary:  "show which connections are waiting on which",
 			covers:   keymap.ActionLocks,
+			contexts: []menuContext{ctxStatusBar},
 			run:      (*App).showLocks,
 		},
 		{
@@ -254,6 +272,7 @@ func paletteCommands() []command {
 			category: catServer,
 			summary:  "stop the statement running on another connection",
 			covers:   keymap.ActionKillSession,
+			contexts: []menuContext{ctxStatusBar},
 			run:      func(a *App) { a.showKillSession(procs.StopStatement) },
 		},
 		{
@@ -268,12 +287,14 @@ func paletteCommands() []command {
 			category: catResults,
 			summary:  "order the results by the selected column, and back again",
 			covers:   keymap.ActionSortColumn,
+			contexts: []menuContext{ctxResult},
 			run:      (*App).sortColumn,
 		},
 		{
 			name:     "copy row",
 			category: catResults,
 			summary:  "put the selected result row on the clipboard, tab separated",
+			contexts: []menuContext{ctxResult},
 			run:      (*App).copyRow,
 		},
 		{
@@ -281,6 +302,7 @@ func paletteCommands() []command {
 			category: catResults,
 			summary:  "show the selected table or result row in full",
 			covers:   keymap.ActionInspect,
+			contexts: []menuContext{ctxResult, ctxTree, ctxTables},
 			run:      (*App).inspect,
 		},
 		{
@@ -288,6 +310,7 @@ func paletteCommands() []command {
 			category: catFinding,
 			summary:  "find a table anywhere on the server by name",
 			covers:   keymap.ActionGoToTable,
+			contexts: []menuContext{ctxEditor, ctxTree},
 			run:      (*App).showGoToTable,
 		},
 		{
@@ -302,18 +325,21 @@ func paletteCommands() []command {
 			category: catFinding,
 			summary:  "complete the word at the cursor",
 			covers:   keymap.ActionComplete,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).showCompletion,
 		},
 		{
 			name:     "attach directory",
 			category: catFiles,
 			summary:  "point this session at a worktree of SQL files",
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).showAttachDirectory,
 		},
 		{
 			name:     "detach directory",
 			category: catFiles,
 			summary:  "forget the attached worktree",
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).detachWorktree,
 		},
 		{
@@ -321,6 +347,7 @@ func paletteCommands() []command {
 			category: catFiles,
 			summary:  "open a SQL file from the attached worktree",
 			covers:   keymap.ActionFindFile,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).showFindFile,
 		},
 		{
@@ -328,6 +355,7 @@ func paletteCommands() []command {
 			category: catFiles,
 			summary:  "write the editor back to the file it came from",
 			covers:   keymap.ActionSaveFile,
+			contexts: []menuContext{ctxEditor},
 			run:      (*App).saveFile,
 		},
 		{
@@ -335,6 +363,7 @@ func paletteCommands() []command {
 			category: catSchema,
 			summary:  "move this session to another configured datasource",
 			covers:   keymap.ActionSwitchDataSource,
+			contexts: []menuContext{ctxTopBar},
 			run:      (*App).showDataSources,
 		},
 		{
@@ -342,6 +371,7 @@ func paletteCommands() []command {
 			category: catSchema,
 			summary:  "choose the schema unqualified names resolve against",
 			covers:   keymap.ActionUseSchema,
+			contexts: []menuContext{ctxTopBar},
 			run:      (*App).showUseSchema,
 		},
 		{
@@ -349,7 +379,32 @@ func paletteCommands() []command {
 			category: catSchema,
 			summary:  "reload the schema tree and completion cache",
 			covers:   keymap.ActionRefreshSchema,
+			contexts: []menuContext{ctxTree, ctxTables},
 			run:      (*App).loadSchemas,
+		},
+		{
+			name:     "copy cell",
+			category: catResults,
+			summary:  "copy the selected cell",
+			contexts: []menuContext{ctxResult},
+			run:      func(a *App) { a.copyCell() },
+		},
+		{
+			name:     "clear sort",
+			category: catResults,
+			summary:  "back to the order the rows arrived in",
+			contexts: []menuContext{ctxResult},
+			run: func(a *App) {
+				a.content.unsort()
+				a.notice(sortNotice(sortState{}))
+			},
+		},
+		{
+			name:     "use this schema",
+			category: catSchema,
+			summary:  "point unqualified statements at the selected schema",
+			contexts: []menuContext{ctxTree},
+			run:      (*App).useSelectedSchema,
 		},
 
 		// Editing, for the keyboards where these arrive as ⌘ chords and never
@@ -360,6 +415,7 @@ func paletteCommands() []command {
 			category: catEditing,
 			summary:  "select the whole editor buffer",
 			covers:   keymap.ActionSelectAll,
+			contexts: []menuContext{ctxEditor},
 			run:      func(a *App) { a.editorAction(keymap.ActionSelectAll) },
 		},
 		{
@@ -367,6 +423,7 @@ func paletteCommands() []command {
 			category: catEditing,
 			summary:  "comment or uncomment the selected lines",
 			covers:   keymap.ActionToggleComment,
+			contexts: []menuContext{ctxEditor},
 			run:      func(a *App) { a.editorAction(keymap.ActionToggleComment) },
 		},
 		{
@@ -374,6 +431,7 @@ func paletteCommands() []command {
 			category: catEditing,
 			summary:  "duplicate the current line",
 			covers:   keymap.ActionDuplicateLine,
+			contexts: []menuContext{ctxEditor},
 			run:      func(a *App) { a.editorAction(keymap.ActionDuplicateLine) },
 		},
 		{
@@ -381,6 +439,7 @@ func paletteCommands() []command {
 			category: catEditing,
 			summary:  "delete the current line",
 			covers:   keymap.ActionDeleteLine,
+			contexts: []menuContext{ctxEditor},
 			run:      func(a *App) { a.editorAction(keymap.ActionDeleteLine) },
 		},
 
@@ -395,6 +454,7 @@ func paletteCommands() []command {
 			category: catOther,
 			summary:  "show the key reference",
 			covers:   keymap.ActionHelp,
+			contexts: []menuContext{ctxTopBar},
 			run:      (*App).showHelp,
 		},
 		{

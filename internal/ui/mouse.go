@@ -27,11 +27,27 @@ func (a *App) bindMouse() {
 			return ev, action
 		}
 
+		// tview keeps one "last click" timestamp shared across every button
+		// (Application.fireMouseActions), not one per button. So the right
+		// click that just opened the menu sets it, and a left click on the
+		// menu within DoubleClickInterval afterwards is read as completing a
+		// double click rather than a click of its own — and List's own
+		// MouseHandler only acts on a click, not a double click, so the row
+		// would silently not respond. That is not a slow-user edge case: it
+		// is the exact gesture this feature is for, read the row and click
+		// it, so the first click on a freshly opened menu must not be the
+		// one that gets eaten.
+		if action == tview.MouseLeftDoubleClick && a.menuOpen() {
+			action = tview.MouseLeftClick
+		}
+
 		switch action {
 		case tview.MouseLeftClick:
 			return a.mouseLeftClick(ev, action)
 		case tview.MouseLeftDoubleClick:
 			return a.mouseLeftDoubleClick(ev, action)
+		case tview.MouseRightClick:
+			return a.mouseRightClick(ev, action)
 		}
 		return ev, action
 	})
@@ -45,6 +61,16 @@ func (a *App) bindMouse() {
 func (a *App) dialogOpen() bool {
 	name, _ := a.pages.GetFrontPage()
 	return name != pageMain
+}
+
+// menuOpen reports whether the right-click menu is the front page.
+//
+// Separate from dialogOpen because the double-click rewrite above is only
+// safe where a right click is what put the front page there in the first
+// place — the menu is the only surface that opens on one today.
+func (a *App) menuOpen() bool {
+	name, _ := a.pages.GetFrontPage()
+	return name == pageMenu
 }
 
 // zoneAt is the dialog guard and the hitmap lookup together.
@@ -114,6 +140,19 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	return nil, action
 }
 
+// mouseRightClick opens the palette's own commands, filtered to where the
+// click landed — the answer to "what can I do here" that the left-click
+// zones and the command palette do not give on their own.
+func (a *App) mouseRightClick(ev *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+	if a.dialogOpen() {
+		return ev, action
+	}
+
+	x, y := ev.Position()
+	a.showMenu(a.contextAt(x, y), x, y)
+	return nil, action
+}
+
 // clickGridHeader sorts by the column a click landed on, reaching the same
 // sortColumn the key does: it reads the selection, so the selection has to
 // move first, or a mouse sort and a key sort could land on different orders.
@@ -139,6 +178,64 @@ func (a *App) clickGridHeader(ev *tcell.EventMouse) bool {
 	a.grid.Select(selRow, col)
 	a.sortColumn()
 	return true
+}
+
+// treeNodeAt finds the node drawn at a screen row, resolving a right click's
+// position the same way TreeView's own left-click handling does
+// (MouseHandler in treeview.go: offset plus the row inside the inner rect,
+// indexing into the nodes visible in expanded order).
+//
+// TreeView keeps that visible-node list to itself, built by walking the root
+// and recursing into expanded children (its unexported process()); Walk is
+// the exported way to rebuild the same order from outside the package, which
+// a right click needs — it resolves the node before running a command,
+// rather than while tview is already handling the click itself.
+func (a *App) treeNodeAt(y int) *tview.TreeNode {
+	root := a.tree.GetRoot()
+	if root == nil {
+		return nil
+	}
+
+	_, rectY, _, _ := a.tree.GetInnerRect()
+	target := a.tree.GetScrollOffset() + (y - rectY)
+	if target < 0 {
+		return nil
+	}
+
+	var found *tview.TreeNode
+	index := -1
+	root.Walk(func(node, parent *tview.TreeNode) bool {
+		index++
+		if index == target {
+			found = node
+		}
+		return node.IsExpanded()
+	})
+	return found
+}
+
+// tableItemAt finds the tables-tab item index drawn at a screen row,
+// resolving a right click's position the same way List's own MouseHandler
+// does (indexAtPoint in list.go: the row inside the inner rect, offset by
+// how much has scrolled).
+//
+// indexAtPoint halves that row count when the list shows secondary text —
+// a.tableList never does (buildTablesTab: ShowSecondaryText(false), so that
+// each table draws on exactly one row), so this only reconstructs the half
+// of indexAtPoint that applies to it, using GetOffset in place of the
+// private field indexAtPoint reads directly.
+func (a *App) tableItemAt(y int) int {
+	_, rectY, _, height := a.tableList.GetInnerRect()
+	if y < rectY || y >= rectY+height {
+		return -1
+	}
+
+	offset, _ := a.tableList.GetOffset()
+	index := y - rectY + offset
+	if index < 0 || index >= a.tableList.GetItemCount() {
+		return -1
+	}
+	return index
 }
 
 // mouseAction performs a zone's click and reports whether it consumed it.

@@ -206,14 +206,33 @@ func TestFromConfigRejectsBadInput(t *testing.T) {
 	}
 }
 
-// The default is the modal keyboard. Everything that makes that survivable —
-// the mode in the status bar, the placeholder, the opening notice and the way
-// out in the help — is in place before this is true.
-func TestDefaultPresetIsVim(t *testing.T) {
-	if got := DefaultPreset; got != PresetVim {
-		t.Errorf("DefaultPreset = %q, want %q", got, PresetVim)
+// Default() is what `dv keys` prints for a session with no configuration; if
+// it drifted from DefaultPreset, that reference would show a keyboard the
+// session does not actually run.
+func TestTheDefaultMapIsTheDefaultPreset(t *testing.T) {
+	m := Default()
+
+	if got := m.Preset(); got != DefaultPreset {
+		t.Errorf("Default().Preset() = %q, want %q", got, DefaultPreset)
 	}
-	if !Default().Modal() {
-		t.Error("the default key map is not modal")
+	if got, want := m.Modal(), DefaultPreset == PresetVim; got != want {
+		t.Errorf("Default().Modal() = %v, want %v", got, want)
+	}
+}
+
+// Someone who has written no configuration arrives from a GUI SQL client and
+// expects typing to type. A modal editor as the unasked-for default is the
+// first thing that sends them back to DataGrip.
+func TestSayingNothingGivesAnEditorThatTypes(t *testing.T) {
+	m, err := FromConfig("", nil)
+	if err != nil {
+		t.Fatalf("FromConfig(\"\", nil) error = %v, want nil", err)
+	}
+
+	if got := m.Preset(); got != PresetDataGrip {
+		t.Errorf("Preset() = %q, want %q", got, PresetDataGrip)
+	}
+	if m.Modal() {
+		t.Error("the default editor is modal; typing does nothing until i is pressed")
 	}
 }

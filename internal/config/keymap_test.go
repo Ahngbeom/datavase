@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // The keymap section used to be a bare action-to-keys mapping. Anyone already
@@ -110,6 +112,39 @@ datasources:
     host: 127.0.0.1
     user: root
 `
+
+// Changing what an absent preset means changes the keyboard under anyone who
+// hand-wrote a config without one. The interface can only say so if the
+// parser keeps "absent" and "written out as empty" apart.
+func TestAnAbsentPresetIsDistinguishableFromAnEmptyOne(t *testing.T) {
+	var absent Keymap
+	if err := yaml.Unmarshal([]byte("actions:\n  run: [\"f5\"]\n"), &absent); err != nil {
+		t.Fatalf("unmarshalling a keymap with no preset: %v", err)
+	}
+	if absent.PresetSet {
+		t.Error("a keymap section with no preset reports that one was set")
+	}
+
+	var stated Keymap
+	if err := yaml.Unmarshal([]byte("preset: \"\"\n"), &stated); err != nil {
+		t.Fatalf("unmarshalling an empty preset: %v", err)
+	}
+	if !stated.PresetSet {
+		t.Error("a preset written out as empty reports that none was set")
+	}
+}
+
+// The bare action-to-keys form predates presets, so it can never have named
+// one — and someone using it is exactly who a changed default would surprise.
+func TestTheOlderKeymapFormNamesNoPreset(t *testing.T) {
+	var k Keymap
+	if err := yaml.Unmarshal([]byte("run: [\"ctrl+enter\", \"f5\"]\n"), &k); err != nil {
+		t.Fatalf("unmarshalling the older form: %v", err)
+	}
+	if k.PresetSet {
+		t.Error("the older form reports that it named a preset")
+	}
+}
 
 func assertActions(t *testing.T, got, want map[string][]string) {
 	t.Helper()

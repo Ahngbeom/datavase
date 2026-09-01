@@ -186,6 +186,15 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 	if room := remaining - used - len(gap); detail != "" && room >= 4 {
 		line += gap + tag(colourMuted, result.Truncate(detail, room))
 	}
+
+	// The region-name zone spans the whole header and is appended last, after
+	// every tab zone: hitmap.at returns the first zone that covers a column,
+	// so a tab keeps answering for itself and every other column — the
+	// marker, the gap, the detail, and the whole of a header with no tabs at
+	// all — falls through to this one. Clicking anywhere on a header that is
+	// not a tab still has to focus the region; that is what the header is.
+	zones = append(zones, zone{from: 0, to: width, target: zoneRegionName, index: -1})
+
 	return line, zones
 }
 

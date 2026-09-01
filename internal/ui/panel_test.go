@@ -164,3 +164,56 @@ func TestASingleUnnamedTabPublishesNoTabZone(t *testing.T) {
 		}
 	}
 }
+
+// Every header has to answer a click somewhere, even the editor's — one
+// unnamed tab, no name of its own to click on the strip — which published no
+// zone at all before this and so was entirely inert.
+func TestRegionHeaderPublishesAZoneForTheWholeHeader(t *testing.T) {
+	const width = 60
+
+	cases := []struct {
+		name  string
+		names []string
+	}{
+		{"two named tabs", []string{"results", "ddl"}},
+		{"a single unnamed tab", []string{""}},
+		{"no tabs at all", nil},
+	}
+
+	for _, c := range cases {
+		_, zones := regionHeader(c.names, 0, false, "", width)
+
+		var found bool
+		for _, z := range zones {
+			if z.target == zoneRegionName && z.from == 0 && z.to == width {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: no region-name zone spanning the header; zones: %+v", c.name, zones)
+		}
+	}
+}
+
+// hitmap.at returns the first zone that covers a column, so the region-name
+// zone has to come after every tab zone or a tab would never be reachable —
+// every click on it would resolve to "focus the region" instead.
+func TestRegionHeaderTriesTabZonesBeforeTheRegionName(t *testing.T) {
+	_, zones := regionHeader([]string{"results", "ddl"}, 0, true, "", 60)
+
+	var sawTab, sawRegionAfterTab bool
+	for _, z := range zones {
+		if z.target == zoneTab {
+			sawTab = true
+		}
+		if z.target == zoneRegionName {
+			if !sawTab {
+				t.Fatalf("region-name zone appeared before any tab zone: %+v", zones)
+			}
+			sawRegionAfterTab = true
+		}
+	}
+	if !sawRegionAfterTab {
+		t.Fatalf("no region-name zone published: %+v", zones)
+	}
+}

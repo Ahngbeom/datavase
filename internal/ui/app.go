@@ -115,6 +115,12 @@ type App struct {
 	// same reason a region's own header is rebuilt every frame rather than
 	// updated: the only way it can be wrong is if a renderer is.
 	hits hitmap
+	// paneRows maps a header's screen row to the tabbed region that drew it.
+	// The hitmap alone answers what a zone means and which tab; it does not
+	// say which of the three regions the row belonged to, and a tab click has
+	// to know that to find the pane to switch. Rebuilt alongside hits, for
+	// the same reason.
+	paneRows map[int]*tabbed
 
 	// selectionAnchor and selectionCaret track which end of a selection the
 	// user is dragging. tview normalises both ends, so the direction cannot
@@ -332,6 +338,7 @@ func (a *App) captureScreen() {
 		// region that is no longer on screen — the sidebar, toggled off —
 		// must not still answer for the rows it used to hold.
 		a.hits.clear()
+		a.paneRows = nil
 		return false
 	})
 }
@@ -518,19 +525,19 @@ func (a *App) buildWidgets() {
 	// saying which file it holds.
 	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
-	a.editorRegion.record = a.hits.set
+	a.editorRegion.record = a.recorderFor(a.editorRegion)
 
 	a.schemaTabs = newTabbed().watch(a.schemaDetail)
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
-	a.schemaTabs.record = a.hits.set
+	a.schemaTabs.record = a.recorderFor(a.schemaTabs)
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 	a.resultTabs.add(tabPlan, a.buildPlanTab())
 	a.resultTabs.add(tabSessions, a.buildSessionsTab())
-	a.resultTabs.record = a.hits.set
+	a.resultTabs.record = a.recorderFor(a.resultTabs)
 
 	a.topBar = newTopBar(a.currentTopBar)
 	a.topBar.record = a.hits.set

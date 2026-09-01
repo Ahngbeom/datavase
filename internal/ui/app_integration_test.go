@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,9 +37,14 @@ type harness struct {
 
 	// keysHandled counts the keys the interface has finished processing.
 	keysHandled int64
-	// mouseHandled counts the mouse events the interface has finished
-	// processing.
-	mouseHandled int64
+
+	// mouseActions counts, by kind, the mouse actions the interface has
+	// finished processing. tview turns one press-and-release into up to
+	// three of them — down, up, click, a double click adding a fourth — so a
+	// count that did not distinguish kinds could be satisfied by the down
+	// alone, long before the click a test is actually waiting for.
+	mouseMu      sync.Mutex
+	mouseActions map[tview.MouseAction]int64
 }
 
 // seedCache replaces the completion cache with a known schema.
@@ -182,7 +188,10 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 	})
 	app.SetScreen(screen)
 
-	h := &harness{app: app, screen: screen, cache: cache, history: hist, t: t}
+	h := &harness{
+		app: app, screen: screen, cache: cache, history: hist, t: t,
+		mouseActions: make(map[tview.MouseAction]int64),
+	}
 	h.countKeys()
 	h.countMouse()
 
@@ -247,6 +256,11 @@ func (h *harness) awaitKeys(want int64) {
 // keys, and for the same reason: an injected mouse event goes onto the
 // screen's queue while QueueUpdateDraw uses the application's.
 //
+// Counting is by kind of action rather than by call: a click arrives at the
+// capture as a down, an up and a click in that order (a double click adds a
+// fourth), so a caller that only wants to know a click has landed must be
+// able to wait for that one and not for whichever fires first.
+//
 // It wraps the interface's own capture from the outside; nothing here exists
 // in the application because of a test.
 func (h *harness) countMouse() {
@@ -257,22 +271,54 @@ func (h *harness) countMouse() {
 		if inner != nil {
 			out, outAction = inner(ev, action)
 		}
-		atomic.AddInt64(&h.mouseHandled, 1)
+		h.mouseMu.Lock()
+		h.mouseActions[action]++
+		h.mouseMu.Unlock()
 		return out, outAction
 	})
+}
+
+// mouseActionCount reads how many times the interface has finished handling
+// one kind of mouse action.
+func (h *harness) mouseActionCount(action tview.MouseAction) int64 {
+	h.mouseMu.Lock()
+	defer h.mouseMu.Unlock()
+	return h.mouseActions[action]
 }
 
 // click presses and releases the left button at a screen position.
 //
 // tview reports a click on the release, so both halves are needed: injecting
 // only the press leaves the application waiting for the rest of a gesture.
+// The wait is for the click action itself, not merely for some action to
+// have gone through the capture — the down that precedes it would satisfy
+// that too, before the click had been decided.
 func (h *harness) click(x, y int) {
 	h.t.Helper()
 
-	before := atomic.LoadInt64(&h.mouseHandled)
+	before := h.mouseActionCount(tview.MouseLeftClick)
 	h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
 	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
-	h.awaitMouse(before + 1)
+	h.awaitMouseAction(tview.MouseLeftClick, before+1)
+}
+
+// doubleClick presses twice inside tview's own double-click interval.
+//
+// The interval is tview's and not configurable, so this does not sleep
+// between the two presses: the events are injected back to back, which is
+// inside any interval tview could be using. tview's release handler fires
+// either a click or a double click, never both, so the first press-release
+// pair's click does not satisfy the wait below — only the double click the
+// second pair produces does.
+func (h *harness) doubleClick(x, y int) {
+	h.t.Helper()
+
+	before := h.mouseActionCount(tview.MouseLeftDoubleClick)
+	for i := 0; i < 2; i++ {
+		h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
+		h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	}
+	h.awaitMouseAction(tview.MouseLeftDoubleClick, before+1)
 }
 
 // clickZone presses whatever the interface drew for a target, by name.
@@ -303,19 +349,92 @@ func (h *harness) clickZone(target zoneTarget, index int) {
 	h.click(x, y)
 }
 
-func (h *harness) awaitMouse(want int64) {
+// awaitMouseAction blocks until the interface has finished handling at least
+// want of a specific kind of mouse action.
+func (h *harness) awaitMouseAction(action tview.MouseAction, want int64) {
 	h.t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if atomic.LoadInt64(&h.mouseHandled) >= want {
+		if h.mouseActionCount(action) >= want {
 			h.settle()
 			return
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	h.t.Fatalf("the interface handled %d of %d injected mouse events",
-		atomic.LoadInt64(&h.mouseHandled), want)
+	h.t.Fatalf("the interface handled %d of %d %v actions",
+		h.mouseActionCount(action), want, action)
+}
+
+// gridHeaderPosition is a screen position inside a column's header cell.
+//
+// The grid lays its columns out by content width, so this asks tview where
+// the cell actually is rather than computing it.
+func (h *harness) gridHeaderPosition(column int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		rx, ry, width, _ := a.grid.GetInnerRect()
+		for col := rx; col < rx+width; col++ {
+			if r, c := a.grid.CellAt(col, ry); r == 0 && c == column {
+				x, y = col, ry
+				return true
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("column %d has no header cell on screen; screen:\n%s", column, h.text())
+	}
+	return x, y
+}
+
+// gridColumn reads a column's values in the order the grid is showing them.
+func (h *harness) gridColumn(column int) []string {
+	h.t.Helper()
+
+	var out []string
+	done := make(chan struct{})
+	h.app.app.QueueUpdateDraw(func() {
+		for row := 1; row < h.app.content.GetRowCount(); row++ {
+			out = append(out, h.app.content.GetCell(row, column).Text)
+		}
+		close(done)
+	})
+	<-done
+	return out
+}
+
+// treeNodePosition is a screen position on a visible tree row.
+func (h *harness) treeNodePosition(offset int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		rx, ry, _, _ := a.tree.GetInnerRect()
+		x, y = rx+2, ry+offset
+		return true
+	})
+	return x, y
+}
+
+// regionHeaderPosition is a screen position on a pane's own header row, at
+// its leftmost column — inside the region-name zone and, for a pane with
+// tabs, outside every one of them.
+func (h *harness) regionHeaderPosition(pane func(*App) *tabbed) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		p := pane(a)
+		x, y = p.headerCol, p.headerRow
+		return true
+	})
+	return x, y
 }
 
 // inject sends keys and waits for all of them to be handled.

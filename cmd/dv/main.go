@@ -186,13 +186,14 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	// the one it leaves, and a session closed twice or by nobody is how a
 	// tunnel outlives the thing it was carrying.
 	return ui.New(sess, cfg, ui.Deps{
-		Keys:      keys,
-		Cache:     cache,
-		History:   hist,
-		Worktree:  wt,
-		Recent:    recents,
-		IntroPath: introPath,
-		Connect:   connectTo,
+		Keys:          keys,
+		Cache:         cache,
+		History:       hist,
+		Worktree:      wt,
+		Recent:        recents,
+		IntroPath:     introPath,
+		Connect:       connectTo,
+		PresetAssumed: !cfg.Keymap.PresetSet,
 	}).Run()
 }
 
@@ -359,14 +360,15 @@ func buildSession(ctx context.Context, h proto.Hello, cfg *config.Config, srv *d
 	}
 
 	app := ui.New(sess, cfg, ui.Deps{
-		Keys:      keys,
-		Cache:     cache,
-		History:   hist,
-		Worktree:  wt,
-		Recent:    recents,
-		IntroPath: introPath,
-		Connect:   connectTo,
-		Detach:    srv.Detach,
+		Keys:          keys,
+		Cache:         cache,
+		History:       hist,
+		Worktree:      wt,
+		Recent:        recents,
+		IntroPath:     introPath,
+		Connect:       connectTo,
+		Detach:        srv.Detach,
+		PresetAssumed: !cfg.Keymap.PresetSet,
 	})
 
 	liveMu.Lock()

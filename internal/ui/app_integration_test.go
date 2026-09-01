@@ -94,7 +94,26 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker, false)
+}
+
+// newHarnessAssumingPreset is newHarness for the tests that are about a
+// session whose configuration never named a keyboard — the case the opening
+// line's assumed-keyboard clause exists for.
+func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
+	t.Helper()
+
+	ds, password := testmysql.DataSource(t)
+	ds.Env = env
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := db.Open(ctx, ds, password, "")
+	if err != nil {
+		t.Fatalf("db.Open() error = %v", err)
+	}
+	return harnessWith(t, &session.Session{Conn: conn}, ds, "", true)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -104,10 +123,10 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds, "")
+	return harnessWith(t, sess, ds, "", false)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string, presetAssumed bool) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -155,6 +174,7 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 
 	app := New(sess, cfg, Deps{
 		Keys: keys, Cache: cache, History: hist, Recent: recents, IntroPath: introMarker,
+		PresetAssumed: presetAssumed,
 	})
 	app.SetScreen(screen)
 
@@ -317,6 +337,19 @@ func (h *harness) do(action keymap.Action) {
 	// can always deliver: it needs no extended keyboard protocol.
 	b := bindings[len(bindings)-1]
 	h.inject(tcell.NewEventKey(b.Key, b.Rune, b.Mods))
+}
+
+// runCommand runs a named palette command the way a user does: open the
+// palette, type the name, take what Enter picks. Every existing palette test
+// either reads the list or drives the App method directly; this exists for a
+// test that only cares what running a command does, not how the palette
+// itself behaves.
+func (h *harness) runCommand(name string) {
+	h.t.Helper()
+
+	h.do(keymap.ActionCommandPalette)
+	h.typeInto(name)
+	h.press(tcell.KeyEnter)
 }
 
 // editorText reads the editor buffer from the UI goroutine.

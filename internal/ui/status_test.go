@@ -557,6 +557,42 @@ func TestTheOpeningLinePutsTheModalHintAheadOfTheServerVersion(t *testing.T) {
 	}
 }
 
+// The default keyboard moved. Someone whose config never named one would
+// otherwise find out by pressing a key that used to do something else.
+func TestASessionOnAnAssumedKeyboardSaysWhichOne(t *testing.T) {
+	clauses := openingClauses(opening{
+		serverVersion: "11.4.2-MariaDB",
+		helpKey:       "F1",
+		sidebarKey:    "Ctrl+B",
+		presetAssumed: true,
+		presetName:    "datagrip",
+	})
+
+	joined := strings.Join(clauses, " | ")
+	if !strings.Contains(joined, "datagrip") {
+		t.Errorf("the opening does not name the keyboard it assumed:\n%s", joined)
+	}
+	if !strings.Contains(joined, "keymap") {
+		t.Errorf("the opening does not say how to change it:\n%s", joined)
+	}
+}
+
+// Someone who stated a preset chose it, and does not need telling what they
+// chose on every session.
+func TestASessionOnAStatedKeyboardSaysNothingAboutIt(t *testing.T) {
+	clauses := openingClauses(opening{
+		serverVersion: "11.4.2-MariaDB",
+		helpKey:       "F1",
+		sidebarKey:    "Ctrl+B",
+		presetAssumed: false,
+		presetName:    "vim",
+	})
+
+	if joined := strings.Join(clauses, " | "); strings.Contains(joined, "keymap") {
+		t.Errorf("the opening lectures someone who chose their keyboard:\n%s", joined)
+	}
+}
+
 // visibleText is what the terminal shows, colour tags removed.
 func visibleText(s string) string {
 	var (

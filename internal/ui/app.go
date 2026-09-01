@@ -85,6 +85,12 @@ type App struct {
 	// configuration.
 	keys *keymap.Map
 
+	// presetAssumed says the configuration named no keyboard, so a.keys is
+	// the default rather than a choice. The opening line reads this once;
+	// nothing else needs to know a session's keyboard was assumed rather
+	// than stated.
+	presetAssumed bool
+
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
 	// around when it is toggled. sidebarRule is the hairline beside it.
 	//
@@ -247,6 +253,10 @@ type Deps struct {
 	// Empty means never show it, which is what a session with no usable state
 	// directory gets — and what every test that is not about the card gets.
 	IntroPath string
+	// PresetAssumed says the configuration named no keyboard preset, so Keys
+	// is the default rather than a choice. False — "they chose it" — is the
+	// safe default for tests and for a config that did name one.
+	PresetAssumed bool
 }
 
 // New builds the interface for an open session.
@@ -271,6 +281,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		detachFn:        deps.Detach,
 		cfg:             cfg,
 		keys:            keys,
+		presetAssumed:   deps.PresetAssumed,
 		cache:           deps.Cache,
 		history:         deps.History,
 		wt:              deps.Worktree,
@@ -327,6 +338,8 @@ func (a *App) openingClauses(serverVersion string) []string {
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
 		modal:         a.keys.Modal(),
 		advice:        keymap.TerminalAdviceShort(os.Getenv("TERM"), a.keys),
+		presetAssumed: a.presetAssumed,
+		presetName:    string(a.keys.Preset()),
 	})
 }
 
@@ -339,6 +352,12 @@ type opening struct {
 	// advice is what this terminal cannot deliver, or empty when it can
 	// deliver everything.
 	advice string
+	// presetAssumed says the configuration named no keyboard, so this
+	// session is running the default rather than a choice. The default
+	// moved once; a session that assumed it has to say so, or the change
+	// arrives as a key that stopped working.
+	presetAssumed bool
+	presetName    string
 }
 
 // openingClauses is the greeting, most actionable first.
@@ -351,9 +370,12 @@ type opening struct {
 // The order decides what survives. What the terminal cannot deliver comes
 // first because it is the only place anyone is told that the key this
 // interface keeps naming will do nothing when they press it. The server
-// version brings up the rear: it is a greeting rather than an instruction, and
-// knowing which MariaDB answered has never stood between anyone and their
-// first query.
+// version brings up the rear of the greeting proper: it is a greeting rather
+// than an instruction, and knowing which MariaDB answered has never stood
+// between anyone and their first query. The assumed-keyboard clause sits
+// behind even that — a session on datagrip needs no "i to type" rescue the
+// way a session on vim does, so it is the first thing shed on a narrow
+// terminal.
 func openingClauses(o opening) []string {
 	var out []string
 
@@ -376,6 +398,10 @@ func openingClauses(o opening) []string {
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)
+	}
+	if o.presetAssumed {
+		out = append(out, fmt.Sprintf("keyboard: %s — %q in the palette for another",
+			o.presetName, "keymap"))
 	}
 	return out
 }

@@ -206,11 +206,12 @@ palette brings it back.
 
 ### Keys
 
-**The editor is modal by default** — it starts in vim's normal mode, so press
-`i` before you type. The status bar always says which mode you are in, and `F1`
-opens with the five keys worth knowing first, the way out of the modal editor
-among them. To use an ordinary typing editor instead, see
-[Changing the keys](#changing-the-keys).
+**Typing types** — the default keyboard is an ordinary one, no mode to leave
+before the first keystroke does anything. `dv init` asks which keyboard you
+want, and `keymap vim` in the palette (or `preset: vim` in the config) gets
+you the modal editor instead, its status bar always saying which mode you are
+in and `F1` opening with the five keys worth knowing first, the way out among
+them. See [Changing the keys](#changing-the-keys).
 
 `:` opens a command line — on the modal keyboard, since that is where the key
 is free. `:w` saves, `:q` quits — asking first if there is unsaved work — `:q!`
@@ -316,8 +317,8 @@ Two things are outside that promise, deliberately:
 - **Undo and redo.** They belong to the text widget rather than to datavase's
   key map, so there is nothing here to offer.
 
-And on the **vim** preset — the default — editing needs no modifiers in the
-first place: `dd`, `yy`, `p`, `gg` are all unclaimable.
+And on the **vim** preset, editing needs no modifiers in the first place:
+`dd`, `yy`, `p`, `gg` are all unclaimable.
 
 You can also just move the key. Listed bindings replace an action's defaults:
 
@@ -373,8 +374,8 @@ keymap:
 
 | Preset | What it is |
 | --- | --- |
-| `vim` | **the default** — modal editing (normal, insert, visual) on DataGrip's application keys |
-| `datagrip` | DataGrip's SQL-tool keyboard |
+| `vim` | modal editing (normal, insert, visual) on DataGrip's application keys |
+| `datagrip` | **the default** — DataGrip's SQL-tool keyboard |
 | `vscode` | VS Code where the two disagree: `⌘⇧K` deletes a line, `⌘⇧P` is the palette, `⌘P` finds a table |
 
 Presets can also be switched mid-session from the command palette

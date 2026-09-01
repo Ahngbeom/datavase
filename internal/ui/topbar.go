@@ -48,26 +48,61 @@ var topBarForms = []topBarForm{
 
 const topBarSeparator = "  ·  "
 
-// renderWidth produces the line, degrading until it fits.
-func (t topBarState) renderWidth(width int) string {
+// renderWidth produces the line, degrading until it fits, alongside the
+// zones for what it drew.
+func (t topBarState) renderWidth(width int) (string, []zone) {
 	for _, form := range topBarForms {
-		if line := t.line(form, width); visibleCost(line) <= width {
-			return line
+		if line, zones := t.line(form, width); visibleCost(line) <= width {
+			return line, zones
 		}
 	}
 
 	// Narrower than the environment and the schema together. Truncating keeps
 	// the leftmost, which is the environment — the one thing that has to
 	// survive a terminal of any size.
-	return truncateMarkup(t.line(topBarForms[len(topBarForms)-1], width), width)
+	last, _ := t.line(topBarForms[len(topBarForms)-1], width)
+	// Truncating drops the zones with the columns they described: the line
+	// that survives is the environment, which is not a control.
+	return truncateMarkup(last, width), nil
 }
 
-func (t topBarState) line(form topBarForm, width int) string {
+func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 	line := t.chip()
+	var zones []zone
 
-	if place := t.place(form.dsName); place != "" {
-		line += " " + place
+	// mark records a zone over the run just appended, measured against the
+	// markup so far so that the columns agree with the rendered string by
+	// construction rather than by a parallel calculation that can drift.
+	mark := func(before string, target zoneTarget) {
+		if from, to := visibleCost(before), visibleCost(line); to > from {
+			zones = append(zones, zone{from: from, to: to, target: target, index: -1})
+		}
 	}
+
+	// The datasource and the schema written as one. A datasource is often
+	// named after its main schema, and the two side by side read as a
+	// repetition rather than as two facts — hence the "@", and hence dropping
+	// the datasource still leaves "@app_db" rather than a bare word. They are
+	// marked as separate zones so a click on either resolves to that field
+	// alone.
+	if (form.dsName && t.dsName != "") || t.schema != "" {
+		line += " "
+		if form.dsName && t.dsName != "" {
+			before := line
+			line += result.EscapeTags(t.dsName)
+			mark(before, zoneDataSource)
+		}
+		if t.schema != "" {
+			// The "@" precedes the schema whenever the schema is drawn, not
+			// only when the datasource half also survived: dropping the
+			// datasource must still leave "@app_db" rather than a bare word.
+			line += "@"
+			before := line
+			line += result.EscapeTags(t.schema)
+			mark(before, zoneSchema)
+		}
+	}
+
 	if form.branch && t.branch != "" {
 		line += topBarSeparator + result.EscapeTags(oneLine(t.branch))
 	}
@@ -77,10 +112,13 @@ func (t topBarState) line(form topBarForm, width int) string {
 		// Two cells of gap at minimum, or the hint reads as part of the branch
 		// name rather than as a thing of its own.
 		if pad := width - visibleCost(line) - visibleCost(help); pad >= 2 {
-			line += strings.Repeat(" ", pad) + help
+			line += strings.Repeat(" ", pad)
+			before := line
+			line += help
+			mark(before, zoneHelp)
 		}
 	}
-	return line
+	return line, zones
 }
 
 // chip is the environment, filled rather than merely coloured.
@@ -93,22 +131,6 @@ func (t topBarState) chip() string {
 	return fmt.Sprintf("[%s] %s [-:-]", colourTag(style.fg, style.bg), strings.ToUpper(string(t.env)))
 }
 
-// place is the datasource and the schema written as one.
-//
-// A datasource is often named after its main schema, and the two side by side
-// read as a repetition rather than as two facts — hence the "@", and hence
-// dropping the datasource still leaves "@app_db" rather than a bare word.
-func (t topBarState) place(withDataSource bool) string {
-	name := ""
-	if withDataSource {
-		name = result.EscapeTags(t.dsName)
-	}
-	if t.schema == "" {
-		return name
-	}
-	return name + "@" + result.EscapeTags(t.schema)
-}
-
 // topBar draws the line at whatever width it actually has.
 //
 // The width is read during Draw for the same reason the status bar reads it
@@ -117,6 +139,9 @@ func (t topBarState) place(withDataSource bool) string {
 type topBar struct {
 	*tview.TextView
 	current func() topBarState
+	// record hands the zones of this frame to the application's hitmap,
+	// offset into screen columns. Nil in a bar nobody is clicking.
+	record func(row int, zones []zone)
 }
 
 func newTopBar(current func() topBarState) *topBar {
@@ -127,11 +152,15 @@ func newTopBar(current func() topBarState) *topBar {
 }
 
 func (b *topBar) Draw(screen tcell.Screen) {
-	_, _, width, _ := b.GetInnerRect()
+	x, y, width, _ := b.GetInnerRect()
 	if width <= 0 {
 		width = defaultStatusWidth
 	}
 
-	b.SetText(b.current().renderWidth(width))
+	text, zones := b.current().renderWidth(width)
+	b.SetText(text)
+	if b.record != nil {
+		b.record(y, offsetZones(zones, x))
+	}
 	b.TextView.Draw(screen)
 }

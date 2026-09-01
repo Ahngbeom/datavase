@@ -593,29 +593,6 @@ func TestASessionOnAStatedKeyboardSaysNothingAboutIt(t *testing.T) {
 	}
 }
 
-// visibleText is what the terminal shows, colour tags removed.
-func visibleText(s string) string {
-	var (
-		b     strings.Builder
-		inTag bool
-		runes = []rune(s)
-	)
-	for i := 0; i < len(runes); i++ {
-		switch {
-		case runes[i] == '[' && i+1 < len(runes) && runes[i+1] == '[':
-			b.WriteRune('[')
-			i++
-		case runes[i] == '[':
-			inTag = true
-		case runes[i] == ']' && inTag:
-			inTag = false
-		case !inTag:
-			b.WriteRune(runes[i])
-		}
-	}
-	return b.String()
-}
-
 // A grid wider than the terminal scrolls, and the columns that go off the left
 // take the row's identity with them: a screenful starting at "total_cents" is
 // indistinguishable from one whose query never selected an id. The bar is the

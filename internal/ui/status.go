@@ -305,6 +305,16 @@ const openingRank = 40
 
 // visibleCost is how many cells a field occupies, ignoring colour tags.
 func visibleCost(s string) int {
+	return runewidth.StringWidth(visibleText(s))
+}
+
+// visibleText is what the terminal shows, colour tags removed.
+//
+// Separate from visibleCost because callers want different things from the
+// same parse: a zone boundary is a rune offset into this string, and a rune
+// offset into a cell count are not the same number once anything double-width
+// is on the line.
+func visibleText(s string) string {
 	var (
 		b     strings.Builder
 		inTag bool
@@ -323,7 +333,7 @@ func visibleCost(s string) int {
 			b.WriteRune(runes[i])
 		}
 	}
-	return runewidth.StringWidth(b.String())
+	return b.String()
 }
 
 // tag wraps text in a tview colour tag. The text is escaped first: server

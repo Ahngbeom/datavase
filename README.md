@@ -160,6 +160,7 @@ defaults:
   auto_limit: 1000        # LIMIT added to unbounded SELECTs
   fetch_chunk: 500        # rows per batch while streaming
   buffer_max: 50000       # rows held in memory before truncating
+  mouse: true              # false turns off clicks; see "The screen"
 ```
 
 Passwords never go in this file. Store them in the OS keychain:
@@ -748,6 +749,23 @@ Regions are separated by a single rule rather than boxed. Each names itself
 once, on its own header line, and the one holding the keyboard is marked `▌`.
 The editor's header carries the open file and a `*` while it differs from disk;
 it does not say "editor", because the caret already does.
+
+**Clicks mean something.** A datasource, a schema or `keys` in the top bar
+does what pressing its key does; a tab or a region name switches focus there;
+a header sorts the grid by that column; and double-clicking a result row
+opens it in full. Right-click anywhere for a menu of what can be done there,
+each entry naming the key that already does it — nothing on it is reachable
+only by mouse.
+
+Set `mouse: false` under `defaults` to turn all of that off, for anyone who
+selects text by dragging: mouse reporting in a terminal disables its own
+native selection, so a click that means something is a regression rather than
+a feature for them. **This makes `dv` ignore the mouse; it does not hand the
+terminal its selection back.** Mouse reporting is turned on by the client, for
+its own terminal, independently of this setting — `dv` on the other end has no
+way to ask it to stop. Everything the mouse could reach stays reachable from
+the keyboard: the command palette (`F3`) and the hints the status bar offers
+as focus moves both name the same commands the right-click menu does.
 
 ## The schema pane
 

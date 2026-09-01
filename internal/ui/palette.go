@@ -450,6 +450,20 @@ func paletteCommands() []command {
 			run:      (*App).showIntro,
 		},
 		{
+			// No contexts: a command for turning the mouse off has no
+			// business being reachable only by mouse.
+			name:     "mouse on",
+			category: catOther,
+			summary:  "let clicks mean something again",
+			run:      (*App).enableMouse,
+		},
+		{
+			name:     "mouse off",
+			category: catOther,
+			summary:  "clicks do nothing — the terminal's own selection is still not restored",
+			run:      (*App).disableMouse,
+		},
+		{
 			name:     "help",
 			category: catOther,
 			summary:  "show the key reference",
@@ -675,6 +689,20 @@ func (a *App) enableWrites() {
 func (a *App) disableWrites() {
 	a.status.writesEnabled = false
 	a.notice("writes locked")
+}
+
+func (a *App) enableMouse() {
+	a.mouseEnabled = true
+	a.notice("mouse on")
+}
+
+// disableMouse turns off dv's own click handling. It does not touch mouse
+// reporting itself — that stays on for the terminal it actually reaches
+// (attach.go), which this session has no way to ask about — so the notice
+// says what changed rather than what someone dragging a selection might hope.
+func (a *App) disableMouse() {
+	a.mouseEnabled = false
+	a.notice("mouse off — clicks do nothing here")
 }
 
 // showKeyboardChooser opens the palette a click on the mode field asks for.

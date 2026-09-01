@@ -37,6 +37,26 @@ func TestClickingTheHelpHintOpensTheKeyReference(t *testing.T) {
 	})
 }
 
+// mouse.go's early return is the one line the whole task exists to add: with
+// the mouse off, a zone that used to open something must go back to doing
+// nothing, not keep working underneath the setting meant to silence it.
+func TestTurningTheMouseOffLeavesTheHelpHintInert(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.inspect(func(a *App) bool {
+		a.mouseEnabled = false
+		return true
+	})
+
+	h.clickZone(zoneHelp, -1)
+
+	h.inspect(func(a *App) bool {
+		if name, _ := a.pages.GetFrontPage(); name == pageHelp {
+			t.Error("the help hint opened the key reference with the mouse off")
+		}
+		return true
+	})
+}
+
 // A misclick on the production marker must not be able to look like it
 // changed the environment.
 func TestTheEnvironmentChipAnswersNoClick(t *testing.T) {

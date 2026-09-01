@@ -199,6 +199,32 @@ func TestTheIntroductionNamesTheKeysThatAreInForce(t *testing.T) {
 				t.Errorf("the introduction does not name the key for %s:\n%s", action, card)
 			}
 		}
+		// The mouse is on by default, and the card is the one place someone
+		// who has never used this before is told the right click exists at
+		// all.
+		if !strings.Contains(card, "Right-click") {
+			t.Errorf("the introduction does not point to the right-click menu:\n%s", card)
+		}
+		return true
+	})
+}
+
+// The right-click line promises a menu that is itself silenced with the
+// mouse off — advertising a way in that has just been turned off would be
+// worse than saying nothing.
+func TestTheIntroductionDropsTheRightClickLineWithTheMouseOff(t *testing.T) {
+	h := newIntroHarness(t, introPath(t))
+
+	h.waitFor("the introduction", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageIntro
+	})
+
+	h.inspect(func(a *App) bool {
+		a.mouseEnabled = false
+		if card := a.introText(); strings.Contains(card, "Right-click") {
+			t.Errorf("the introduction still points to the right-click menu with the mouse off:\n%s", card)
+		}
 		return true
 	})
 }

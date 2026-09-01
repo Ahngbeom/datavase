@@ -26,6 +26,14 @@ func (a *App) bindMouse() {
 		if ev == nil {
 			return ev, action
 		}
+		// Mouse reporting itself stays on regardless: the client turns it on
+		// for its own terminal (attach.go), and this setting lives on the
+		// server. Off only stops dv claiming the click, so the zones and the
+		// context menu go quiet and tview's own handling — a table's default
+		// row selection, for instance — is whatever is left underneath.
+		if !a.mouseEnabled {
+			return ev, action
+		}
 
 		// tview keeps one "last click" timestamp shared across every button
 		// (Application.fireMouseActions), not one per button. So the right

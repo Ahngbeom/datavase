@@ -110,6 +110,15 @@ type App struct {
 	// reads are asynchronous and usually refused.
 	clipboard string
 
+	// mouseEnabled says whether a click means anything. config.Defaults.Mouse
+	// is a *bool so "not written" can be told apart from "written as false";
+	// this is the resolved value, true when the config left it unset.
+	//
+	// Off silences the zones and the context menu, not the hints: hints are
+	// driven by keyboard focus and name keys, so they are the discovery path
+	// for exactly the person who turned the mouse off.
+	mouseEnabled bool
+
 	// hits is where the last frame's regions recorded what a click on them
 	// means. Rebuilt every frame in captureScreen's SetBeforeDrawFunc, the
 	// same reason a region's own header is rebuilt every frame rather than
@@ -316,6 +325,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
 		selectionAnchor: noAnchor,
+		mouseEnabled:    cfg.Defaults.Mouse == nil || *cfg.Defaults.Mouse,
 	}
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)

@@ -80,7 +80,7 @@ func (a *App) buildSessionsTab() tview.Primitive {
 // Reading is explicit rather than on a timer. A list that reloads under the
 // cursor is how the wrong session gets acted on, and the moment this matters
 // is the moment someone is about to act on a row.
-func (a *App) showSessions() { a.refreshSessions("") }
+func (a *App) showSessions() { a.refreshSessions("", true) }
 
 // refreshSessions reads the list again, keeping a message that matters more
 // than the summary would.
@@ -88,7 +88,14 @@ func (a *App) showSessions() { a.refreshSessions("") }
 // Refreshing after a kill is the obvious kindness and it takes away the one
 // thing the user wanted confirmed: they stopped somebody's statement, and the
 // status bar answers "3 connections · 1 working".
-func (a *App) refreshSessions(keep string) {
+//
+// follow decides whether this read also takes the keyboard: true for
+// showSessions, where the user just asked to see the list, false for the
+// post-kill refresh (kill, below), which the confirm dialog already closed
+// back to the editor. Stealing focus into a plain TextView a second time
+// there would silently eat the next few keystrokes of whatever the user
+// started typing next.
+func (a *App) refreshSessions(keep string, follow bool) {
 	if keep == "" {
 		a.notice("reading the process list…")
 	}
@@ -106,6 +113,9 @@ func (a *App) refreshSessions(keep string) {
 
 			a.sessionsView.show(func(width int) string { return sessionsText(listing, width) })
 			a.resultTabs.show(tabSessions)
+			if follow {
+				a.app.SetFocus(a.resultPrimitive())
+			}
 			if keep != "" {
 				a.notice(keep)
 				return
@@ -355,7 +365,9 @@ func (a *App) kill(p procs.Process, stop procs.Stop) {
 				a.notice(fmt.Sprintf("%v", err))
 				return
 			}
-			a.refreshSessions(fmt.Sprintf("stopped the %s on connection %d", stop, p.ID))
+			// follow is false: closeDialog already put focus back in the
+			// editor, and this read should not take it again.
+			a.refreshSessions(fmt.Sprintf("stopped the %s on connection %d", stop, p.ID), false)
 		})
 	}()
 }
@@ -434,6 +446,7 @@ func (a *App) showLocks() {
 
 			a.sessionsView.show(func(width int) string { return lockTreeText(tree, width) })
 			a.resultTabs.show(tabSessions)
+			a.app.SetFocus(a.resultPrimitive())
 			a.notice(lockSummary(tree))
 		})
 	}()

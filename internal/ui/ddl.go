@@ -52,6 +52,10 @@ func (a *App) inspectTable() {
 			a.ddlText = ddl
 			a.ddlView.SetText(ddl).ScrollToBeginning()
 			a.resultTabs.show(tabDDL)
+			// inspectTable is invoked from the schema pane, so without this
+			// the definition is on screen and the keyboard is still in the
+			// tree.
+			a.app.SetFocus(a.resultPrimitive())
 			a.notice(fmt.Sprintf("%s.%s — %s copies it", schema, table, a.copyKeyLabel()))
 		})
 	}()

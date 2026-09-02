@@ -71,8 +71,17 @@ func TerminalAdviceShort(term string, m *Map) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s does not work here — use %s",
-		primary.Label(false), fallback.Label(false))
+	// The palette's own fallback is the one key guaranteed to reach an
+	// action that has no fallback of its own; without one, degrade to the
+	// run-only sentence rather than name a key that cannot be pressed.
+	_, palette := primaryAndFallback(m, ActionCommandPalette)
+	if palette == nil {
+		return fmt.Sprintf("%s does not work here — use %s",
+			primary.Label(false), fallback.Label(false))
+	}
+
+	return fmt.Sprintf("%s blocked — %s, %s lists commands",
+		primary.Label(false), fallback.Label(false), palette.Label(false))
 }
 
 // primaryAndFallback picks the binding this advice is about and the one that
@@ -151,9 +160,10 @@ var clipboardActions = map[Action]bool{
 	ActionCopyOrCancel: true,
 }
 
-// TmuxSnippet returns the two settings that let tmux carry modified keys.
+// TmuxSnippet returns the settings that let tmux carry modified keys and
+// mouse events through to the application.
 func TmuxSnippet() string {
-	return `# datavase — let tmux carry modified keys such as Ctrl+Enter
+	return `# datavase — let tmux carry modified keys and mouse events through to it
 # Append to ~/.tmux.conf, then: tmux kill-server (or restart your session).
 #
 # The default TERM inside tmux is "screen-256color", which predates the
@@ -164,6 +174,12 @@ func TmuxSnippet() string {
 set -g default-terminal "tmux-256color"
 set -g extended-keys on
 set -as terminal-features 'xterm*:extkeys'
+
+# tmux forwards no mouse events at all until told to, so clicking a table
+# or dragging to resize a pane reaches the application only with this on.
+# Once it is, tmux's own copy-by-drag needs a modifier held — on most
+# terminals that means holding Shift while you drag to select text.
+set -g mouse on
 `
 }
 

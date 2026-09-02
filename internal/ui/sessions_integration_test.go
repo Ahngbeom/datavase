@@ -143,6 +143,42 @@ func newHarnessAs(t *testing.T, ds *config.DataSource, password string) *harness
 	return harnessOver(t, &session.Session{Conn: conn}, ds)
 }
 
+// The confirm dialog closes back to the editor deliberately (closeDialog,
+// dialog.go); the refresh that follows a kill must not steal focus back out
+// of it a second time, or a user who confirms and starts typing their next
+// statement loses keystrokes to a plain TextView with no input capture of
+// its own.
+func TestKillingASessionLeavesFocusInTheEditor(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	stopOther := runElsewhere(t, "SELECT SLEEP(25)")
+	defer stopOther()
+
+	h.waitForOtherSession(t, "SLEEP(25)")
+
+	h.do(keymap.ActionKillSession)
+	h.waitFor("the picker", func(a *App) bool {
+		front, _ := a.pages.GetFrontPage()
+		return front == pageKill
+	})
+
+	h.typeInto("SLEEP(25)")
+	h.press(tcell.KeyEnter)
+
+	h.waitFor("the confirmation", func(a *App) bool {
+		front, _ := a.pages.GetFrontPage()
+		return front == pageConfirm
+	})
+	h.press(tcell.KeyRight)
+	h.press(tcell.KeyEnter)
+
+	if !h.waitForScreen("stopped the statement") {
+		t.Fatalf("the kill was not reported:\n%s", h.text())
+	}
+	if onEditor := h.inspect(func(a *App) bool { return a.app.GetFocus() == a.editor }); !onEditor {
+		t.Errorf("focus left the editor after the kill's own refresh, where closeDialog had already put it")
+	}
+}
+
 // Stopping somebody else's statement, through the interface, end to end.
 func TestStoppingAnotherSessionsStatement(t *testing.T) {
 	h := newHarness(t, config.EnvDev)

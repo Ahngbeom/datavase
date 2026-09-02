@@ -609,12 +609,19 @@ func schemaPaneDetail(tab, currentSchema string) string {
 }
 
 // resultDetail says what the empty results tab would otherwise not say.
+//
+// editorFocused reads a.editor.HasFocus() rather than a.app.GetFocus():
+// this runs at draw time (tabbed's detail is read from Draw), and asking
+// the Application who has focus from inside Draw deadlocks — see the
+// warning on tabbed.detail (panel.go). HasFocus is a plain field read on
+// the primitive itself and takes no lock.
 func (a *App) resultDetail() string {
 	return resultHint(resultState{
-		tab:     a.resultTabs.current(),
-		columns: a.buf.ColumnCount(),
-		running: a.running != nil,
-		wrote:   a.status.written != nil,
+		tab:           a.resultTabs.current(),
+		columns:       a.buf.ColumnCount(),
+		running:       a.running != nil,
+		wrote:         a.status.written != nil,
+		editorFocused: a.editor.HasFocus(),
 	})
 }
 
@@ -626,6 +633,11 @@ type resultState struct {
 	// wrote says the last statement changed rows instead of returning them,
 	// which is an empty grid for a reason rather than an empty grid.
 	wrote bool
+	// editorFocused is the one place Esc does not return to results:
+	// returnToResults steps aside there so vim's own Esc (leave insert
+	// mode) still gets it. The hint has to agree, or it promises a key
+	// that a Tab press into the editor quietly stops delivering.
+	editorFocused bool
 }
 
 // resultHint is the trailing line on the results tab's header.
@@ -637,8 +649,22 @@ type resultState struct {
 // statement was running and the bar two rows below said so. A pane telling
 // the user to do the thing they are watching happen is the same contradiction
 // the finders opened with.
+//
+// A tab that is not the results tab has no other way of telling you the
+// results are still there, so it says how to get back — Esc, a literal
+// rather than a bound action's key label, since rebinding "back" would take
+// it away from every dialog that already relies on it (see
+// returnToResults). Silent whenever the editor holds focus: that is the one
+// place Esc means something else, and a hint naming a key that does not do
+// what it says is worse than none.
 func resultHint(s resultState) string {
-	if s.tab != tabResults || s.columns > 0 {
+	if s.tab != tabResults {
+		if s.editorFocused {
+			return ""
+		}
+		return "Esc returns to results"
+	}
+	if s.columns > 0 {
 		return ""
 	}
 
@@ -805,10 +831,16 @@ func (a *App) focusOrder() []tview.Primitive {
 // resultPrimitive and schemaPrimitive return whichever widget the visible tab
 // holds, so Tab lands on something focusable rather than on the tab strip.
 func (a *App) resultPrimitive() tview.Primitive {
-	if a.resultTabs.current() == tabDDL {
+	switch a.resultTabs.current() {
+	case tabDDL:
 		return a.ddlView
+	case tabPlan:
+		return a.planView
+	case tabSessions:
+		return a.sessionsView
+	default:
+		return a.grid
 	}
-	return a.grid
 }
 
 func (a *App) schemaPrimitive() tview.Primitive {
@@ -854,11 +886,42 @@ func (a *App) bindKeys() {
 			return ev
 		}
 
+		if a.returnToResults(ev) {
+			return nil
+		}
 		if a.dispatch(a.keys.Lookup(ev)) {
 			return nil
 		}
 		return ev
 	})
+}
+
+// returnToResults sends Esc back to the results tab from any of the other
+// three, picking up the keyboard along with it — inspecting a table, asking
+// for a plan or listing sessions can all leave the keyboard somewhere else
+// entirely, and the tab strip alone does not say how to get back.
+//
+// Esc is deliberately not a keymap.Action: making it one would let it be
+// rebound away from every dialog that already relies on it as the one
+// universal way out, so it is intercepted here, ahead of dispatch. The
+// editor keeps its own Esc — leaving insert mode — which is why this steps
+// aside whenever the editor holds focus rather than deciding purely from
+// which tab is showing.
+func (a *App) returnToResults(ev *tcell.EventKey) bool {
+	if ev.Key() != tcell.KeyEscape {
+		return false
+	}
+	if a.app.GetFocus() == a.editor {
+		return false
+	}
+	if a.resultTabs.current() == tabResults {
+		return false
+	}
+
+	a.resultTabs.show(tabResults)
+	a.app.SetFocus(a.resultPrimitive())
+	a.refreshHints()
+	return true
 }
 
 // dispatch performs an action and reports whether it consumed the key.

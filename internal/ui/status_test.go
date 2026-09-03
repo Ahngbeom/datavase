@@ -497,6 +497,70 @@ func TestTheOpeningLineKeepsTheSchemaTreeAtEightyColumns(t *testing.T) {
 	}
 }
 
+// CI's simulation screen is 80x25, not the 120x40 the local harness runs at
+// (SimulationScreen.Init resets it), and three consecutive CI runs failed
+// this exact assertion while the same suite stayed green locally — a build
+// that only fails on a narrower terminal than the one running the tests.
+// These widths pin the opening line against that shape directly, with no
+// terminal required to reproduce it.
+func TestTheOpeningLineAtCIsWidth(t *testing.T) {
+	full := opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		advice:        "Ctrl+↩ does not work here — use F5",
+		paletteHint:   "F3 lists commands",
+	}
+
+	for _, width := range []int{76, 79, 80} {
+		s := baseStatus()
+		s.hints = openingClauses(full)
+		line, _ := s.renderWidth(width)
+
+		for _, want := range []string{"does not work here", "schema tree", "F1 for keys"} {
+			if !strings.Contains(line, want) {
+				t.Errorf("width %d: %q is missing %q", width, line, want)
+			}
+		}
+		for _, gone := range []string{"lists commands", "11.4.12-MariaDB-ubu2404"} {
+			if strings.Contains(line, gone) {
+				t.Errorf("width %d: %q still carries %q, which should have shed first", width, line, gone)
+			}
+		}
+	}
+}
+
+// The failing CI assertion was standing in for this: whatever width lets the
+// terminal advice survive has to let the schema tree survive too, because
+// losing the sidebar's only announcement is exactly the discovery failure
+// this line exists to prevent.
+//
+// The floor is the combined width of the two clauses plus a separator
+// (59 cells here): below that no ranking can save both, since the terminal
+// is too narrow to hold them side by side at all. That is a real limit
+// rather than a bug, so the invariant is checked from there up, through
+// every width this application's own convention treats as usable (eighty
+// columns and beyond) and a margin under it.
+func TestTheSchemaTreeSurvivesEveryWidthTheAdviceDoes(t *testing.T) {
+	full := opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		advice:        "Ctrl+↩ does not work here — use F5",
+		paletteHint:   "F3 lists commands",
+	}
+
+	for width := 60; width <= 130; width++ {
+		s := baseStatus()
+		s.hints = openingClauses(full)
+		line, _ := s.renderWidth(width)
+
+		if strings.Contains(line, "does not work here") && !strings.Contains(line, "schema tree") {
+			t.Errorf("width %d: the advice survived and the schema tree did not: %q", width, line)
+		}
+	}
+}
+
 // A clause that does not fit is dropped whole. Half a hint reads as a hint
 // that is wrong rather than one that was cut.
 func TestTheOpeningLineDropsWholeClausesRatherThanCuttingOne(t *testing.T) {

@@ -313,37 +313,10 @@ func TestShortTerminalAdviceFitsBesideTheOtherHints(t *testing.T) {
 		}
 	}
 
-	// Naming the key is not enough on its own: someone who has never opened
-	// the palette has to be able to tell what pressing it gets them.
-	if !strings.Contains(got, "F3") || !strings.Contains(got, "lists commands") {
-		t.Errorf("short advice = %q, want it to say what the palette fallback does", got)
-	}
-
 	// Two clauses of the opening line stand beside it: "F1 for keys" and
 	// "^B for the schema tree", with separators. What is left is the budget.
 	const budget = 80 - len("F1 for keys") - len(" · ") - len("^B for the schema tree") - len(" · ")
 	if n := utf8.RuneCountInString(got); n > budget {
 		t.Errorf("short advice is %d runes, leaving no room for the hints beside it: %q", n, got)
-	}
-}
-
-// A palette rebound to a modifier-only chord has no key this terminal can
-// deliver; naming it would send a stuck user chasing a key that never
-// arrives either.
-func TestShortTerminalAdviceDegradesWithNoPlainPalette(t *testing.T) {
-	m := Default()
-	if err := m.Apply(map[string][]string{"command-palette": {"ctrl+shift+a"}}); err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-
-	got := TerminalAdviceShort("screen-256color", m)
-	if got == "" {
-		t.Fatal("TerminalAdviceShort(screen-256color) = \"\", want the run-only instruction")
-	}
-	if strings.Contains(got, "F3") {
-		t.Errorf("short advice = %q, named a palette key that cannot be pressed", got)
-	}
-	if !strings.Contains(got, "Ctrl+↩") || !strings.Contains(got, "F5") {
-		t.Errorf("short advice = %q, want it to still name the run fallback", got)
 	}
 }

@@ -71,17 +71,8 @@ func TerminalAdviceShort(term string, m *Map) string {
 		return ""
 	}
 
-	// The palette's own fallback is the one key guaranteed to reach an
-	// action that has no fallback of its own; without one, degrade to the
-	// run-only sentence rather than name a key that cannot be pressed.
-	_, palette := primaryAndFallback(m, ActionCommandPalette)
-	if palette == nil {
-		return fmt.Sprintf("%s does not work here — use %s",
-			primary.Label(false), fallback.Label(false))
-	}
-
-	return fmt.Sprintf("%s blocked — %s, %s lists commands",
-		primary.Label(false), fallback.Label(false), palette.Label(false))
+	return fmt.Sprintf("%s does not work here — use %s",
+		primary.Label(false), fallback.Label(false))
 }
 
 // primaryAndFallback picks the binding this advice is about and the one that

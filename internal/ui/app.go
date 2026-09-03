@@ -378,12 +378,23 @@ func (a *App) captureScreen() {
 // nothing happen is the worst way to learn it; the status bar is already
 // there and costs nothing to read.
 func (a *App) openingClauses(serverVersion string) []string {
+	term := os.Getenv("TERM")
+
+	paletteHint := ""
+	if !keymap.SupportsExtendedKeys(term) {
+		// Two-thirds of the bindings have no plain-key fallback of their
+		// own, so on exactly the terminals this advice already targets the
+		// palette is the one key that still reaches all of them.
+		paletteHint = a.keyLabel(keymap.ActionCommandPalette) + " lists commands"
+	}
+
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
 		modal:         a.keys.Modal(),
-		advice:        keymap.TerminalAdviceShort(os.Getenv("TERM"), a.keys),
+		advice:        keymap.TerminalAdviceShort(term, a.keys),
+		paletteHint:   paletteHint,
 		presetAssumed: a.presetAssumed,
 		presetName:    string(a.keys.Preset()),
 	})
@@ -398,6 +409,12 @@ type opening struct {
 	// advice is what this terminal cannot deliver, or empty when it can
 	// deliver everything.
 	advice string
+	// paletteHint names the palette's own fallback, for the same terminal
+	// advice already targets. Empty wherever advice would be, since the
+	// question it answers — how to reach an action with no fallback of its
+	// own — only exists on a terminal that cannot deliver the primary
+	// bindings in the first place.
+	paletteHint string
 	// presetAssumed says the configuration named no keyboard, so this
 	// session is running the default rather than a choice made for it. A
 	// session that assumed its keyboard has to say so, or a default that
@@ -413,15 +430,25 @@ type opening struct {
 // clause was chopped mid-word on an eighty-column terminal — which is where a
 // default one starts — and the reader was left with "for the s".
 //
-// The order decides what survives. What the terminal cannot deliver comes
-// first because it is the only place anyone is told that the key this
-// interface keeps naming will do nothing when they press it. The server
-// version brings up the rear of the greeting proper: it is a greeting rather
-// than an instruction, and knowing which MariaDB answered has never stood
-// between anyone and their first query. The assumed-keyboard clause sits
-// behind even that — a session on datagrip needs no "i to type" rescue the
-// way a session on vim does, so it is the first thing shed on a narrow
-// terminal.
+// The order decides what survives, and it is the whole of the ranking: a
+// clause's position in this slice is its shedding priority, most protected
+// first. What the terminal cannot deliver comes first because it is the only
+// place anyone is told that the key this interface keeps naming will do
+// nothing when they press it. The schema tree follows immediately — the
+// sidebar starts hidden, so this is the only place its existence is
+// announced, and losing it is losing the one way a first-time user finds it
+// at all. F1 comes next, ahead of the palette hint, because it alone reaches
+// the full reference the palette hint is merely a shortcut around. The
+// palette hint itself earns last place among these four: it is the least
+// costly to lose, since the advice beside it already names a key that works
+// and F1 reaches the same information by a longer route — a user who loses
+// this clause is inconvenienced, not stranded, which is not true of the
+// other three. The server version brings up the rear of the greeting proper:
+// it is a greeting rather than an instruction, and knowing which MariaDB
+// answered has never stood between anyone and their first query. The
+// assumed-keyboard clause sits behind even that — a session on datagrip
+// needs no "i to type" rescue the way a session on vim does, so it is the
+// first thing shed on a narrow terminal.
 func openingClauses(o opening) []string {
 	var out []string
 
@@ -434,13 +461,16 @@ func openingClauses(o opening) []string {
 	if o.modal {
 		out = append(out, "vim keys: i to type, Esc for normal")
 	}
-	if o.helpKey != "" {
-		out = append(out, o.helpKey+" for keys")
-	}
 	// The schema tree is not on screen, so this is where anyone learns it
 	// exists at all.
 	if o.sidebarKey != "" {
 		out = append(out, o.sidebarKey+" for the schema tree")
+	}
+	if o.helpKey != "" {
+		out = append(out, o.helpKey+" for keys")
+	}
+	if o.paletteHint != "" {
+		out = append(out, o.paletteHint)
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)

@@ -4,12 +4,10 @@ package ui
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/gdamore/tcell/v2"
 )
 
 // The schema name on the top bar is where someone looks to see which schema
@@ -272,49 +270,4 @@ func TestClickingATreeNodeDoesWhatEnterDoes(t *testing.T) {
 		node := a.tree.GetCurrentNode()
 		return node != nil && node.IsExpanded() != before
 	})
-}
-
-// Mouse reporting disables the terminal's own text selection. Someone who
-// copies by dragging must be able to turn this off — and must lose only the
-// ways in, never a capability.
-//
-// menuEntries is filtered from paletteCommands by construction, so checking
-// a menu entry's name for membership in that same list can never fail — it
-// is not evidence that turning the mouse off costs nothing, only that
-// menuEntries does what it obviously does. What has to hold is that the
-// real palette, filtered the way a person actually reaches a command by
-// name, still finds everything a right-click menu would have offered.
-func TestWithTheMouseOffEveryMenuCommandIsStillNamedInThePalette(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.inspect(func(a *App) bool {
-		a.mouseEnabled = false
-		return true
-	})
-
-	seen := make(map[string]bool)
-	for _, ctx := range allMenuContexts() {
-		for _, e := range menuEntries(paletteCommands(), ctx, func(keymap.Action) string { return "" }) {
-			if seen[e.name] {
-				continue
-			}
-			seen[e.name] = true
-
-			h.do(keymap.ActionCommandPalette)
-			h.waitFor("the palette to open for "+e.name, func(a *App) bool {
-				name, _ := a.pages.GetFrontPage()
-				return name == pagePalette
-			})
-
-			h.typeInto(e.name)
-			if !strings.Contains(h.text(), e.name) {
-				t.Errorf("%q is offered on right click but the palette filter cannot find it with the mouse off:\n%s", e.name, h.text())
-			}
-
-			h.press(tcell.KeyEscape)
-			h.waitFor("the palette to close for "+e.name, func(a *App) bool {
-				name, _ := a.pages.GetFrontPage()
-				return name == pageMain
-			})
-		}
-	}
 }

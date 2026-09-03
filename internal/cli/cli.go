@@ -53,8 +53,9 @@ type App struct {
 
 	// RunServer runs the headless server in the foreground.
 	RunServer func() error
-	// StopServer ends a running server.
-	StopServer func() error
+	// StopServer ends a running server. force is --force: signal the pid the
+	// observation API reports rather than asking the session to end itself.
+	StopServer func(force bool) error
 	// ServerStatus describes what is running, in one paragraph for a person.
 	ServerStatus func() (string, error)
 	// APISnapshot fetches the observation snapshot as JSON.
@@ -150,6 +151,9 @@ usage:
 advanced:
   dv server             run the session server in the foreground
   dv server stop        end a running session
+  dv server stop --force
+                        the session did not end within the wait above; signal
+                        its process directly instead of asking it again
 `)
 }
 
@@ -289,14 +293,21 @@ func (a *App) check(args []string) int {
 	return exitOK
 }
 
-// server is `dv server` and `dv server stop`.
+// server is `dv server` and `dv server stop [--force]`.
 func (a *App) server(args []string) int {
 	if len(args) > 0 && args[0] == "stop" {
+		fs := flag.NewFlagSet("server stop", flag.ContinueOnError)
+		fs.SetOutput(a.Err)
+		force := fs.Bool("force", false, "end a wedged session by signalling its process directly")
+		if err := fs.Parse(args[1:]); err != nil {
+			return exitUsage
+		}
+
 		if a.StopServer == nil {
 			fmt.Fprintln(a.Err, "this build cannot stop a server")
 			return exitUsage
 		}
-		if err := a.StopServer(); err != nil {
+		if err := a.StopServer(*force); err != nil {
 			fmt.Fprintf(a.Err, "%v\n", err)
 			return exitError
 		}

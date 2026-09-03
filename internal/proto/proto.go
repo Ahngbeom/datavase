@@ -55,6 +55,12 @@ type Hello struct {
 	// was named.
 	DataSource string
 	PID        int
+	// BuildFingerprint is version.BuildFingerprint(): empty for a release
+	// build, which reports a real Version and needs nothing more to be told
+	// apart from another. It exists because every development build reports
+	// the same Version, "(devel)", so that alone cannot tell a rebuilt local
+	// binary from the one already running in the server it is attaching to.
+	BuildFingerprint string
 }
 
 // Welcome accepts a Hello.

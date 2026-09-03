@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -95,6 +96,73 @@ func TestVersionMismatchIsRefused(t *testing.T) {
 	}
 	if got.Reject == nil || got.Reject.Reason == "" {
 		t.Error("the refusal came with no reason for the user to read")
+	}
+}
+
+// Every development build reports the same version string, "(devel)", so the
+// version check alone cannot tell a developer's rebuilt binary from the one
+// still running in the server it is about to attach to — that gap is what let
+// a rebuild get read from silently until the fingerprint below closed it.
+func TestRebuildingWithoutRestartingTheServerIsRefused(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	srv := daemon.New(daemon.Options{
+		Version:          "(devel)",
+		BuildFingerprint: "2026-08-27T09:00:00Z",
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
+			t.Error("the session was built for a client that should have been refused")
+			return newEchoSession(), nil, nil
+		},
+	})
+	go srv.Serve(server)
+
+	h := hello("(devel)")
+	h.Hello.BuildFingerprint = "2026-08-27T10:30:00Z"
+	if err := proto.NewEncoder(client).ToServer(h); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+
+	got, err := proto.NewDecoder(client).ToClient()
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Kind != proto.KindReject {
+		t.Fatalf("Kind = %v, want KindReject", got.Kind)
+	}
+	if !strings.Contains(got.Reject.Reason, "dv server stop") {
+		t.Errorf("the refusal does not say what to run instead: %q", got.Reject.Reason)
+	}
+}
+
+// A release build's Options.BuildFingerprint is always empty — computing one
+// is gated on the version being "(devel)" — and this pins that an empty
+// fingerprint on either side is read as "nothing to compare" rather than as a
+// mismatch. Without it, every release attach would refuse itself.
+func TestMatchingReleaseVersionsAttachRegardlessOfFingerprint(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	srv := daemon.New(daemon.Options{
+		Version: "0.7.0",
+		Start: func(context.Context, proto.Hello) (daemon.Session, []string, error) {
+			return newEchoSession(), nil, nil
+		},
+	})
+	go srv.Serve(server)
+
+	h := hello("0.7.0")
+	h.Hello.BuildFingerprint = "anything"
+	if err := proto.NewEncoder(client).ToServer(h); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+
+	got, err := proto.NewDecoder(client).ToClient()
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Kind != proto.KindWelcome {
+		t.Fatalf("Kind = %v, want KindWelcome", got.Kind)
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/attach"
@@ -55,10 +57,11 @@ func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config,
 	}
 
 	return attach.Run(conn, attach.Options{
-		Version:    version.String(),
-		WorkDir:    absWorkDir(opt.WorkDir),
-		DataSource: ds.Name,
-		Err:        os.Stderr,
+		Version:          version.String(),
+		BuildFingerprint: version.BuildFingerprint(),
+		WorkDir:          absWorkDir(opt.WorkDir),
+		DataSource:       ds.Name,
+		Err:              os.Stderr,
 	})
 }
 
@@ -176,7 +179,8 @@ func runServer(cfg *config.Config) error {
 
 	var srv *daemon.Server
 	srv = daemon.New(daemon.Options{
-		Version: version.String(),
+		Version:          version.String(),
+		BuildFingerprint: version.BuildFingerprint(),
 		Start: func(ctx context.Context, h proto.Hello) (daemon.Session, []string, error) {
 			return buildSession(ctx, h, cfg, srv)
 		},
@@ -192,8 +196,37 @@ func runServer(cfg *config.Config) error {
 	return srv.Wait()
 }
 
-// stopServer is `dv server stop`.
-func stopServer() error {
+// stopPollInterval is how often the graceful stop path checks whether the
+// socket has gone, once asked.
+const stopPollInterval = 100 * time.Millisecond
+
+// stopDeadline bounds how long the graceful stop path waits for the process
+// to actually exit before telling the user the session did not answer.
+const stopDeadline = 5 * time.Second
+
+// stopServer is `dv server stop`. Without force it asks the session to end
+// itself and waits up to stopDeadline; with force it skips straight to
+// signalling the pid the observation API reports.
+func stopServer(force bool) error {
+	if force {
+		return stopServerForce()
+	}
+	return stopServerGracefully(stopDeadline)
+}
+
+// stopServerGracefully asks the session to end itself and waits for the
+// process to actually go. The stop request itself is always read — Accept
+// serves every connection on its own goroutine (internal/daemon/socket.go),
+// and a KindStop reaches Stop, which calls session.Stop, every time. What a
+// wedged session does not do is let Run return: Stop only asks the
+// interface's event loop to exit, and a loop stuck inside a handler never
+// gets back around to notice. The deadline is what turns that silence into a
+// pid the user can act on instead of a hang.
+//
+// deadline is a parameter rather than a package constant read directly so a
+// test can supply its own short value without a var that exists only for
+// that purpose.
+func stopServerGracefully(deadline time.Duration) error {
 	path, err := daemon.SocketPath()
 	if err != nil {
 		return err
@@ -202,9 +235,92 @@ func stopServer() error {
 	if err != nil {
 		return errors.New("no dv server is running")
 	}
-	defer conn.Close()
+	sendErr := proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
+	conn.Close()
+	if sendErr != nil {
+		return sendErr
+	}
 
-	return proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
+	giveUpAt := time.Now().Add(deadline)
+	for time.Now().Before(giveUpAt) {
+		if !serverRunning() {
+			return nil
+		}
+		time.Sleep(stopPollInterval)
+	}
+	if !serverRunning() {
+		return nil
+	}
+
+	pid, pidErr := serverPID()
+	if pidErr != nil {
+		return fmt.Errorf("a dv server is running, but did not stop within %s, and its observation socket did not answer either: %w", deadline, pidErr)
+	}
+	return fmt.Errorf(
+		"a dv server is running (pid %d); it did not stop within %s.\n\n  dv server stop --force   end it by signalling that pid directly",
+		pid, deadline)
+}
+
+// stopServerForce ends a session that stopServerGracefully could not, by
+// signalling the pid the observation API reports.
+func stopServerForce() error {
+	pid, err := serverPID()
+	if err != nil {
+		return fmt.Errorf("cannot find the server to stop: %w", err)
+	}
+
+	// kill(2) treats a pid of 0 as the caller's own process group and a
+	// negative pid as every process the caller owns — either would signal
+	// far more than the server this was asked to stop. Nothing in this
+	// repository ever produces such a value (Info always sets it from
+	// os.Getpid()), but --force must refuse it outright rather than learn
+	// that from a malformed or foreign responder on the socket it dialled.
+	if pid <= 0 {
+		return fmt.Errorf("the observation socket named an unusable pid (%d); refusing to signal it", pid)
+	}
+
+	// Checked ahead of the call rather than left to surface as whatever
+	// os.Process.Signal returns: on Windows that call implements only Kill
+	// and Interrupt, so SIGTERM always fails with a raw EWINDOWS that names
+	// no remedy. This is the one platform where the pid --force already has
+	// is worth more than the attempt.
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf(
+			"a dv server is running (pid %d); --force cannot signal a process on Windows.\n\n  taskkill /F /PID %d   end it directly",
+			pid, pid)
+	}
+
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("finding pid %d: %w", pid, err)
+	}
+
+	// The signal is sent from here, the client, rather than from the
+	// observation API that supplied the pid. snapshot.Source holds only two
+	// functions and neither can mutate anything — see internal/snapshot's
+	// package comment — and a kill added there would be exactly the control
+	// path that design refuses to open. Reading the pid over a read-only
+	// socket and acting on it in this process is what keeps that decision
+	// intact.
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("signalling pid %d: %w", pid, err)
+	}
+	return nil
+}
+
+// serverPID reads the pid the observation API's server tier reports. That
+// tier answers whatever the session is doing, which is what lets --force
+// find a wedged server even when the session inside it cannot.
+func serverPID() (int, error) {
+	raw, err := apiSnapshot()
+	if err != nil {
+		return 0, err
+	}
+	var s snapshot.Snapshot
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0, fmt.Errorf("the server answered with something unreadable: %w", err)
+	}
+	return s.Server.PID, nil
 }
 
 // apiReadTimeout bounds the wait for the observation socket to answer.

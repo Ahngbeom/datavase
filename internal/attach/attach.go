@@ -21,6 +21,11 @@ type Options struct {
 	// Version must match the server's exactly.
 	Version string
 
+	// BuildFingerprint is version.BuildFingerprint(): empty outside a
+	// development build, where Version alone cannot tell a rebuilt binary
+	// from the one already running in the server it is attaching to.
+	BuildFingerprint string
+
 	// WorkDir and DataSource are what this invocation asked for, passed on so
 	// the server can build or move the session.
 	WorkDir    string
@@ -69,9 +74,10 @@ func Run(rwc io.ReadWriteCloser, opt Options) error {
 				CharacterSet: scr.CharacterSet(),
 				HasMouse:     scr.HasMouse(),
 			},
-			WorkDir:    opt.WorkDir,
-			DataSource: opt.DataSource,
-			PID:        os.Getpid(),
+			WorkDir:          opt.WorkDir,
+			DataSource:       opt.DataSource,
+			PID:              os.Getpid(),
+			BuildFingerprint: opt.BuildFingerprint,
 		},
 	})
 	if err != nil {

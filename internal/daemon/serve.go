@@ -141,7 +141,7 @@ func (s *Server) Serve(rwc io.ReadWriteCloser) {
 	// which never does, out of this: it already told the two apart above.
 	if s.opts.BuildFingerprint != "" && h.BuildFingerprint != "" && h.BuildFingerprint != s.opts.BuildFingerprint {
 		reject(rwc,
-			"this dv was rebuilt after the running server started, so attaching would silently run the old build.\n\n"+
+			"this dv's binary is not the one the running server started from.\n\n"+
 				"  dv server stop           end that session and start again\n"+
 				"  dv server stop --force   if the session is also wedged")
 		return

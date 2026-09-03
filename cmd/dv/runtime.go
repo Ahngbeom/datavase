@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -215,11 +216,11 @@ func stopServer(force bool) error {
 	return stopServerGracefully()
 }
 
-// stopServerGracefully is what defect 1 was missing: the previous
-// implementation returned as soon as the stop message was written, which is
-// success down a socket that the wedged session it was meant to end never
-// reads from again. Waiting here, with a deadline, is what turns that
-// silence into something the user can act on.
+// stopServerGracefully asks the session to end itself and waits for the
+// process to actually go. dv.sock is served by the same loop the session
+// runs in, so a wedged session leaves the stop write with nothing on the
+// other end ever reading it back; the deadline is what turns that silence
+// into a pid the user can act on instead of a hang.
 func stopServerGracefully() error {
 	path, err := daemon.SocketPath()
 	if err != nil {
@@ -262,6 +263,18 @@ func stopServerForce() error {
 	if err != nil {
 		return fmt.Errorf("cannot find the server to stop: %w", err)
 	}
+
+	// Checked ahead of the call rather than left to surface as whatever
+	// os.Process.Signal returns: on Windows that call implements only Kill
+	// and Interrupt, so SIGTERM always fails with a raw EWINDOWS that names
+	// no remedy. This is the one platform where the pid --force already has
+	// is worth more than the attempt.
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf(
+			"a dv server is running (pid %d); --force cannot signal a process on Windows.\n\n  taskkill /F /PID %d   end it directly",
+			pid, pid)
+	}
+
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("finding pid %d: %w", pid, err)

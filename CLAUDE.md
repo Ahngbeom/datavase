@@ -118,8 +118,10 @@ becomes a key map; both `cmd/dv` and `dv keys` go through it so the reference
 cannot disagree with the interface. Presets share one base map and only rebind
 where the tools genuinely differ.
 
-**The default preset is `vim`,** so the editor is modal out of the box. That
-default is only survivable because of things that must stay true:
+**The default preset is `datagrip`,** so typing types. `vim` is one answer to
+`dv init` or one palette command away, and everything below is what makes the
+modal editor survivable *for the people who choose it* — none of it may be
+dropped on the grounds that it is no longer the default:
 
 - the status bar always shows the mode and any half-typed sequence
 - normal mode consumes **every** key — one leaking through gets typed

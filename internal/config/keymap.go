@@ -14,6 +14,13 @@ import (
 type Keymap struct {
 	// Preset names the keyboard to start from; empty means the default.
 	Preset string `yaml:"preset"`
+	// PresetSet says the configuration named a preset at all.
+	//
+	// Without it, a config that never mentioned a keyboard could not be told
+	// apart from one that chose the default on purpose — and telling the two
+	// apart is what lets a session that assumed its keyboard say so, rather
+	// than silently swapping keys under someone who never asked for it.
+	PresetSet bool `yaml:"-"`
 	// Actions overrides individual bindings by action name.
 	Actions map[string][]string `yaml:"actions"`
 }
@@ -64,6 +71,7 @@ func (k *Keymap) UnmarshalYAML(node *yaml.Node) error {
 			if err := value.Decode(&k.Preset); err != nil {
 				return err
 			}
+			k.PresetSet = true
 		case "actions":
 			if err := value.Decode(&k.Actions); err != nil {
 				return err

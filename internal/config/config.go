@@ -99,6 +99,13 @@ type Defaults struct {
 	AutoLimit  int `yaml:"auto_limit"`
 	FetchChunk int `yaml:"fetch_chunk"`
 	BufferMax  int `yaml:"buffer_max"`
+
+	// Mouse says whether clicks mean anything.
+	//
+	// Mouse reporting disables the terminal's own text selection, which is a
+	// regression for anyone who copies by dragging. Off costs the ways in and
+	// no capability: every click resolves to an action or a palette command.
+	Mouse *bool `yaml:"mouse"`
 }
 
 // Config is the root of the configuration file.

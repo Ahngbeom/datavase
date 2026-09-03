@@ -59,11 +59,14 @@ type status struct {
 	// the ordinary case and says nothing.
 	columnsLeft int
 	message     string
-	// opening is the greeting's clauses, most important first. They are held
-	// apart rather than joined because the bar can drop a field whole and can
-	// only cut a sentence in half, and a list of independent hints loses far
-	// less to a dropped clause than to a chopped one.
-	opening []string
+	// hints are what the bar offers when it has nothing else to say. Most
+	// actionable first: the bar can drop a clause whole and can only cut a
+	// sentence in half, and a list of independent hints loses far less to a
+	// dropped clause than to a chopped one.
+	//
+	// Anything that actually happened displaces them, which is what keeps
+	// them out of a working session's way.
+	hints []string
 }
 
 // field is one item of the bar, with whether it may be dropped when the line
@@ -76,6 +79,11 @@ type field struct {
 	expendable  bool
 	expendRank  int // higher goes first when space runs out
 	visibleCost int
+	// target is what a click on this field answers. zoneNone for most fields
+	// — a zone is only worth publishing for a state someone can forget they
+	// are in and a click can act on, which today is the mode and the
+	// unlocked-writes notice.
+	target zoneTarget
 }
 
 // defaultStatusWidth is used when the real width is not known yet, on the
@@ -83,7 +91,10 @@ type field struct {
 const defaultStatusWidth = 100
 
 // render produces the line at the bar's default width.
-func (s status) render() string { return s.renderWidth(defaultStatusWidth) }
+func (s status) render() string {
+	line, _ := s.renderWidth(defaultStatusWidth)
+	return line
+}
 
 // Separators, widest first. Tightening the spacing costs nothing, so it is
 // tried before any field is dropped — losing whitespace is always better
@@ -94,8 +105,12 @@ const (
 )
 
 // renderWidth produces the line, tightening and then dropping fields until
-// it fits.
-func (s status) renderWidth(width int) string {
+// it fits, and the zones a click on the result can land in.
+//
+// A zone's columns are known only after the join, since dropping and
+// tightening both happen first — the same reason topBarState.renderWidth
+// accumulates them here rather than in fields().
+func (s status) renderWidth(width int) (string, []zone) {
 	fields := s.fields()
 
 	separator := wideSeparator
@@ -107,19 +122,32 @@ func (s status) renderWidth(width int) string {
 	for statusWidth(fields, sepCost) > width && dropOne(&fields) {
 	}
 
-	parts := make([]string, len(fields))
+	var (
+		line  strings.Builder
+		zones []zone
+		at    int
+	)
 	for i, f := range fields {
-		parts[i] = f.text
+		if i > 0 {
+			line.WriteString(separator)
+			at += sepCost
+		}
+		if f.target != zoneNone {
+			zones = append(zones, zone{from: at, to: at + f.visibleCost, target: f.target, index: -1})
+		}
+		line.WriteString(f.text)
+		at += f.visibleCost
 	}
-	line := strings.Join(parts, separator)
 
 	// On a terminal too narrow even for the warnings, something has to give.
 	// Truncating is the last resort and keeps the leftmost fields, which are
-	// the environment badge and whatever warning followed it.
-	if visibleCost(line) > width {
-		return truncateMarkup(line, width)
+	// the environment badge and whatever warning followed it. Truncating
+	// drops the zones with the columns they described — a partially cut field
+	// has nothing intact left for a click to mean.
+	if out := line.String(); visibleCost(out) > width {
+		return truncateMarkup(out, width), nil
 	}
-	return line
+	return line.String(), zones
 }
 
 // truncateMarkup shortens a tagged string to a visible width, leaving colour
@@ -231,10 +259,16 @@ func (s status) fields() []field {
 			mode += " " + s.vimPending
 		}
 		out = add(out, tag(colourNotice, mode), false, 0)
+		// It is where someone reads which keyboard they are on, so it is also
+		// where they reach to change it.
+		out[len(out)-1].target = zoneStatusMode
 	}
 
 	if s.writesEnabled {
 		out = add(out, tag(colourNotice, "writes on"), false, 0)
+		// A state someone can forget they are in; a click is the shortest way
+		// back to locked.
+		out[len(out)-1].target = zoneStatusWrites
 	}
 	// Never dropped. Whether the work so far can be undone is not a detail
 	// that should vanish because the terminal got narrow.
@@ -289,22 +323,37 @@ func (s status) fields() []field {
 		out = add(out, result.EscapeTags(oneLine(s.message)), false, 0)
 	}
 
-	// The greeting, on the other hand, is a list. Each clause is a field of
-	// its own, ranked so the least useful one goes first, which is what keeps
-	// a narrow terminal from cutting a hint in half and leaving "for the s".
-	for i, clause := range s.opening {
-		out = add(out, result.EscapeTags(oneLine(clause)), true, openingRank+i)
+	// Hints only appear when the bar has nothing else to say — the moment
+	// anything happens, the phase, the message or the error stops being idle
+	// and the answer the user was waiting for stops competing with a hint for
+	// the same room. Each clause is a field of its own, ranked so the least
+	// useful one goes first, which is what keeps a narrow terminal from
+	// cutting a hint in half and leaving "for the s".
+	if s.phase == phaseIdle && s.message == "" && s.err == nil {
+		for i, clause := range s.hints {
+			out = add(out, result.EscapeTags(oneLine(clause)), true, hintRank+i)
+		}
 	}
 	return out
 }
 
-// openingRank is where the greeting's clauses sit in the shedding order.
-// Above the row count and the elapsed time, because a greeting has already
-// been read by the time either of those exists.
-const openingRank = 40
+// hintRank is where the hints sit in the shedding order. Above the row count
+// and the elapsed time, because by the time either of those exists the bar
+// has something more important to say than what is under the keyboard.
+const hintRank = 40
 
 // visibleCost is how many cells a field occupies, ignoring colour tags.
 func visibleCost(s string) int {
+	return runewidth.StringWidth(visibleText(s))
+}
+
+// visibleText is what the terminal shows, colour tags removed.
+//
+// Separate from visibleCost because callers want different things from the
+// same parse: a zone boundary is a count of cells, computed by visibleCost
+// against the string this returns — and a rune count and a cell count are
+// not the same number once anything double-width is on the line.
+func visibleText(s string) string {
 	var (
 		b     strings.Builder
 		inTag bool
@@ -323,7 +372,7 @@ func visibleCost(s string) int {
 			b.WriteRune(runes[i])
 		}
 	}
-	return runewidth.StringWidth(b.String())
+	return b.String()
 }
 
 // tag wraps text in a tview colour tag. The text is escaped first: server
@@ -369,6 +418,9 @@ func formatElapsed(d time.Duration) string {
 type statusBar struct {
 	*tview.TextView
 	current func() status
+	// record hands the zones of this frame to the application's hitmap,
+	// offset into screen columns. Nil in a bar nobody is clicking.
+	record func(row int, zones []zone)
 }
 
 func newStatusBar(current func() status) *statusBar {
@@ -379,12 +431,16 @@ func newStatusBar(current func() status) *statusBar {
 }
 
 func (b *statusBar) Draw(screen tcell.Screen) {
-	_, _, width, _ := b.GetInnerRect()
+	x, y, width, _ := b.GetInnerRect()
 	if width <= 0 {
 		width = defaultStatusWidth
 	}
 
-	b.SetText(b.current().renderWidth(width))
+	text, zones := b.current().renderWidth(width)
+	b.SetText(text)
+	if b.record != nil {
+		b.record(y, offsetZones(zones, x))
+	}
 	b.TextView.Draw(screen)
 }
 

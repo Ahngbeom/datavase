@@ -146,3 +146,31 @@ func TestEveryPaletteCommandHasADistinctNameAndASummary(t *testing.T) {
 		seen[c.name] = true
 	}
 }
+
+// A context that opens an empty menu reads as a dead region.
+func TestEveryContextOffersSomething(t *testing.T) {
+	cmds := paletteCommands()
+
+	for _, ctx := range allMenuContexts() {
+		if got := menuEntries(cmds, ctx, func(keymap.Action) string { return "" }); len(got) == 0 {
+			t.Errorf("right-clicking in context %v would open an empty menu", ctx)
+		}
+	}
+}
+
+// A typo'd context shows up in no menu and is otherwise silent, so the
+// compiler cannot catch it and this must.
+func TestEveryCommandNamesRealContexts(t *testing.T) {
+	known := make(map[menuContext]bool, len(allMenuContexts()))
+	for _, ctx := range allMenuContexts() {
+		known[ctx] = true
+	}
+
+	for _, cmd := range paletteCommands() {
+		for _, ctx := range cmd.contexts {
+			if !known[ctx] {
+				t.Errorf("command %q names context %v, which does not exist", cmd.name, ctx)
+			}
+		}
+	}
+}

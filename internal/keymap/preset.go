@@ -27,11 +27,12 @@ const (
 
 // DefaultPreset is what a user who has said nothing gets.
 //
-// It is the modal one. That is a strong default, so the interface says which
-// mode it is in at all times, the empty editor says how to start typing, and
-// the help screen says how to leave — see the vim reference and the escape
-// hatch there.
-const DefaultPreset = PresetVim
+// It is the ordinary one, because the person who has said nothing is by
+// definition the person who has not been asked yet — and an editor where
+// typing does nothing is the wrong thing to hand someone who has not chosen
+// it. `dv init` asks, and the palette switches mid-session, so choosing the
+// modal editor costs one answer or one command.
+const DefaultPreset = PresetDataGrip
 
 // Presets lists the presets, most preferred first.
 func Presets() []Preset {

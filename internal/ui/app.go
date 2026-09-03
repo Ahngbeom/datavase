@@ -85,6 +85,12 @@ type App struct {
 	// configuration.
 	keys *keymap.Map
 
+	// presetAssumed says the configuration named no keyboard, so a.keys is
+	// the default rather than a choice. The opening line reads this once;
+	// nothing else needs to know a session's keyboard was assumed rather
+	// than stated.
+	presetAssumed bool
+
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
 	// around when it is toggled. sidebarRule is the hairline beside it.
 	//
@@ -103,6 +109,41 @@ type App struct {
 	// clipboard is the session-local copy, used for pasting since OSC 52
 	// reads are asynchronous and usually refused.
 	clipboard string
+
+	// mouseEnabled says whether a click means anything. config.Defaults.Mouse
+	// is a *bool so "not written" can be told apart from "written as false";
+	// this is the resolved value, true when the config left it unset.
+	//
+	// Off silences the zones and the context menu, not the hints: hints are
+	// driven by keyboard focus and name keys, so they are the discovery path
+	// for exactly the person who turned the mouse off.
+	mouseEnabled bool
+
+	// hits is where the last frame's regions recorded what a click on them
+	// means. Rebuilt every frame in captureScreen's SetBeforeDrawFunc, the
+	// same reason a region's own header is rebuilt every frame rather than
+	// updated: the only way it can be wrong is if a renderer is.
+	hits hitmap
+	// paneRows maps a header's screen row to the tabbed region that drew it.
+	// The hitmap alone answers what a zone means and which tab; it does not
+	// say which of the three regions the row belonged to, and a tab click has
+	// to know that to find the pane to switch. Rebuilt alongside hits, for
+	// the same reason.
+	paneRows map[int]*tabbed
+
+	// visitedRegions is which menuContexts the keyboard has already been
+	// offered a hint for this session. In memory only, unlike intro's marker
+	// file: that one has to survive a restart, and a beginner who restarts is
+	// a beginner again.
+	visitedRegions map[menuContext]bool
+	// hintBoundary is how many leading entries of status.hints are the
+	// greeting rather than some region's. refreshHints trims back to this
+	// boundary before adding the newly focused region's own clauses, so a
+	// region that has been left behind cannot go on describing where the
+	// keyboard used to be. notice() resets it to zero along with hints
+	// itself: once the greeting has been displaced there is nothing left of
+	// it to preserve.
+	hintBoundary int
 
 	// selectionAnchor and selectionCaret track which end of a selection the
 	// user is dragging. tview normalises both ends, so the direction cannot
@@ -247,6 +288,10 @@ type Deps struct {
 	// Empty means never show it, which is what a session with no usable state
 	// directory gets — and what every test that is not about the card gets.
 	IntroPath string
+	// PresetAssumed says the configuration named no keyboard preset, so Keys
+	// is the default rather than a choice. False — "they chose it" — is the
+	// safe default for tests and for a config that did name one.
+	PresetAssumed bool
 }
 
 // New builds the interface for an open session.
@@ -271,6 +316,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		detachFn:        deps.Detach,
 		cfg:             cfg,
 		keys:            keys,
+		presetAssumed:   deps.PresetAssumed,
 		cache:           deps.Cache,
 		history:         deps.History,
 		wt:              deps.Worktree,
@@ -279,11 +325,16 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
 		selectionAnchor: noAnchor,
+		mouseEnabled:    cfg.Defaults.Mouse == nil || *cfg.Defaults.Mouse,
 	}
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
 	}
-	a.status.opening = a.openingClauses(conn.ServerVersion())
+	a.status.hints = a.openingClauses(conn.ServerVersion())
+	// hintBoundary marks where the greeting ends, so the first region a
+	// visit adds to it can be told apart from the greeting later, when a
+	// second region's visit needs to trim the first one's back off.
+	a.hintBoundary = len(a.status.hints)
 
 	// Before any widget is built: tview copies its palette into each one as it
 	// is created, so a default claimed afterwards would reach nothing.
@@ -292,6 +343,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.buildWidgets()
 	a.buildLayout()
 	a.bindKeys()
+	a.bindMouse()
 	a.bindEditor()
 	a.captureScreen()
 	a.loadSchemas()
@@ -310,6 +362,11 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 func (a *App) captureScreen() {
 	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
 		a.screen = screen
+		// The zones of the frame about to be drawn replace the last one's. A
+		// region that is no longer on screen — the sidebar, toggled off —
+		// must not still answer for the rows it used to hold.
+		a.hits.clear()
+		a.paneRows = nil
 		return false
 	})
 }
@@ -321,12 +378,25 @@ func (a *App) captureScreen() {
 // nothing happen is the worst way to learn it; the status bar is already
 // there and costs nothing to read.
 func (a *App) openingClauses(serverVersion string) []string {
+	term := os.Getenv("TERM")
+
+	paletteHint := ""
+	if !keymap.SupportsExtendedKeys(term) {
+		// Two-thirds of the bindings have no plain-key fallback of their
+		// own, so on exactly the terminals this advice already targets the
+		// palette is the one key that still reaches all of them.
+		paletteHint = a.keyLabel(keymap.ActionCommandPalette) + " lists commands"
+	}
+
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
 		modal:         a.keys.Modal(),
-		advice:        keymap.TerminalAdviceShort(os.Getenv("TERM"), a.keys),
+		advice:        keymap.TerminalAdviceShort(term, a.keys),
+		paletteHint:   paletteHint,
+		presetAssumed: a.presetAssumed,
+		presetName:    string(a.keys.Preset()),
 	})
 }
 
@@ -339,6 +409,18 @@ type opening struct {
 	// advice is what this terminal cannot deliver, or empty when it can
 	// deliver everything.
 	advice string
+	// paletteHint names the palette's own fallback, for the same terminal
+	// advice already targets. Empty wherever advice would be, since the
+	// question it answers — how to reach an action with no fallback of its
+	// own — only exists on a terminal that cannot deliver the primary
+	// bindings in the first place.
+	paletteHint string
+	// presetAssumed says the configuration named no keyboard, so this
+	// session is running the default rather than a choice made for it. A
+	// session that assumed its keyboard has to say so, or a default that
+	// ever changes arrives as a key that silently stopped working.
+	presetAssumed bool
+	presetName    string
 }
 
 // openingClauses is the greeting, most actionable first.
@@ -348,12 +430,25 @@ type opening struct {
 // clause was chopped mid-word on an eighty-column terminal — which is where a
 // default one starts — and the reader was left with "for the s".
 //
-// The order decides what survives. What the terminal cannot deliver comes
-// first because it is the only place anyone is told that the key this
-// interface keeps naming will do nothing when they press it. The server
-// version brings up the rear: it is a greeting rather than an instruction, and
-// knowing which MariaDB answered has never stood between anyone and their
-// first query.
+// The order decides what survives, and it is the whole of the ranking: a
+// clause's position in this slice is its shedding priority, most protected
+// first. What the terminal cannot deliver comes first because it is the only
+// place anyone is told that the key this interface keeps naming will do
+// nothing when they press it. The schema tree follows immediately — the
+// sidebar starts hidden, so this is the only place its existence is
+// announced, and losing it is losing the one way a first-time user finds it
+// at all. F1 comes next, ahead of the palette hint, because it alone reaches
+// the full reference the palette hint is merely a shortcut around. The
+// palette hint itself earns last place among these four: it is the least
+// costly to lose, since the advice beside it already names a key that works
+// and F1 reaches the same information by a longer route — a user who loses
+// this clause is inconvenienced, not stranded, which is not true of the
+// other three. The server version brings up the rear of the greeting proper:
+// it is a greeting rather than an instruction, and knowing which MariaDB
+// answered has never stood between anyone and their first query. The
+// assumed-keyboard clause sits behind even that — a session on datagrip
+// needs no "i to type" rescue the way a session on vim does, so it is the
+// first thing shed on a narrow terminal.
 func openingClauses(o opening) []string {
 	var out []string
 
@@ -366,16 +461,23 @@ func openingClauses(o opening) []string {
 	if o.modal {
 		out = append(out, "vim keys: i to type, Esc for normal")
 	}
-	if o.helpKey != "" {
-		out = append(out, o.helpKey+" for keys")
-	}
 	// The schema tree is not on screen, so this is where anyone learns it
 	// exists at all.
 	if o.sidebarKey != "" {
 		out = append(out, o.sidebarKey+" for the schema tree")
 	}
+	if o.helpKey != "" {
+		out = append(out, o.helpKey+" for keys")
+	}
+	if o.paletteHint != "" {
+		out = append(out, o.paletteHint)
+	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)
+	}
+	if o.presetAssumed {
+		out = append(out, fmt.Sprintf("keyboard: %s — %q in the palette for another",
+			o.presetName, "keymap"))
 	}
 	return out
 }
@@ -473,7 +575,11 @@ func (a *App) buildWidgets() {
 	a.grid = tview.NewTable().
 		SetContent(a.content).
 		SetFixed(1, 1).
-		SetSelectable(true, true)
+		SetSelectable(true, true).
+		// SetBorders(true) draws a rule between every row too, halving how
+		// many fit on screen — row density matters more here than a box.
+		SetSeparator('│').
+		SetBordersColor(colourMuted)
 	a.grid.SetInputCapture(a.gridKey)
 
 	// Every region shares one component so they cannot drift apart in
@@ -481,19 +587,24 @@ func (a *App) buildWidgets() {
 	// saying which file it holds.
 	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
+	a.editorRegion.record = a.recorderFor(a.editorRegion)
 
 	a.schemaTabs = newTabbed().watch(a.schemaDetail)
 	a.schemaTabs.add(tabTree, a.tree)
 	a.schemaTabs.add(tabTables, a.buildTablesTab())
+	a.schemaTabs.record = a.recorderFor(a.schemaTabs)
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.add(tabDDL, a.buildDDLTab())
 	a.resultTabs.add(tabPlan, a.buildPlanTab())
 	a.resultTabs.add(tabSessions, a.buildSessionsTab())
+	a.resultTabs.record = a.recorderFor(a.resultTabs)
 
 	a.topBar = newTopBar(a.currentTopBar)
+	a.topBar.record = a.hits.set
 	a.statusBar = newStatusBar(a.currentStatus)
+	a.statusBar.record = a.hits.set
 }
 
 // editorDetail names the file the buffer came from, and whether it has
@@ -532,12 +643,19 @@ func schemaPaneDetail(tab, currentSchema string) string {
 }
 
 // resultDetail says what the empty results tab would otherwise not say.
+//
+// editorFocused reads a.editor.HasFocus() rather than a.app.GetFocus():
+// this runs at draw time (tabbed's detail is read from Draw), and asking
+// the Application who has focus from inside Draw deadlocks — see the
+// warning on tabbed.detail (panel.go). HasFocus is a plain field read on
+// the primitive itself and takes no lock.
 func (a *App) resultDetail() string {
 	return resultHint(resultState{
-		tab:     a.resultTabs.current(),
-		columns: a.buf.ColumnCount(),
-		running: a.running != nil,
-		wrote:   a.status.written != nil,
+		tab:           a.resultTabs.current(),
+		columns:       a.buf.ColumnCount(),
+		running:       a.running != nil,
+		wrote:         a.status.written != nil,
+		editorFocused: a.editor.HasFocus(),
 	})
 }
 
@@ -549,6 +667,11 @@ type resultState struct {
 	// wrote says the last statement changed rows instead of returning them,
 	// which is an empty grid for a reason rather than an empty grid.
 	wrote bool
+	// editorFocused is the one place Esc does not return to results:
+	// returnToResults steps aside there so vim's own Esc (leave insert
+	// mode) still gets it. The hint has to agree, or it promises a key
+	// that a Tab press into the editor quietly stops delivering.
+	editorFocused bool
 }
 
 // resultHint is the trailing line on the results tab's header.
@@ -560,8 +683,22 @@ type resultState struct {
 // statement was running and the bar two rows below said so. A pane telling
 // the user to do the thing they are watching happen is the same contradiction
 // the finders opened with.
+//
+// A tab that is not the results tab has no other way of telling you the
+// results are still there, so it says how to get back — Esc, a literal
+// rather than a bound action's key label, since rebinding "back" would take
+// it away from every dialog that already relies on it (see
+// returnToResults). Silent whenever the editor holds focus: that is the one
+// place Esc means something else, and a hint naming a key that does not do
+// what it says is worse than none.
 func resultHint(s resultState) string {
-	if s.tab != tabResults || s.columns > 0 {
+	if s.tab != tabResults {
+		if s.editorFocused {
+			return ""
+		}
+		return "Esc returns to results"
+	}
+	if s.columns > 0 {
 		return ""
 	}
 
@@ -661,6 +798,7 @@ func (a *App) cycleTab() {
 	}
 	a.resultTabs.cycle()
 	a.app.SetFocus(a.resultPrimitive())
+	a.refreshHints()
 }
 
 // focusVisibleSchemaTab moves focus onto whatever the newly shown tab holds,
@@ -670,6 +808,7 @@ func (a *App) focusVisibleSchemaTab() {
 		a.renderTables()
 	}
 	a.app.SetFocus(a.schemaPrimitive())
+	a.refreshHints()
 }
 
 func (a *App) toggleSidebar() {
@@ -710,6 +849,7 @@ const (
 	pageDataSource = "datasource"
 	pageKill       = "kill"
 	pageIntro      = "intro"
+	pageMenu       = "menu"
 )
 
 // focusOrder is the Tab cycle. A hidden sidebar is skipped rather than
@@ -725,10 +865,16 @@ func (a *App) focusOrder() []tview.Primitive {
 // resultPrimitive and schemaPrimitive return whichever widget the visible tab
 // holds, so Tab lands on something focusable rather than on the tab strip.
 func (a *App) resultPrimitive() tview.Primitive {
-	if a.resultTabs.current() == tabDDL {
+	switch a.resultTabs.current() {
+	case tabDDL:
 		return a.ddlView
+	case tabPlan:
+		return a.planView
+	case tabSessions:
+		return a.sessionsView
+	default:
+		return a.grid
 	}
-	return a.grid
 }
 
 func (a *App) schemaPrimitive() tview.Primitive {
@@ -744,6 +890,29 @@ func (a *App) schemaHasFocus() bool {
 	return focus == a.tree || focus == a.tableFilter || focus == a.tableList
 }
 
+// focusedContext maps the focused primitive to a menuContext, answering the
+// same question contextAt (menu.go) answers from a screen position rather
+// than from focus. Both gate the grid, the tree and the tables list on
+// which tab is actually current for the reason contextAt's own comment
+// gives — a hidden tab keeps the rect and the focus of whichever widget was
+// on top last — so the two cannot disagree about what a region is.
+//
+// false means the focus is on something a hint would be meaningless for: a
+// dialog, a menu, or any widget this session added since.
+func (a *App) focusedContext() (menuContext, bool) {
+	switch focus := a.app.GetFocus(); {
+	case focus == a.editor:
+		return ctxEditor, true
+	case focus == a.grid && a.resultTabs.current() == tabResults:
+		return ctxResult, true
+	case focus == a.tree && a.schemaTabs.current() == tabTree:
+		return ctxTree, true
+	case (focus == a.tableList || focus == a.tableFilter) && a.schemaTabs.current() == tabTables:
+		return ctxTables, true
+	}
+	return ctxEditor, false
+}
+
 func (a *App) bindKeys() {
 	a.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		// While a dialog is open it owns the keyboard.
@@ -751,11 +920,42 @@ func (a *App) bindKeys() {
 			return ev
 		}
 
+		if a.returnToResults(ev) {
+			return nil
+		}
 		if a.dispatch(a.keys.Lookup(ev)) {
 			return nil
 		}
 		return ev
 	})
+}
+
+// returnToResults sends Esc back to the results tab from any of the other
+// three, picking up the keyboard along with it — inspecting a table, asking
+// for a plan or listing sessions can all leave the keyboard somewhere else
+// entirely, and the tab strip alone does not say how to get back.
+//
+// Esc is deliberately not a keymap.Action: making it one would let it be
+// rebound away from every dialog that already relies on it as the one
+// universal way out, so it is intercepted here, ahead of dispatch. The
+// editor keeps its own Esc — leaving insert mode — which is why this steps
+// aside whenever the editor holds focus rather than deciding purely from
+// which tab is showing.
+func (a *App) returnToResults(ev *tcell.EventKey) bool {
+	if ev.Key() != tcell.KeyEscape {
+		return false
+	}
+	if a.app.GetFocus() == a.editor {
+		return false
+	}
+	if a.resultTabs.current() == tabResults {
+		return false
+	}
+
+	a.resultTabs.show(tabResults)
+	a.app.SetFocus(a.resultPrimitive())
+	a.refreshHints()
+	return true
 }
 
 // dispatch performs an action and reports whether it consumed the key.
@@ -853,11 +1053,73 @@ func (a *App) cycleFocus(delta int) {
 		if p == current {
 			next := (i + delta + len(order)) % len(order)
 			a.app.SetFocus(order[next])
+			a.refreshHints()
 			return
 		}
 	}
 	a.app.SetFocus(order[0])
+	a.refreshHints()
 }
+
+// refreshHints offers the commands for wherever the keyboard is now, the
+// first time this session it goes there.
+//
+// A beginner meets each region once and is told what is in it; someone
+// working never sees these, because after the first statement the bar
+// always has a row count or an error to carry instead — fields() withholds
+// every hint the moment the phase, the message or the error stops being
+// idle. The visited bit is per-region and in memory: intro keeps its
+// equivalent on disk because it must survive a restart, and this one must
+// not.
+func (a *App) refreshHints() {
+	ctx, ok := a.focusedContext()
+	if !ok {
+		return
+	}
+
+	// Whatever the previously focused region added no longer describes where
+	// the keyboard is; only the greeting, if it is still unread, survives a
+	// move. Without this a region left days ago — or one second ago — would
+	// go on being read as "here" by anyone glancing at the bar, and the
+	// shedding order would rank it above the region actually in use, because
+	// rank follows position in this slice and a stale entry sits earlier in
+	// it than a fresh one appended after.
+	if len(a.status.hints) > a.hintBoundary {
+		a.status.hints = a.status.hints[:a.hintBoundary]
+	}
+
+	if a.visitedRegions[ctx] {
+		return
+	}
+	if a.visitedRegions == nil {
+		a.visitedRegions = make(map[menuContext]bool)
+	}
+	a.visitedRegions[ctx] = true
+
+	entries := menuEntries(paletteCommands(), ctx, a.keyLabel)
+
+	// An entry with no key covers no action a beginner can reach directly —
+	// finding it again means opening the menu regardless, so it does not
+	// spend one of the region's three slots.
+	clauses := make([]string, 0, hintsShown)
+	for _, e := range entries {
+		if e.key == "" {
+			continue
+		}
+		clauses = append(clauses, fmt.Sprintf("%s %s", e.key, e.name))
+		if len(clauses) == hintsShown {
+			break
+		}
+	}
+
+	// Appended after the trim above, not assigned: the greeting — if any is
+	// still standing — is what this joins onto, not what it replaces.
+	a.status.hints = append(a.status.hints, clauses...)
+}
+
+// hintsShown is how many commands a region offers on the bar. Three is what
+// fits beside a schema name on a narrow terminal; the menu holds the rest.
+const hintsShown = 3
 
 // detach leaves the terminal and keeps the session.
 //
@@ -1229,10 +1491,17 @@ func (a *App) cancelRunning() {
 // value itself on the next draw, so setting the field is the whole job.
 func (a *App) notice(msg string) {
 	a.status.message = msg
-	// The greeting is what the bar says until something happens; once
-	// something has, keeping it would leave the opening advice competing for
-	// room with the answer the user was waiting for.
-	a.status.opening = nil
+	// The greeting and every region's hint are what the bar says until
+	// something happens; once something has, keeping them would leave them
+	// competing for room with the answer the user was waiting for. fields()
+	// already withholds them whenever message is set, so this is belt and
+	// braces — it also means a visited region's hint cannot resurface later
+	// stitched onto some unrelated notice.
+	a.status.hints = nil
+	// The greeting just cleared is the one hintBoundary was counting; once it
+	// is gone there is nothing left of it for refreshHints to preserve, so
+	// the next region's visit should not go looking for it.
+	a.hintBoundary = 0
 }
 
 func (a *App) refreshStatus() {

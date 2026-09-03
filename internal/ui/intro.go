@@ -45,6 +45,15 @@ func (a *App) introText() string {
 			keymap.PadLabel(a.keyLabel(action), introKeyColumn), action.Describe())
 	}
 
+	// The one line that leads to everything else in the interface: the rest
+	// of what can be done is discoverable from wherever the pointer is,
+	// rather than from a key that has to be known first. Dropped along with
+	// the rest of the mouse when it is off — nothing here would work.
+	if a.mouseEnabled {
+		fmt.Fprintf(&b, "\n%s\n", tag(colourMuted,
+			"Right-click anywhere for what you can do there, with its key."))
+	}
+
 	// What the guard will do is the one thing about this session that cannot be
 	// worked out by pressing keys, and it is the reason the rest of this exists.
 	fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, a.introGuardLine()))

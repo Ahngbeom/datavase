@@ -160,6 +160,7 @@ defaults:
   auto_limit: 1000        # LIMIT added to unbounded SELECTs
   fetch_chunk: 500        # rows per batch while streaming
   buffer_max: 50000       # rows held in memory before truncating
+  mouse: true             # false turns off clicks; see "The screen"
 ```
 
 Passwords never go in this file. Store them in the OS keychain:
@@ -206,11 +207,12 @@ palette brings it back.
 
 ### Keys
 
-**The editor is modal by default** — it starts in vim's normal mode, so press
-`i` before you type. The status bar always says which mode you are in, and `F1`
-opens with the five keys worth knowing first, the way out of the modal editor
-among them. To use an ordinary typing editor instead, see
-[Changing the keys](#changing-the-keys).
+**Typing types** — the default keyboard is an ordinary one, no mode to leave
+before the first keystroke does anything. `dv init` asks which keyboard you
+want, and `keymap vim` in the palette (or `preset: vim` in the config) gets
+you the modal editor instead, its status bar always saying which mode you are
+in and `F1` opening with the five keys worth knowing first, the way out among
+them. See [Changing the keys](#changing-the-keys).
 
 `:` opens a command line — on the modal keyboard, since that is where the key
 is free. `:w` saves, `:q` quits — asking first if there is unsaved work — `:q!`
@@ -229,7 +231,8 @@ by the time it would matter. `Tab` completes as far as one name.
 Everything outside the editor is the same on every keyboard, and follows
 DataGrip. Where DataGrip and VS Code agree, that key is used; where they
 differ, DataGrip wins. **`⌘` and `Ctrl` do the same thing** — use whichever
-your hands reach for.
+your hands reach for. Inside tmux the interface shows the `Ctrl` spelling even
+on a Mac, since tmux does not forward `⌘` to the program it hosts.
 
 | Action | macOS | Windows / Linux |
 |---|---|---|
@@ -316,8 +319,8 @@ Two things are outside that promise, deliberately:
 - **Undo and redo.** They belong to the text widget rather than to datavase's
   key map, so there is nothing here to offer.
 
-And on the **vim** preset — the default — editing needs no modifiers in the
-first place: `dd`, `yy`, `p`, `gg` are all unclaimable.
+And on the **vim** preset, editing needs no modifiers in the first place:
+`dd`, `yy`, `p`, `gg` are all unclaimable.
 
 You can also just move the key. Listed bindings replace an action's defaults:
 
@@ -373,8 +376,8 @@ keymap:
 
 | Preset | What it is |
 | --- | --- |
-| `vim` | **the default** — modal editing (normal, insert, visual) on DataGrip's application keys |
-| `datagrip` | DataGrip's SQL-tool keyboard |
+| `vim` | modal editing (normal, insert, visual) on DataGrip's application keys |
+| `datagrip` | **the default** — DataGrip's SQL-tool keyboard |
 | `vscode` | VS Code where the two disagree: `⌘⇧K` deletes a line, `⌘⇧P` is the palette, `⌘P` finds a table |
 
 Presets can also be switched mid-session from the command palette
@@ -726,8 +729,8 @@ opens a fresh one, and so does restarting.
 █   ADD INDEX idx_email (email);
 █──────────────────────────────────────────────────────────────────────────
 █  ▸results ddl
-█ id      email
-█ 1       ada@example.com
+█ id      │email
+█ 1       │ada@example.com
 █──────────────────────────────────────────────────────────────────────────
 █ 1 row  ·  6ms
 ```
@@ -747,6 +750,23 @@ Regions are separated by a single rule rather than boxed. Each names itself
 once, on its own header line, and the one holding the keyboard is marked `▌`.
 The editor's header carries the open file and a `*` while it differs from disk;
 it does not say "editor", because the caret already does.
+
+**Clicks mean something.** A datasource, a schema or `keys` in the top bar
+does what pressing its key does; a tab or a region name switches focus there;
+a header sorts the grid by that column; and double-clicking a result row
+opens it in full. Right-click anywhere for a menu of what can be done there,
+each entry naming the key that already does it — nothing on it is reachable
+only by mouse.
+
+Set `mouse: false` under `defaults` to turn all of that off, for anyone who
+selects text by dragging: mouse reporting in a terminal disables its own
+native selection, so a click that means something is a regression rather than
+a feature for them. **This makes `dv` ignore the mouse; it does not hand the
+terminal its selection back.** Mouse reporting is turned on by the client, for
+its own terminal, independently of this setting — `dv` on the other end has no
+way to ask it to stop. Everything the mouse could reach stays reachable from
+the keyboard: the command palette (`F3`) and the hints the status bar offers
+as focus moves both name the same commands the right-click menu does.
 
 ## The schema pane
 
@@ -823,10 +843,12 @@ numerically and disagree with the server about its own column. Where the driver
 reports no type, the column sorts as text — a coarse ordering being better than
 one nothing justifies.
 
-The result pane has two tabs as well: **results** and **ddl**. `⌘I` on a
-selected table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches
-to the ddl tab; `⌘C` there copies the whole definition. Running a query
-switches back to results.
+The result pane has four tabs: **results**, **ddl**, **plan** and
+**sessions** — the last two are their own sections below. `⌘I` on a selected
+table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches to the
+ddl tab; `⌘C` there copies the whole definition. Running a query switches
+back to results, and so does `Esc` from any of the other three, wherever the
+keyboard happens to be.
 
 The lookup is deliberate rather than automatic — `SHOW CREATE` is a server
 round trip, and issuing one every time the tree selection moved would make

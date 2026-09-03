@@ -43,6 +43,13 @@ type tabbed struct {
 	// GetFocus takes the same one — and the Flex already knows, because the
 	// focused widget is one of its children.
 	detail func() string
+
+	// record hands this frame's header zones to the application's hitmap.
+	record func(row int, zones []zone)
+	// headerRow and headerCol are where the header was last drawn, in screen
+	// coordinates.
+	headerRow int
+	headerCol int
 }
 
 func newTabbed() *tabbed {
@@ -126,15 +133,19 @@ func (t *tabbed) cycle() {
 // forget. The strip is a handful of string joins; the status bar has always
 // been rendered this way for the same reason.
 func (t *tabbed) Draw(screen tcell.Screen) {
-	if _, _, width, _ := t.GetInnerRect(); width > 0 {
-		t.width = width
+	if x, y, width, _ := t.GetInnerRect(); width > 0 {
+		t.width, t.headerCol, t.headerRow = width, x, y
 	}
 	t.renderHeader()
 	t.Flex.Draw(screen)
 }
 
 func (t *tabbed) renderHeader() {
-	t.header.SetText(regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.width))
+	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.width)
+	t.header.SetText(text)
+	if t.record != nil {
+		t.record(t.headerRow, offsetZones(zones, t.headerCol))
+	}
 }
 
 // focusMarker is the bar that says which region the keyboard is in. It is a
@@ -147,7 +158,7 @@ const focusMarker = "▌"
 //
 // The detail is the first thing to go when the region is narrow: which tab you
 // are on is structural, while a file name or a hint is a convenience.
-func regionHeader(names []string, active int, focused bool, detail string, width int) string {
+func regionHeader(names []string, active int, focused bool, detail string, width int) (string, []zone) {
 	if width < 1 {
 		width = 1
 	}
@@ -162,9 +173,12 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 	}
 	remaining := width - 2
 
-	tabs := tabHeader(names, active, remaining)
+	tabs, zones := tabHeader(names, active, remaining)
 	line := marker + tabs
 	used := visibleCost(tabs)
+
+	// The strip is drawn after the marker, so its zones sit that far in.
+	zones = offsetZones(zones, visibleCost(marker))
 
 	const gap = "  "
 	// Four cells is the least that can carry a legible fragment; below that the
@@ -172,7 +186,16 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 	if room := remaining - used - len(gap); detail != "" && room >= 4 {
 		line += gap + tag(colourMuted, result.Truncate(detail, room))
 	}
-	return line
+
+	// The region-name zone spans the whole header and is appended last, after
+	// every tab zone: hitmap.at returns the first zone that covers a column,
+	// so a tab keeps answering for itself and every other column — the
+	// marker, the gap, the detail, and the whole of a header with no tabs at
+	// all — falls through to this one. Clicking anywhere on a header that is
+	// not a tab still has to focus the region; that is what the header is.
+	zones = append(zones, zone{from: 0, to: width, target: zoneRegionName, index: -1})
+
+	return line, zones
 }
 
 // tabHeader renders the strip of tab names, marking the active one.
@@ -180,9 +203,9 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 // Names are abbreviated when the pane is narrow, but the active marker is
 // never dropped: a header that does not say which tab you are looking at has
 // no reason to exist.
-func tabHeader(names []string, active, width int) string {
+func tabHeader(names []string, active, width int) (string, []zone) {
 	if len(names) == 0 {
-		return ""
+		return "", nil
 	}
 	if active < 0 || active >= len(names) {
 		active = 0
@@ -192,13 +215,14 @@ func tabHeader(names []string, active, width int) string {
 	}
 
 	for _, budget := range abbreviationBudgets(names, width) {
-		if header, ok := renderTabs(names, active, budget, width); ok {
-			return header
+		if header, zones, ok := renderTabs(names, active, budget, width); ok {
+			return header, zones
 		}
 	}
 
 	// Nothing fits; show the active tab's initial so the pane is not silent.
-	return fmt.Sprintf("[%s]%s[-]", colourAccent, result.EscapeTags(firstRune(names[active])))
+	// One initial is not a target — there is nothing to distinguish it from.
+	return fmt.Sprintf("[%s]%s[-]", colourAccent, result.EscapeTags(firstRune(names[active]))), nil
 }
 
 // abbreviationBudgets are the per-name lengths to try, longest first.
@@ -218,11 +242,12 @@ func abbreviationBudgets(names []string, width int) []int {
 }
 
 // renderTabs lays out the strip with each name capped at budget runes.
-func renderTabs(names []string, active, budget, width int) (string, bool) {
+func renderTabs(names []string, active, budget, width int) (string, []zone, bool) {
 	const separator = " "
 
 	var (
 		markup  strings.Builder
+		zones   []zone
 		visible int
 	)
 	for i, name := range names {
@@ -233,21 +258,27 @@ func renderTabs(names []string, active, budget, width int) (string, bool) {
 			visible += utf8.RuneCountInString(separator)
 		}
 
+		from := visible
 		// The active tab is bracketed as well as coloured: colour alone is
 		// lost on a monochrome terminal or to a colour-blind reader.
 		if i == active {
 			markup.WriteString(fmt.Sprintf("[%s]▸%s[-]", colourAccent, result.EscapeTags(label)))
 			visible += utf8.RuneCountInString(label) + 1
-			continue
+		} else {
+			markup.WriteString(fmt.Sprintf("[%s]%s[-]", colourMuted, result.EscapeTags(label)))
+			visible += utf8.RuneCountInString(label)
 		}
-		markup.WriteString(fmt.Sprintf("[%s]%s[-]", colourMuted, result.EscapeTags(label)))
-		visible += utf8.RuneCountInString(label)
+		// An unnamed tab is a region holding one thing, and there is nothing
+		// to switch to.
+		if name != "" {
+			zones = append(zones, zone{from: from, to: visible, target: zoneTab, index: i})
+		}
 	}
 
 	if visible > width {
-		return "", false
+		return "", nil, false
 	}
-	return markup.String(), true
+	return markup.String(), zones, true
 }
 
 func firstRune(s string) string {

@@ -295,6 +295,26 @@ func TestEnterOnAnUnfilteredPaletteCannotUnlockWrites(t *testing.T) {
 	t.Fatal("the palette offers nothing to run")
 }
 
+// The palette is keyboard-only, so a command that rankCommand cannot match
+// against its own name has no way in at all — not a worse way, none.
+func TestEveryCommandCanBeFoundByTypingItsOwnName(t *testing.T) {
+	for _, cmd := range paletteCommands() {
+		var found bool
+		choose := func(c command) func() {
+			if c.name == cmd.name {
+				found = true
+			}
+			return func() {}
+		}
+
+		paletteItems(cmd.name, choose)
+
+		if !found {
+			t.Errorf("%q cannot be found in the palette by typing its own name", cmd.name)
+		}
+	}
+}
+
 // The ":" command line resolves palette command names, so a palette command
 // that borrows a vim command's name and means something else makes the line
 // lie about what it is about to do.

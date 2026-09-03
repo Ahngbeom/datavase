@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // harness drives the real interface against a simulated terminal, so the
@@ -35,6 +37,14 @@ type harness struct {
 
 	// keysHandled counts the keys the interface has finished processing.
 	keysHandled int64
+
+	// mouseActions counts, by kind, the mouse actions the interface has
+	// finished processing. tview turns one press-and-release into up to
+	// three of them — down, up, click, a double click adding a fourth — so a
+	// count that did not distinguish kinds could be satisfied by the down
+	// alone, long before the click a test is actually waiting for.
+	mouseMu      sync.Mutex
+	mouseActions map[tview.MouseAction]int64
 }
 
 // seedCache replaces the completion cache with a known schema.
@@ -94,7 +104,26 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker, false)
+}
+
+// newHarnessAssumingPreset is newHarness for the tests that are about a
+// session whose configuration never named a keyboard — the case the opening
+// line's assumed-keyboard clause exists for.
+func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
+	t.Helper()
+
+	ds, password := testmysql.DataSource(t)
+	ds.Env = env
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := db.Open(ctx, ds, password, "")
+	if err != nil {
+		t.Fatalf("db.Open() error = %v", err)
+	}
+	return harnessWith(t, &session.Session{Conn: conn}, ds, "", true)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -104,10 +133,10 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds, "")
+	return harnessWith(t, sess, ds, "", false)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string, presetAssumed bool) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -155,11 +184,16 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 
 	app := New(sess, cfg, Deps{
 		Keys: keys, Cache: cache, History: hist, Recent: recents, IntroPath: introMarker,
+		PresetAssumed: presetAssumed,
 	})
 	app.SetScreen(screen)
 
-	h := &harness{app: app, screen: screen, cache: cache, history: hist, t: t}
+	h := &harness{
+		app: app, screen: screen, cache: cache, history: hist, t: t,
+		mouseActions: make(map[tview.MouseAction]int64),
+	}
 	h.countKeys()
+	h.countMouse()
 
 	done := make(chan error, 1)
 	go func() { done <- app.Run() }()
@@ -216,6 +250,247 @@ func (h *harness) awaitKeys(want int64) {
 	}
 	h.t.Fatalf("the interface handled %d of %d injected keys",
 		atomic.LoadInt64(&h.keysHandled), want)
+}
+
+// countMouse makes injected clicks observable, the way countKeys does for
+// keys, and for the same reason: an injected mouse event goes onto the
+// screen's queue while QueueUpdateDraw uses the application's.
+//
+// Counting is by kind of action rather than by call: a click arrives at the
+// capture as a down, an up and a click in that order (a double click adds a
+// fourth), so a caller that only wants to know a click has landed must be
+// able to wait for that one and not for whichever fires first.
+//
+// It wraps the interface's own capture from the outside; nothing here exists
+// in the application because of a test.
+func (h *harness) countMouse() {
+	inner := h.app.app.GetMouseCapture()
+
+	h.app.app.SetMouseCapture(func(ev *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+		out, outAction := ev, action
+		if inner != nil {
+			out, outAction = inner(ev, action)
+		}
+		h.mouseMu.Lock()
+		h.mouseActions[action]++
+		h.mouseMu.Unlock()
+		return out, outAction
+	})
+}
+
+// mouseActionCount reads how many times the interface has finished handling
+// one kind of mouse action.
+func (h *harness) mouseActionCount(action tview.MouseAction) int64 {
+	h.mouseMu.Lock()
+	defer h.mouseMu.Unlock()
+	return h.mouseActions[action]
+}
+
+// click presses and releases the left button at a screen position.
+//
+// tview reports a click on the release, so both halves are needed: injecting
+// only the press leaves the application waiting for the rest of a gesture.
+// The wait is for the click action itself, not merely for some action to
+// have gone through the capture — the down that precedes it would satisfy
+// that too, before the click had been decided.
+func (h *harness) click(x, y int) {
+	h.t.Helper()
+
+	before := h.mouseActionCount(tview.MouseLeftClick)
+	h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
+	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	h.awaitMouseAction(tview.MouseLeftClick, before+1)
+}
+
+// rightClick presses and releases the secondary button at a screen position,
+// the same shape as click. tview maps tcell.ButtonSecondary to
+// MouseRightClick (application.go's button table), which is the action a
+// context menu opens on.
+func (h *harness) rightClick(x, y int) {
+	h.t.Helper()
+
+	before := h.mouseActionCount(tview.MouseRightClick)
+	h.screen.InjectMouse(x, y, tcell.ButtonSecondary, tcell.ModNone)
+	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	h.awaitMouseAction(tview.MouseRightClick, before+1)
+}
+
+// doubleClick presses twice inside tview's own double-click interval.
+//
+// The interval is tview's and not configurable, so this does not sleep
+// between the two presses: the events are injected back to back, which is
+// inside any interval tview could be using. tview's release handler fires
+// either a click or a double click, never both, so the first press-release
+// pair's click does not satisfy the wait below — only the double click the
+// second pair produces does.
+func (h *harness) doubleClick(x, y int) {
+	h.t.Helper()
+
+	before := h.mouseActionCount(tview.MouseLeftDoubleClick)
+	for i := 0; i < 2; i++ {
+		h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
+		h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
+	}
+	h.awaitMouseAction(tview.MouseLeftDoubleClick, before+1)
+}
+
+// clickZone presses whatever the interface drew for a target, by name.
+//
+// Tests name what they are clicking for the reason h.do names actions rather
+// than keys: a layout change must not invalidate a behavioural test. Only the
+// tests that verify the zone mapping itself use raw coordinates.
+func (h *harness) clickZone(target zoneTarget, index int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		for row, zones := range a.hits.rows {
+			for _, z := range zones {
+				if z.target == target && z.index == index {
+					x, y = z.from, row
+					return true
+				}
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("nothing on screen is a zone for target %v index %d; screen:\n%s",
+			target, index, h.text())
+	}
+	h.click(x, y)
+}
+
+// awaitMouseAction blocks until the interface has finished handling at least
+// want of a specific kind of mouse action.
+func (h *harness) awaitMouseAction(action tview.MouseAction, want int64) {
+	h.t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if h.mouseActionCount(action) >= want {
+			h.settle()
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	h.t.Fatalf("the interface handled %d of %d %v actions",
+		h.mouseActionCount(action), want, action)
+}
+
+// gridHeaderPosition is a screen position inside a column's header cell.
+//
+// The grid lays its columns out by content width, so this asks tview where
+// the cell actually is rather than computing it.
+func (h *harness) gridHeaderPosition(column int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		rx, ry, width, _ := a.grid.GetInnerRect()
+		for col := rx; col < rx+width; col++ {
+			if r, c := a.grid.CellAt(col, ry); r == 0 && c == column {
+				x, y = col, ry
+				return true
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("column %d has no header cell on screen; screen:\n%s", column, h.text())
+	}
+	return x, y
+}
+
+// gridHeaderGlyphPosition finds where a header's own text is actually
+// drawn, reading the simulated screen's cells rather than asking
+// a.grid.CellAt — the same lookup a click resolves through, which a test
+// meant to catch CellAt disagreeing with what is on screen cannot also use
+// to find what to click.
+func (h *harness) gridHeaderGlyphPosition(glyph rune) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	want := string(glyph)
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		rx, ry, width, _ := a.grid.GetInnerRect()
+		cells, screenWidth, _ := h.screen.GetContents()
+		for col := rx; col < rx+width; col++ {
+			cell := cells[ry*screenWidth+col]
+			if string(cell.Bytes) == want {
+				x, y = col, ry
+				return true
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("%q is not drawn anywhere on the header row; screen:\n%s", want, h.text())
+	}
+	return x, y
+}
+
+// gridColumn reads a column's values in the order the grid is showing them.
+func (h *harness) gridColumn(column int) []string {
+	h.t.Helper()
+
+	var out []string
+	done := make(chan struct{})
+	h.app.app.QueueUpdateDraw(func() {
+		for row := 1; row < h.app.content.GetRowCount(); row++ {
+			out = append(out, h.app.content.GetCell(row, column).Text)
+		}
+		close(done)
+	})
+	<-done
+	return out
+}
+
+// treeNodePosition is a screen position on a visible tree row.
+func (h *harness) treeNodePosition(offset int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		rx, ry, _, _ := a.tree.GetInnerRect()
+		x, y = rx+2, ry+offset
+		return true
+	})
+	return x, y
+}
+
+// tableItemPosition is a screen position on the tables tab's Nth item.
+func (h *harness) tableItemPosition(index int) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		rx, ry, _, _ := a.tableList.GetInnerRect()
+		x, y = rx+2, ry+index
+		return true
+	})
+	return x, y
+}
+
+// regionHeaderPosition is a screen position on a pane's own header row, at
+// its leftmost column — inside the region-name zone and, for a pane with
+// tabs, outside every one of them.
+func (h *harness) regionHeaderPosition(pane func(*App) *tabbed) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	var x, y int
+	h.inspect(func(a *App) bool {
+		p := pane(a)
+		x, y = p.headerCol, p.headerRow
+		return true
+	})
+	return x, y
 }
 
 // inject sends keys and waits for all of them to be handled.
@@ -317,6 +592,19 @@ func (h *harness) do(action keymap.Action) {
 	// can always deliver: it needs no extended keyboard protocol.
 	b := bindings[len(bindings)-1]
 	h.inject(tcell.NewEventKey(b.Key, b.Rune, b.Mods))
+}
+
+// runCommand runs a named palette command the way a user does: open the
+// palette, type the name, take what Enter picks. Every existing palette test
+// either reads the list or drives the App method directly; this exists for a
+// test that only cares what running a command does, not how the palette
+// itself behaves.
+func (h *harness) runCommand(name string) {
+	h.t.Helper()
+
+	h.do(keymap.ActionCommandPalette)
+	h.typeInto(name)
+	h.press(tcell.KeyEnter)
 }
 
 // editorText reads the editor buffer from the UI goroutine.

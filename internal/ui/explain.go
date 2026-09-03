@@ -145,6 +145,7 @@ func (a *App) showPlanFrom(buf *result.Buffer) {
 
 	a.resultTabs.show(tabPlan)
 	a.planView.show(plan)
+	a.app.SetFocus(a.resultPrimitive())
 	a.notice(fmt.Sprintf("plan · %s copies it", a.copyKeyLabel()))
 }
 
@@ -188,6 +189,7 @@ func (a *App) fetchPlan(statement, schema string) {
 			// is the visible tab, and it renders itself once it has one.
 			a.resultTabs.show(tabPlan)
 			a.planView.show(plan)
+			a.app.SetFocus(a.resultPrimitive())
 			a.notice(fmt.Sprintf("plan · %s copies it", a.copyKeyLabel()))
 		})
 	}()

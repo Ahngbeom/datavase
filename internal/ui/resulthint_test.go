@@ -10,6 +10,12 @@ import "testing"
 // statement while one was running: the bar said "running… ^C cancels" and the
 // pane two rows above said "run a statement to see rows here", at the moment
 // the user is watching the screen hardest.
+//
+// It also said nothing at all on the DDL, plan and sessions tabs. The fix is
+// not this pure function alone: see returnToResults (app.go) and
+// TestEscFromDDLReturnsFocusAndTabToResults (panel_integration_test.go),
+// which drives the real tree-select-then-inspect path and checks focus, not
+// just the string this test checks.
 func TestTheResultHint(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
@@ -42,8 +48,23 @@ func TestTheResultHint(t *testing.T) {
 			want:  "",
 		},
 		{
-			name:  "another tab is in front",
+			name:  "the DDL tab is in front, where a user who clicked a table lands",
+			state: resultState{tab: tabDDL},
+			want:  "Esc returns to results",
+		},
+		{
+			name:  "the plan tab is in front",
 			state: resultState{tab: tabPlan, running: true},
+			want:  "Esc returns to results",
+		},
+		{
+			name:  "the sessions tab is in front",
+			state: resultState{tab: tabSessions},
+			want:  "Esc returns to results",
+		},
+		{
+			name:  "the DDL tab is in front but a Tab press already moved focus into the editor",
+			state: resultState{tab: tabDDL, editorFocused: true},
 			want:  "",
 		},
 	} {

@@ -113,13 +113,48 @@ func TestGhosttySnippetSkipsTheEnterStandIn(t *testing.T) {
 	}
 }
 
-func TestTmuxSnippetCarriesBothRequiredSettings(t *testing.T) {
+func TestTmuxSnippetCarriesAllRequiredSettings(t *testing.T) {
 	got := TmuxSnippet()
 
-	for _, want := range []string{`default-terminal "tmux-256color"`, "extended-keys on"} {
+	for _, want := range []string{
+		`default-terminal "tmux-256color"`, "extended-keys on",
+		// Without this, the keyboard fix alone still leaves a click
+		// reaching nowhere — tmux forwards no mouse events until told to.
+		"mouse on",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("tmux snippet is missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// tmux kill-server destroys every session on the socket, not just the one
+// applying this file — a user asked whether following this advice would
+// kill the other sessions they had running, and it would have. source-file
+// applies the same settings without touching anything else.
+func TestTmuxSnippetSaysHowToApplyItselfWithoutKillingAnything(t *testing.T) {
+	got := TmuxSnippet()
+
+	for _, want := range []string{
+		// The instruction itself.
+		"tmux source-file ~/.tmux.conf",
+		// It has to run on the session being configured, or it targets
+		// whatever socket $TMUX names outside of one — which may not exist.
+		"from inside tmux",
+		// The mouse setting is live immediately; the key settings are not,
+		// since TERM is fixed when a pane is created — the fact that sends
+		// someone who does not know it back to kill-server.
+		"applies at once",
+		"opened afterwards",
+		"prefix c",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tmux snippet is missing %q:\n%s", want, got)
+		}
+	}
+
+	if strings.Contains(got, "kill-server") {
+		t.Errorf("tmux snippet still tells someone to kill their tmux server, destroying every other session on the socket:\n%s", got)
 	}
 }
 

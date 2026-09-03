@@ -151,10 +151,14 @@ var clipboardActions = map[Action]bool{
 	ActionCopyOrCancel: true,
 }
 
-// TmuxSnippet returns the two settings that let tmux carry modified keys.
+// TmuxSnippet returns the settings that let tmux carry modified keys and
+// mouse events through to the application.
 func TmuxSnippet() string {
-	return `# datavase — let tmux carry modified keys such as Ctrl+Enter
-# Append to ~/.tmux.conf, then: tmux kill-server (or restart your session).
+	return `# datavase — let tmux carry modified keys and mouse events through to it
+# Append to ~/.tmux.conf, then, from inside tmux: tmux source-file ~/.tmux.conf
+# (outside tmux, that targets a socket that may not even exist).
+# The mouse setting applies at once. The key settings only reach panes
+# opened afterwards — TERM is fixed per pane — open one (prefix c), not a restart.
 #
 # The default TERM inside tmux is "screen-256color", which predates the
 # extended keyboard protocols; applications therefore never receive
@@ -164,6 +168,12 @@ func TmuxSnippet() string {
 set -g default-terminal "tmux-256color"
 set -g extended-keys on
 set -as terminal-features 'xterm*:extkeys'
+
+# tmux forwards no mouse events at all until told to, so clicking a table
+# or dragging to resize a pane reaches the application only with this on.
+# Once it is, tmux's own copy-by-drag needs a modifier held — on most
+# terminals that means holding Shift while you drag to select text.
+set -g mouse on
 `
 }
 

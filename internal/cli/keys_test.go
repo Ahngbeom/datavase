@@ -79,6 +79,27 @@ func TestKeysTmuxSnippet(t *testing.T) {
 	}
 }
 
+// tmux forwards no mouse events at all until told to, so the keyboard-only
+// fix still leaves clicking dead.
+func TestKeysTmuxSnippetAlsoEnablesTheMouse(t *testing.T) {
+	h := newHarness(t)
+
+	if code := h.app.Run([]string{"keys", "--tmux"}); code != 0 {
+		t.Fatalf("Run(keys --tmux) = %d, want 0", code)
+	}
+
+	out := h.out.String()
+	if !strings.Contains(out, "set -g mouse on") {
+		t.Errorf("tmux output is missing the mouse setting:\n%s", out)
+	}
+	// Once tmux owns the mouse, its own copy-by-drag needs a modifier held —
+	// a detail that has to survive the copy into ~/.tmux.conf, or the next
+	// person to drag-select loses their own selection without knowing why.
+	if !strings.Contains(out, "Shift") {
+		t.Errorf("tmux output does not warn that its own selection now needs a modifier:\n%s", out)
+	}
+}
+
 func TestKeysIterm2Advice(t *testing.T) {
 	h := newHarness(t)
 

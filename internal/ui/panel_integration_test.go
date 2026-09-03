@@ -12,6 +12,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // focusSchemaPane puts focus on the schema pane without depending on how
@@ -100,6 +101,47 @@ func TestTablesTabOpensATable(t *testing.T) {
 	}
 }
 
+// buildLayout puts schemaTabs and rightPane in one horizontal Flex, so with
+// the sidebar open their headers can land on the same screen row. The
+// hitmap used to be keyed by row alone and replace whatever a row already
+// held, so whichever region recorded second — the one holding focus, since
+// tview.Flex.Draw defers a focused item's Draw — silently erased the
+// other's zones from the hitmap.
+func TestBothHeadersSharingARowPublishTheirOwnZones(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.showSidebar()
+	h.settle()
+
+	var schemaRow, editorRow int
+	var zones []zone
+	h.inspect(func(a *App) bool {
+		schemaRow = a.schemaTabs.headerRow
+		editorRow = a.editorRegion.headerRow
+		zones = a.hits.rows[editorRow]
+		return true
+	})
+
+	if schemaRow != editorRow {
+		t.Fatalf("schemaTabs and editorRegion drew their headers on rows %d and %d; this test needs them shared", schemaRow, editorRow)
+	}
+
+	var haveTab, haveRegionName bool
+	for _, z := range zones {
+		if z.target == zoneTab {
+			haveTab = true
+		}
+		if z.target == zoneRegionName {
+			haveRegionName = true
+		}
+	}
+	if !haveTab {
+		t.Errorf("row %d holds no zoneTab zone; the sidebar's tab strip is gone: %+v", editorRow, zones)
+	}
+	if !haveRegionName {
+		t.Errorf("row %d holds no zoneRegionName zone; the editor header's zone is gone: %+v", editorRow, zones)
+	}
+}
+
 // Cycling affects the focused pane only; otherwise one key would move two
 // panes at once and neither would be predictable.
 func TestCycleTabAffectsTheFocusedPaneOnly(t *testing.T) {
@@ -161,6 +203,81 @@ func TestInspectShowsTheDefinition(t *testing.T) {
 	if got := h.currentTabs(); got.result != tabDDL {
 		t.Errorf("the result pane is on %q, want it switched to %q", got.result, tabDDL)
 	}
+}
+
+// The field report this fix exists for: select a table in the tree, inspect
+// it, and get back to the results with one key. Inspecting now focuses the
+// DDL pane on its own, so the test also drives focus back to the tree
+// afterward — the same mismatch Tab, another click, or browsing for a
+// second table while the first table's DDL is still up would leave behind —
+// and checks Esc recovers from that, not only from the moment inspecting
+// itself leaves.
+func TestEscFromDDLReturnsFocusAndTabToResults(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	seedSequenceTable(t, h)
+
+	h.focusSchemaPane()
+	h.waitFor("the tree to list at least one schema", func(a *App) bool {
+		return len(a.tree.GetRoot().GetChildren()) > 0
+	})
+
+	var schema *tview.TreeNode
+	h.inspect(func(a *App) bool {
+		for _, n := range a.tree.GetRoot().GetChildren() {
+			if ref, ok := n.GetReference().(*nodeRef); ok && strings.EqualFold(ref.schema, testmysql.DefaultDatabase) {
+				schema = n
+				return true
+			}
+		}
+		return false
+	})
+	if schema == nil {
+		t.Fatalf("the tree never listed %q", testmysql.DefaultDatabase)
+	}
+
+	// Selecting the schema is what loads its tables — the same lazy load a
+	// real click triggers.
+	h.app.app.QueueUpdateDraw(func() { h.app.onTreeSelect(schema) })
+	h.settle()
+
+	var table *tview.TreeNode
+	h.waitFor("dv_seq to appear under its schema", func(a *App) bool {
+		for _, n := range schema.GetChildren() {
+			if ref, ok := n.GetReference().(*nodeRef); ok && strings.EqualFold(ref.table, "dv_seq") {
+				table = n
+				return true
+			}
+		}
+		return false
+	})
+
+	// Selecting the node in the tree, without following it through
+	// onTreeSelect's expand-and-load path: this is what a real click on an
+	// already-loaded table leaves behind — a current node and unmoved focus.
+	h.app.app.QueueUpdateDraw(func() {
+		h.app.tree.SetCurrentNode(table)
+		h.app.app.SetFocus(h.app.tree)
+	})
+	h.settle()
+
+	h.do(keymap.ActionInspect)
+	if !h.waitForScreen("CREATE TABLE") {
+		t.Fatalf("the definition never appeared:\n%s", h.text())
+	}
+	if got := h.currentTabs(); got.result != tabDDL {
+		t.Fatalf("result pane is on %q, want %q before Esc is tried", got.result, tabDDL)
+	}
+
+	// Send the keyboard back to the tree, as Tab or a second click would —
+	// the DDL stays on screen, exactly as the field report found it.
+	h.app.app.QueueUpdateDraw(func() { h.app.app.SetFocus(h.app.tree) })
+	h.settle()
+
+	h.press(tcell.KeyEscape)
+
+	h.waitFor("Esc to switch back to the results tab and focus it", func(a *App) bool {
+		return a.resultTabs.current() == tabResults && a.app.GetFocus() == a.resultPrimitive()
+	})
 }
 
 // Running a query afterwards returns the pane to the grid.

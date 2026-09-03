@@ -86,3 +86,23 @@ func (a *App) useSchema(schema string) {
 	a.setSchema(schema)
 	a.notice(fmt.Sprintf("using %s", schema))
 }
+
+// useSelectedSchema issues USE for whatever the tree's current node belongs
+// to.
+//
+// This is distinct from selecting the node, which only points completion and
+// the tables tab at a schema. useSchema is what the "●" marks and what an
+// unqualified statement actually follows, so a schema browsed to and a schema
+// in force stay two different things until this is asked for.
+func (a *App) useSelectedSchema() {
+	node := a.tree.GetCurrentNode()
+	if node == nil {
+		return
+	}
+	ref, ok := node.GetReference().(*nodeRef)
+	if !ok || ref.schema == "" {
+		a.notice("nothing here has a schema")
+		return
+	}
+	a.useSchema(ref.schema)
+}

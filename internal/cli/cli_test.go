@@ -266,6 +266,52 @@ func TestStatusReportsWithNoServer(t *testing.T) {
 	}
 }
 
+// dv server stop must reach StopServer with force set only when --force was
+// typed, since sending SIGTERM to anything is a choice only --force may make.
+func TestServerStopPassesForceOnlyWhenTyped(t *testing.T) {
+	h := newHarness(t)
+
+	var got []bool
+	h.app.StopServer = func(force bool) error {
+		got = append(got, force)
+		return nil
+	}
+
+	if code := h.app.Run([]string{"server", "stop"}); code != exitOK {
+		t.Fatalf("Run(server stop) = %d, want %d", code, exitOK)
+	}
+	if code := h.app.Run([]string{"server", "stop", "--force"}); code != exitOK {
+		t.Fatalf("Run(server stop --force) = %d, want %d", code, exitOK)
+	}
+
+	if len(got) != 2 || got[0] != false || got[1] != true {
+		t.Fatalf("StopServer called with force=%v, want [false true]", got)
+	}
+}
+
+// Whatever StopServer says about a session that would not end must reach the
+// user — that sentence, naming the pid, is the whole recovery path when a
+// wedged session leaves the stop request unanswered.
+func TestServerStopReportsWhatStopServerSaid(t *testing.T) {
+	h := newHarness(t)
+	h.app.StopServer = func(bool) error {
+		return errors.New(`a dv server is running (pid 82515); it did not stop within 5s.
+
+  dv server stop --force   end it by signalling that pid directly`)
+	}
+
+	code := h.app.Run([]string{"server", "stop"})
+	if code == exitOK {
+		t.Fatal("Run(server stop) = 0, want a non-zero exit code")
+	}
+	if !strings.Contains(h.err.String(), "pid 82515") {
+		t.Errorf("stderr = %q, want it to name the pid", h.err.String())
+	}
+	if !strings.Contains(h.err.String(), "--force") {
+		t.Errorf("stderr = %q, want it to name --force", h.err.String())
+	}
+}
+
 func TestRmDeletesStoredPassword(t *testing.T) {
 	h := newHarness(t)
 	if err := h.app.Secrets.Set("prod-app", "pw"); err != nil {

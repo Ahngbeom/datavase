@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/attach"
@@ -192,8 +193,32 @@ func runServer(cfg *config.Config) error {
 	return srv.Wait()
 }
 
-// stopServer is `dv server stop`.
-func stopServer() error {
+// stopPollInterval is how often the graceful stop path checks whether the
+// socket has gone, once asked.
+const stopPollInterval = 100 * time.Millisecond
+
+// stopDeadline bounds how long the graceful stop path waits for the process
+// to actually exit before telling the user the session did not answer. It is
+// a var rather than a const so a test can shrink it instead of spending it
+// for real.
+var stopDeadline = 5 * time.Second
+
+// stopServer is `dv server stop`. Without force it asks the session to end
+// itself and waits up to stopDeadline; with force it skips straight to
+// signalling the pid the observation API reports.
+func stopServer(force bool) error {
+	if force {
+		return stopServerForce()
+	}
+	return stopServerGracefully()
+}
+
+// stopServerGracefully is what defect 1 was missing: the previous
+// implementation returned as soon as the stop message was written, which is
+// success down a socket that the wedged session it was meant to end never
+// reads from again. Waiting here, with a deadline, is what turns that
+// silence into something the user can act on.
+func stopServerGracefully() error {
 	path, err := daemon.SocketPath()
 	if err != nil {
 		return err
@@ -202,9 +227,70 @@ func stopServer() error {
 	if err != nil {
 		return errors.New("no dv server is running")
 	}
-	defer conn.Close()
+	sendErr := proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
+	conn.Close()
+	if sendErr != nil {
+		return sendErr
+	}
 
-	return proto.NewEncoder(conn).ToServer(proto.ToServer{Kind: proto.KindStop})
+	deadline := time.Now().Add(stopDeadline)
+	for time.Now().Before(deadline) {
+		if !serverRunning() {
+			return nil
+		}
+		time.Sleep(stopPollInterval)
+	}
+	if !serverRunning() {
+		return nil
+	}
+
+	pid, pidErr := serverPID()
+	if pidErr != nil {
+		return fmt.Errorf("a dv server is running, but did not stop within %s, and its observation socket did not answer either: %w", stopDeadline, pidErr)
+	}
+	return fmt.Errorf(
+		"a dv server is running (pid %d); it did not stop within %s.\n\n  dv server stop --force   end it by signalling that pid directly",
+		pid, stopDeadline)
+}
+
+// stopServerForce ends a session that stopServerGracefully could not, by
+// signalling the pid the observation API reports.
+func stopServerForce() error {
+	pid, err := serverPID()
+	if err != nil {
+		return fmt.Errorf("cannot find the server to stop: %w", err)
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("finding pid %d: %w", pid, err)
+	}
+
+	// The signal is sent from here, the client, rather than from the
+	// observation API that supplied the pid. snapshot.Source holds only two
+	// functions and neither can mutate anything — see internal/snapshot's
+	// package comment — and a kill added there would be exactly the control
+	// path that design refuses to open. Reading the pid over a read-only
+	// socket and acting on it in this process is what keeps that decision
+	// intact.
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("signalling pid %d: %w", pid, err)
+	}
+	return nil
+}
+
+// serverPID reads the pid the observation API's server tier reports. That
+// tier answers whatever the session is doing, which is what lets --force
+// find a wedged server even when the session inside it cannot.
+func serverPID() (int, error) {
+	raw, err := apiSnapshot()
+	if err != nil {
+		return 0, err
+	}
+	var s snapshot.Snapshot
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0, fmt.Errorf("the server answered with something unreadable: %w", err)
+	}
+	return s.Server.PID, nil
 }
 
 // apiReadTimeout bounds the wait for the observation socket to answer.

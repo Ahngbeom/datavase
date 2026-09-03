@@ -411,6 +411,21 @@ dv status             # say whether a session is running, and what it is doing
 dv server stop        # end the session and the process holding it
 ```
 
+`dv server stop` asks the session to end itself and waits a few seconds. If
+the session is wedged — stuck on something that keeps it from ever reaching
+that request — the wait times out and names the pid instead of hanging:
+
+```
+a dv server is running (pid 82515); it did not stop within 5s.
+
+  dv server stop --force   end it by signalling that pid directly
+```
+
+`dv server stop --force` is the second command in that message: it reads the
+pid from `dv status`'s own observation socket and sends it `SIGTERM` directly,
+skipping the session entirely. Nothing is ever signalled without `--force` —
+a wedged session is reported, not acted on, until a person chooses to.
+
 `dv status` names the datasource, the environment, how long the session has
 been up, and whether a terminal is currently attached, and adds a second line
 when a statement is running:

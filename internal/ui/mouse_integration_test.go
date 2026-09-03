@@ -199,6 +199,26 @@ func TestClickingAHeaderAndPressingSortAgreeOnTheOrder(t *testing.T) {
 	}
 }
 
+// The separator between columns shifts every header's x position; a header
+// click resolving to the wrong column would sort by whichever one is to its
+// left instead of the one actually clicked.
+func TestClickingTheSecondHeaderSortsByTheSecondColumnNotTheFirst(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.typeSQL("SELECT 1 AS a, 2 AS b UNION ALL SELECT 2, 1")
+	h.do(keymap.ActionRun)
+	h.waitFor("two rows", func(a *App) bool { return a.buf.RowCount() == 2 })
+
+	x, y := h.gridHeaderPosition(1)
+	h.click(x, y)
+
+	if got := h.gridColumn(1); !slices.Equal(got, []string{"1", "2"}) {
+		t.Errorf("clicking column b's header sorted %v, want ascending by b", got)
+	}
+	if got := h.gridColumn(0); slices.Equal(got, []string{"1", "2"}) {
+		t.Errorf("column a is also ascending; the click sorted by column 0, not the one clicked")
+	}
+}
+
 // A grid is the wrong shape for a wide row, and the row view is the answer.
 // Reaching it is a chord nobody guesses, and double click is what every grid
 // in the world already means by "open this".

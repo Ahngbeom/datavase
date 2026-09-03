@@ -545,7 +545,11 @@ func (a *App) buildWidgets() {
 	a.grid = tview.NewTable().
 		SetContent(a.content).
 		SetFixed(1, 1).
-		SetSelectable(true, true)
+		SetSelectable(true, true).
+		// SetBorders(true) draws a rule between every row too, halving how
+		// many fit on screen — row density matters more here than a box.
+		SetSeparator('│').
+		SetBordersColor(colourMuted)
 	a.grid.SetInputCapture(a.gridKey)
 
 	// Every region shares one component so they cannot drift apart in

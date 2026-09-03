@@ -231,7 +231,8 @@ by the time it would matter. `Tab` completes as far as one name.
 Everything outside the editor is the same on every keyboard, and follows
 DataGrip. Where DataGrip and VS Code agree, that key is used; where they
 differ, DataGrip wins. **`⌘` and `Ctrl` do the same thing** — use whichever
-your hands reach for.
+your hands reach for. Inside tmux the interface shows the `Ctrl` spelling even
+on a Mac, since tmux does not forward `⌘` to the program it hosts.
 
 | Action | macOS | Windows / Linux |
 |---|---|---|
@@ -728,8 +729,8 @@ opens a fresh one, and so does restarting.
 █   ADD INDEX idx_email (email);
 █──────────────────────────────────────────────────────────────────────────
 █  ▸results ddl
-█ id      email
-█ 1       ada@example.com
+█ id      │email
+█ 1       │ada@example.com
 █──────────────────────────────────────────────────────────────────────────
 █ 1 row  ·  6ms
 ```

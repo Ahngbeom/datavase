@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -183,22 +185,23 @@ func TestStopEndsASessionThatAnswers(t *testing.T) {
 	}
 }
 
-// This is the defect: dv.sock is served by the same loop the session runs
-// in, so a wedged session leaves the stop write with nothing reading it back
-// and dv server stop returning success while the process stays up. The fix
-// is a deadline that turns silence into a reported pid rather than a hang.
+// The stop request is always read — Accept serves every connection on its
+// own goroutine, and a KindStop reaches session.Stop every time. What a
+// wedged session does not do is let Run return: Stop only asks the
+// interface's event loop to exit, and a loop stuck inside a handler never
+// gets back around to notice. The deadline is what turns that silence into a
+// reported pid rather than a hang.
 func TestStopNamesThePIDWhenTheSessionWontEnd(t *testing.T) {
-	orig := stopDeadline
-	stopDeadline = 300 * time.Millisecond
-	t.Cleanup(func() { stopDeadline = orig })
-
 	unblock := make(chan struct{})
 	t.Cleanup(func() { close(unblock) })
 	startTestServer(t, &wedgedSession{unblock: unblock})
 
-	err := stopServer(false)
+	// stopServerGracefully takes its deadline as a parameter rather than
+	// through stopServer(false), so this test can use a short one without a
+	// package var that exists only for that purpose.
+	err := stopServerGracefully(300 * time.Millisecond)
 	if err == nil {
-		t.Fatal("stopServer(false) = nil, want an error naming the pid to reach with --force")
+		t.Fatal("stopServerGracefully(...) = nil, want an error naming the pid to reach with --force")
 	}
 
 	wantPID := fmt.Sprintf("pid %d", os.Getpid())
@@ -251,5 +254,103 @@ func TestForceSignalsThePIDFromTheObservationSnapshot(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the victim process was never signalled")
+	}
+
+	// Specifically SIGTERM, not just "the process ended": a future switch to
+	// Kill must be a deliberate choice, not an accident this test would not
+	// have caught.
+	ws, ok := victim.ProcessState.Sys().(syscall.WaitStatus)
+	if !ok {
+		t.Fatalf("ProcessState.Sys() = %T, want syscall.WaitStatus", victim.ProcessState.Sys())
+	}
+	if !ws.Signaled() || ws.Signal() != syscall.SIGTERM {
+		t.Errorf("victim's WaitStatus = %v, want it signalled by SIGTERM", ws)
+	}
+}
+
+// A malformed or foreign responder on the socket dv dialled could report a
+// pid of 0 or negative. kill(2) treats both specially — 0 reaches the
+// caller's own process group and a negative pid reaches every process the
+// caller owns — so --force must refuse either outright rather than ever
+// pass one to Signal. Nothing in this codebase produces such a value today:
+// Info always sets it from os.Getpid().
+func TestForceRefusesAnUnusablePID(t *testing.T) {
+	for _, pid := range []int{0, -1} {
+		t.Run(fmt.Sprintf("pid=%d", pid), func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", shortStateDir(t))
+
+			apiPath, err := daemon.APISocketPath()
+			if err != nil {
+				t.Fatalf("APISocketPath: %v", err)
+			}
+			apiLn, err := daemon.Listen(apiPath)
+			if err != nil {
+				t.Fatalf("Listen: %v", err)
+			}
+			t.Cleanup(func() { apiLn.Close() })
+
+			go daemon.ServeAPI(apiLn, snapshot.Source{
+				Server:  func() snapshot.Server { return snapshot.Server{PID: pid} },
+				Session: func(context.Context) (*snapshot.Session, error) { return nil, nil },
+			})
+
+			err = stopServer(true)
+			if err == nil {
+				t.Fatalf("stopServer(true) = nil, want an error refusing pid %d", pid)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf("%d", pid)) {
+				t.Errorf("error = %q, want it to name %d", err, pid)
+			}
+
+			// The proof that pid was never reached: signal 0 to this test's
+			// own process is the standard liveness probe and returns nil only
+			// if the process still exists. If the guard above were missing,
+			// pid 0 would have reached this same process group.
+			self, err := os.FindProcess(os.Getpid())
+			if err != nil {
+				t.Fatalf("FindProcess(self): %v", err)
+			}
+			if err := self.Signal(syscall.Signal(0)); err != nil {
+				t.Fatalf("this test process is no longer signalable: %v", err)
+			}
+		})
+	}
+}
+
+// A dv-api.sock file can outlive the process that made it — the same
+// staleness internal/daemon/socket.go already handles for dv.sock. --force
+// must fail to find a server rather than trust a dial that no longer reaches
+// anything, and this pins ECONNREFUSED specifically as the mechanism (an
+// ordinary Listener.Close unlinks the file, which would test ENOENT
+// instead) so a future "remove and retry" or "fall back to pgrep" has to
+// change this test on purpose.
+func TestForceFindsNothingBehindAStaleAPISocket(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", shortStateDir(t))
+
+	apiPath, err := daemon.APISocketPath()
+	if err != nil {
+		t.Fatalf("APISocketPath: %v", err)
+	}
+	// daemon.Listen rather than net.Listen directly: it creates
+	// $XDG_STATE_HOME/datavase, which shortStateDir does not.
+	ln, err := daemon.Listen(apiPath)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	ul, ok := ln.(*net.UnixListener)
+	if !ok {
+		t.Fatalf("Listen returned %T, want *net.UnixListener", ln)
+	}
+	ul.SetUnlinkOnClose(false)
+	if err := ln.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	err = stopServer(true)
+	if err == nil {
+		t.Fatal("stopServer(true) = nil, want an error — nothing is listening on the observation socket")
+	}
+	if !strings.Contains(err.Error(), "cannot find the server") {
+		t.Errorf("error = %q, want it to say the server could not be found", err)
 	}
 }

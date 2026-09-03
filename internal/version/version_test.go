@@ -1,6 +1,9 @@
 package version
 
-import "testing"
+import (
+	"runtime/debug"
+	"testing"
+)
 
 // A go install'd or goreleaser-built binary already carries a real version,
 // which is what the handshake's existing check compares. Adding an mtime on
@@ -11,34 +14,53 @@ func TestBuildFingerprintIsEmptyForAReleaseVersion(t *testing.T) {
 	injected = "v0.7.0"
 	t.Cleanup(func() { injected = old })
 
-	if got := BuildFingerprint(); got != "" {
-		t.Errorf("BuildFingerprint() = %q, want empty for a released version", got)
+	vcsInfo := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "deadbeef"}}}
+	if got := buildFingerprint(vcsInfo); got != "" {
+		t.Errorf("buildFingerprint() = %q, want empty for a released version", got)
 	}
 }
 
-// A `go test` binary reports "(devel)" the same way an ordinary local build
-// does, which is what makes this test exercise the real path rather than a
-// stand-in for it.
-func TestBuildFingerprintIsSetForADevelopmentBuild(t *testing.T) {
-	if String() != "(devel)" {
-		t.Skipf("this binary reports %q, not (devel); nothing to distinguish", String())
-	}
+// `go install module@version` builds from the module proxy's cache, not a
+// version-controlled tree, so it carries no vcs.revision setting — that is
+// the second exempt case fingerprinting must not disturb.
+func TestBuildFingerprintIsEmptyWithoutVCSProvenance(t *testing.T) {
+	old := injected
+	injected = ""
+	t.Cleanup(func() { injected = old })
 
-	if got := BuildFingerprint(); got == "" {
-		t.Error("BuildFingerprint() = \"\", want a non-empty value for a development build")
+	noVCSInfo := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "GOOS", Value: "darwin"}}}
+	if got := buildFingerprint(noVCSInfo); got != "" {
+		t.Errorf("buildFingerprint() = %q, want empty without a vcs.revision setting", got)
+	}
+}
+
+// Since Go 1.24, a build made inside a git checkout is stamped with a
+// pseudo-version and "+dirty" instead of "(devel)", and String() alone
+// cannot tell two such builds apart — which is why the fingerprint gates on
+// the vcs.revision setting rather than on what String() reports. This is the
+// case the fingerprint exists for: a real build in a real checkout.
+func TestBuildFingerprintIsSetWithVCSProvenance(t *testing.T) {
+	old := injected
+	injected = ""
+	t.Cleanup(func() { injected = old })
+
+	vcsInfo := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "deadbeef"}}}
+	if got := buildFingerprint(vcsInfo); got == "" {
+		t.Error("buildFingerprint() = \"\", want a non-empty value with a vcs.revision setting")
 	}
 }
 
 // Two builds are the same build only if nothing has been rebuilt since; the
 // fingerprint exists to say so even though String() cannot.
 func TestBuildFingerprintIsStableAcrossCalls(t *testing.T) {
-	if String() != "(devel)" {
-		t.Skipf("this binary reports %q, not (devel); nothing to distinguish", String())
-	}
+	old := injected
+	injected = ""
+	t.Cleanup(func() { injected = old })
 
-	first := BuildFingerprint()
-	second := BuildFingerprint()
+	vcsInfo := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "deadbeef"}}}
+	first := buildFingerprint(vcsInfo)
+	second := buildFingerprint(vcsInfo)
 	if first != second {
-		t.Errorf("BuildFingerprint() = %q then %q, want the same value without a rebuild in between", first, second)
+		t.Errorf("buildFingerprint() = %q then %q, want the same value without a rebuild in between", first, second)
 	}
 }

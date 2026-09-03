@@ -201,10 +201,8 @@ func runServer(cfg *config.Config) error {
 const stopPollInterval = 100 * time.Millisecond
 
 // stopDeadline bounds how long the graceful stop path waits for the process
-// to actually exit before telling the user the session did not answer. It is
-// a var rather than a const so a test can shrink it instead of spending it
-// for real.
-var stopDeadline = 5 * time.Second
+// to actually exit before telling the user the session did not answer.
+const stopDeadline = 5 * time.Second
 
 // stopServer is `dv server stop`. Without force it asks the session to end
 // itself and waits up to stopDeadline; with force it skips straight to
@@ -213,15 +211,22 @@ func stopServer(force bool) error {
 	if force {
 		return stopServerForce()
 	}
-	return stopServerGracefully()
+	return stopServerGracefully(stopDeadline)
 }
 
 // stopServerGracefully asks the session to end itself and waits for the
-// process to actually go. dv.sock is served by the same loop the session
-// runs in, so a wedged session leaves the stop write with nothing on the
-// other end ever reading it back; the deadline is what turns that silence
-// into a pid the user can act on instead of a hang.
-func stopServerGracefully() error {
+// process to actually go. The stop request itself is always read — Accept
+// serves every connection on its own goroutine (internal/daemon/socket.go),
+// and a KindStop reaches Stop, which calls session.Stop, every time. What a
+// wedged session does not do is let Run return: Stop only asks the
+// interface's event loop to exit, and a loop stuck inside a handler never
+// gets back around to notice. The deadline is what turns that silence into a
+// pid the user can act on instead of a hang.
+//
+// deadline is a parameter rather than a package constant read directly so a
+// test can supply its own short value without a var that exists only for
+// that purpose.
+func stopServerGracefully(deadline time.Duration) error {
 	path, err := daemon.SocketPath()
 	if err != nil {
 		return err
@@ -236,8 +241,8 @@ func stopServerGracefully() error {
 		return sendErr
 	}
 
-	deadline := time.Now().Add(stopDeadline)
-	for time.Now().Before(deadline) {
+	giveUpAt := time.Now().Add(deadline)
+	for time.Now().Before(giveUpAt) {
 		if !serverRunning() {
 			return nil
 		}
@@ -249,11 +254,11 @@ func stopServerGracefully() error {
 
 	pid, pidErr := serverPID()
 	if pidErr != nil {
-		return fmt.Errorf("a dv server is running, but did not stop within %s, and its observation socket did not answer either: %w", stopDeadline, pidErr)
+		return fmt.Errorf("a dv server is running, but did not stop within %s, and its observation socket did not answer either: %w", deadline, pidErr)
 	}
 	return fmt.Errorf(
 		"a dv server is running (pid %d); it did not stop within %s.\n\n  dv server stop --force   end it by signalling that pid directly",
-		pid, stopDeadline)
+		pid, deadline)
 }
 
 // stopServerForce ends a session that stopServerGracefully could not, by
@@ -262,6 +267,16 @@ func stopServerForce() error {
 	pid, err := serverPID()
 	if err != nil {
 		return fmt.Errorf("cannot find the server to stop: %w", err)
+	}
+
+	// kill(2) treats a pid of 0 as the caller's own process group and a
+	// negative pid as every process the caller owns — either would signal
+	// far more than the server this was asked to stop. Nothing in this
+	// repository ever produces such a value (Info always sets it from
+	// os.Getpid()), but --force must refuse it outright rather than learn
+	// that from a malformed or foreign responder on the socket it dialled.
+	if pid <= 0 {
+		return fmt.Errorf("the observation socket named an unusable pid (%d); refusing to signal it", pid)
 	}
 
 	// Checked ahead of the call rather than left to surface as whatever

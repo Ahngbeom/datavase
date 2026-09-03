@@ -411,9 +411,11 @@ dv status             # say whether a session is running, and what it is doing
 dv server stop        # end the session and the process holding it
 ```
 
-`dv server stop` asks the session to end itself and waits a few seconds. If
-the session is wedged — stuck on something that keeps it from ever reaching
-that request — the wait times out and names the pid instead of hanging:
+`dv server stop` asks the session to end itself and waits a few seconds. The
+request always gets through; what can go wrong is the session itself —
+stuck inside something that never gets back around to noticing it was asked
+to stop. When that happens the wait times out and names the pid instead of
+hanging:
 
 ```
 a dv server is running (pid 82515); it did not stop within 5s.

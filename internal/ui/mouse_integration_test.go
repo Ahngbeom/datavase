@@ -197,16 +197,18 @@ func TestClickingAHeaderAndPressingSortAgreeOnTheOrder(t *testing.T) {
 	}
 }
 
-// The separator between columns shifts every header's x position; a header
-// click resolving to the wrong column would sort by whichever one is to its
-// left instead of the one actually clicked.
+// Clicking the column named "b" has to sort by "b" — checked by finding
+// where that glyph is actually drawn (gridHeaderGlyphPosition reads the
+// simulated screen directly) rather than by asking a.grid.CellAt for
+// column 1's position, which is the same lookup a click resolves through
+// and so cannot catch the two disagreeing.
 func TestClickingTheSecondHeaderSortsByTheSecondColumnNotTheFirst(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	h.typeSQL("SELECT 1 AS a, 2 AS b UNION ALL SELECT 2, 1")
 	h.do(keymap.ActionRun)
 	h.waitFor("two rows", func(a *App) bool { return a.buf.RowCount() == 2 })
 
-	x, y := h.gridHeaderPosition(1)
+	x, y := h.gridHeaderGlyphPosition('b')
 	h.click(x, y)
 
 	if got := h.gridColumn(1); !slices.Equal(got, []string{"1", "2"}) {

@@ -843,10 +843,12 @@ numerically and disagree with the server about its own column. Where the driver
 reports no type, the column sorts as text — a coarse ordering being better than
 one nothing justifies.
 
-The result pane has two tabs as well: **results** and **ddl**. `⌘I` on a
-selected table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches
-to the ddl tab; `⌘C` there copies the whole definition. Running a query
-switches back to results.
+The result pane has four tabs: **results**, **ddl**, **plan** and
+**sessions** — the last two are their own sections below. `⌘I` on a selected
+table runs `SHOW CREATE TABLE` (or `SHOW CREATE VIEW`) and switches to the
+ddl tab; `⌘C` there copies the whole definition. Running a query switches
+back to results, and so does `Esc` from any of the other three, wherever the
+keyboard happens to be.
 
 The lookup is deliberate rather than automatic — `SHOW CREATE` is a server
 round trip, and issuing one every time the tree selection moved would make

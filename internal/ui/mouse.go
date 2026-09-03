@@ -165,13 +165,20 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 // mouseRightClick opens the palette's own commands, filtered to where the
 // click landed — the answer to "what can I do here" that the left-click
 // zones and the command palette do not give on their own.
+//
+// A position contextAt does not claim is handed back untouched, per its own
+// doc comment on what false means there.
 func (a *App) mouseRightClick(ev *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
 	if a.dialogOpen() {
 		return ev, action
 	}
 
 	x, y := ev.Position()
-	a.showMenu(a.contextAt(x, y), x, y)
+	ctx, ok := a.contextAt(x, y)
+	if !ok {
+		return ev, action
+	}
+	a.showMenu(ctx, x, y)
 	return nil, action
 }
 

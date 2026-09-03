@@ -135,20 +135,31 @@ func (a *App) menuContentWidth() int {
 // keeps that region's coordinates and InRect on it keeps matching there
 // too. Checking which tab is actually current, not just which rect a
 // position falls in, is what a stale rect from a sibling tab cannot fool.
-func (a *App) contextAt(x, y int) menuContext {
+//
+// false means no widget claims the point — a region header row, the sidebar
+// rule, or the DDL/plan/sessions body once a.grid's stale rect has been
+// ruled out above. ctxEditor used to be the fallback for exactly that case,
+// which meant a right click over a table's definition could open the
+// editor's own menu: several of its entries (delete line, duplicate line,
+// comment) write the buffer, not merely read it, so the click could edit
+// SQL the user cannot currently see. Editor commands are only offered where
+// the editor actually is.
+func (a *App) contextAt(x, y int) (menuContext, bool) {
 	switch {
 	case a.gridVisible(x, y):
-		return ctxResult
+		return ctxResult, true
 	case a.schemaTabs.current() == tabTree && a.tree.InRect(x, y):
-		return ctxTree
+		return ctxTree, true
 	case a.schemaTabs.current() == tabTables && (a.tableList.InRect(x, y) || a.tableFilter.InRect(x, y)):
-		return ctxTables
+		return ctxTables, true
 	case a.topBar.InRect(x, y):
-		return ctxTopBar
+		return ctxTopBar, true
 	case a.statusBar.InRect(x, y):
-		return ctxStatusBar
+		return ctxStatusBar, true
+	case a.editor.InRect(x, y):
+		return ctxEditor, true
 	}
-	return ctxEditor
+	return ctxEditor, false
 }
 
 // focusContext moves focus onto what a context's commands expect to be

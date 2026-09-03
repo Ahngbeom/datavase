@@ -305,6 +305,11 @@ func TestRightClickingATablesTabRowActsOnThatRowNotTheOldSelection(t *testing.T)
 // from it, the same as a.tree does for the schema pane, and would otherwise
 // win the switch in contextAt on a stale match rather than the tab that is
 // actually showing.
+//
+// Falling through to ctxEditor was worse than a misclassification: several
+// editor commands write the buffer (delete line, duplicate line, comment),
+// so a menu opened there could edit SQL the user cannot currently see. No
+// widget claims this position, so no menu opens at all.
 func TestRightClickingANonGridResultTabIsNotClassifiedAsTheResult(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	h.runSQL("SELECT 1 AS n", 1)
@@ -314,7 +319,28 @@ func TestRightClickingANonGridResultTabIsNotClassifiedAsTheResult(t *testing.T) 
 	h.app.app.QueueUpdateDraw(func() { h.app.resultTabs.show(tabDDL) })
 	h.settle()
 
-	if got := h.inspect(func(a *App) bool { return a.contextAt(x, y) == ctxResult }); got {
+	if got := h.inspect(func(a *App) bool { ctx, ok := a.contextAt(x, y); return ok && ctx == ctxResult }); got {
 		t.Error("a right click over the DDL tab, where the grid used to be, was still classified as the result")
+	}
+
+	h.rightClick(x, y)
+	if h.inspect(func(a *App) bool { return a.menuOpen() }) {
+		t.Error("right-clicking the DDL body opened a menu — the editor's, since nothing else claims that position")
+	}
+}
+
+// The region header rows publish a zone for a left click (zoneRegionName),
+// but a right click resolves through contextAt, not the hitmap — none of
+// its widgets claim a header row's position, so this must land the same as
+// any other unclaimed point: no menu.
+func TestRightClickingARegionHeaderOpensNoMenu(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.runSQL("SELECT 1 AS n", 1)
+
+	x, y := h.regionHeaderPosition(func(a *App) *tabbed { return a.resultTabs })
+	h.rightClick(x, y)
+
+	if h.inspect(func(a *App) bool { return a.menuOpen() }) {
+		t.Error("right-clicking the result region's header row opened a menu")
 	}
 }

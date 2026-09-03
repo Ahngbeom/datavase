@@ -404,6 +404,35 @@ func (h *harness) gridHeaderPosition(column int) (int, int) {
 	return x, y
 }
 
+// gridHeaderGlyphPosition finds where a header's own text is actually
+// drawn, reading the simulated screen's cells rather than asking
+// a.grid.CellAt — the same lookup a click resolves through, which a test
+// meant to catch CellAt disagreeing with what is on screen cannot also use
+// to find what to click.
+func (h *harness) gridHeaderGlyphPosition(glyph rune) (int, int) {
+	h.t.Helper()
+	h.settle()
+
+	want := string(glyph)
+	var x, y int
+	found := h.inspect(func(a *App) bool {
+		rx, ry, width, _ := a.grid.GetInnerRect()
+		cells, screenWidth, _ := h.screen.GetContents()
+		for col := rx; col < rx+width; col++ {
+			cell := cells[ry*screenWidth+col]
+			if string(cell.Bytes) == want {
+				x, y = col, ry
+				return true
+			}
+		}
+		return false
+	})
+	if !found {
+		h.t.Fatalf("%q is not drawn anywhere on the header row; screen:\n%s", want, h.text())
+	}
+	return x, y
+}
+
 // gridColumn reads a column's values in the order the grid is showing them.
 func (h *harness) gridColumn(column int) []string {
 	h.t.Helper()

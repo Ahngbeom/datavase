@@ -56,10 +56,11 @@ func attachSession(_ context.Context, ds *config.DataSource, cfg *config.Config,
 	}
 
 	return attach.Run(conn, attach.Options{
-		Version:    version.String(),
-		WorkDir:    absWorkDir(opt.WorkDir),
-		DataSource: ds.Name,
-		Err:        os.Stderr,
+		Version:          version.String(),
+		BuildFingerprint: version.BuildFingerprint(),
+		WorkDir:          absWorkDir(opt.WorkDir),
+		DataSource:       ds.Name,
+		Err:              os.Stderr,
 	})
 }
 
@@ -177,7 +178,8 @@ func runServer(cfg *config.Config) error {
 
 	var srv *daemon.Server
 	srv = daemon.New(daemon.Options{
-		Version: version.String(),
+		Version:          version.String(),
+		BuildFingerprint: version.BuildFingerprint(),
 		Start: func(ctx context.Context, h proto.Hello) (daemon.Session, []string, error) {
 			return buildSession(ctx, h, cfg, srv)
 		},

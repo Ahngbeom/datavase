@@ -71,6 +71,12 @@ type Options struct {
 	// Version is what a client must match exactly.
 	Version string
 
+	// BuildFingerprint is version.BuildFingerprint(): empty outside a
+	// development build. It is compared only when both this and the client's
+	// Hello.BuildFingerprint are non-empty, so a release server — which never
+	// sets this — is never refused over it.
+	BuildFingerprint string
+
 	// Start builds the session the first client asked for, returning it and
 	// anything the user should be told about how it was built — a schema
 	// cache that would not open, a worktree that no longer exists. Those

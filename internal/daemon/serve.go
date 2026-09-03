@@ -133,6 +133,20 @@ func (s *Server) Serve(rwc io.ReadWriteCloser) {
 		return
 	}
 
+	// Every development build reports the same Version, "(devel)", so the
+	// check above always passes between two of them even when one was
+	// rebuilt after the other's server started — a rebuild that would
+	// otherwise attach silently and run the previous build's code. Comparing
+	// only when both sides set a fingerprint is what keeps a release server,
+	// which never does, out of this: it already told the two apart above.
+	if s.opts.BuildFingerprint != "" && h.BuildFingerprint != "" && h.BuildFingerprint != s.opts.BuildFingerprint {
+		reject(rwc,
+			"this dv was rebuilt after the running server started, so attaching would silently run the old build.\n\n"+
+				"  dv server stop           end that session and start again\n"+
+				"  dv server stop --force   if the session is also wedged")
+		return
+	}
+
 	c, warnings, err := s.admit(h, rwc)
 	if err != nil {
 		reject(rwc, err.Error())

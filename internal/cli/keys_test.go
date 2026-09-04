@@ -255,12 +255,7 @@ func TestKeysLeadsWithWhatDVTeachesAndPacksTheRest(t *testing.T) {
 
 	_, familiar := keymap.SplitByFamiliarity(keymap.AllActions())
 
-	packed := out[known:]
-	if end := strings.Index(packed, "\n\n"); end > 0 {
-		packed = packed[:end]
-	}
-	// The slice starts at the heading, which is not one of the packed lines.
-	block := strings.Split(strings.TrimSpace(packed), "\n")[1:]
+	block := packedRows(t, out)
 
 	// The point of packing is that these keys cost less than a row each.
 	// There is deliberately no absolute ceiling: how few lines are reachable
@@ -269,6 +264,22 @@ func TestKeysLeadsWithWhatDVTeachesAndPacksTheRest(t *testing.T) {
 	if len(block) >= len(familiar) {
 		t.Errorf("the familiar block spends %d lines on %d keys, so it is not packed at all",
 			len(block), len(familiar))
+	}
+}
+
+// A packed line that wraps costs two rows, which undoes the packing. The
+// budget lives in a constant whose comment does the arithmetic; nothing ran
+// it until this test, and the same slip survived on the other surface for a
+// while because of that.
+func TestTheFamiliarBlockFitsAConventionalTerminal(t *testing.T) {
+	out := runKeys(t)
+
+	block := packedRows(t, out)
+
+	for _, line := range block {
+		if w := keymap.LabelWidth(line); w > 80 {
+			t.Errorf("a packed row is %d cells wide and wraps at eighty:\n%s", w, line)
+		}
 	}
 }
 
@@ -296,4 +307,26 @@ func TestKeysStillListsEveryAction(t *testing.T) {
 			t.Errorf("%q is missing from dv keys:\n%s", a, out)
 		}
 	}
+}
+
+// packedRows returns the rendered rows of the familiar-keys section, which
+// begins after its heading.
+//
+// Two tests read the same rows and have to agree on which they are. Written
+// out at each of them, they did not: both counted the heading as a row, and
+// the line budget that followed was one too high — enough to break Linux CI,
+// where the labels are long enough for one row to make the difference.
+func packedRows(t *testing.T, out string) []string {
+	t.Helper()
+
+	i := strings.Index(out, "Already what you expect")
+	if i < 0 {
+		t.Fatalf("no section for familiar keys:\n%s", out)
+	}
+
+	packed := out[i:]
+	if end := strings.Index(packed, "\n\n"); end > 0 {
+		packed = packed[:end]
+	}
+	return strings.Split(strings.TrimSpace(packed), "\n")[1:]
 }

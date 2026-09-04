@@ -15,7 +15,7 @@ func TestEveryActionIsClassified(t *testing.T) {
 
 // The classification counts what a user must be taught. If it drifts, the
 // key reference silently starts teaching the wrong list.
-func TestTheClassificationSplitsFortySixIntoSixteenAndThirty(t *testing.T) {
+func TestTheKeyReferenceDoesNotSilentlyStartTeachingTheWrongList(t *testing.T) {
 	var known, ours int
 	for _, a := range AllActions() {
 		if a.Familiar() {

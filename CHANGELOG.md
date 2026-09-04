@@ -21,6 +21,15 @@ was `vim`; it is `datagrip` now. A session that assumed it — no `preset:` in
 the config — says so on the opening line, naming the keyboard it picked and
 the palette command for another.
 
+**The key reference leads with what you have to learn.** `dv keys` and the
+help screen listed all forty-six keys in one run, so the sixteen that mean the
+same thing in every editor — cut, paste, select all, save, find, quit, the
+word and line movements — padded out the thirty that are this program's own.
+Those sixteen now sit behind the thirty, packed into a few lines rather than a
+row each, and the command palette's entry says what has been true since the
+last release: it reaches every other command by name. Nothing was removed or
+rebound, and the README's key table follows the same split.
+
 ### Added
 
 **Clicks mean something.** A datasource, a schema or `keys` in the top bar

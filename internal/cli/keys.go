@@ -80,9 +80,11 @@ func printVimKeys(out io.Writer, km *keymap.Map) {
 // keyColumn is the width of the key column. Wide enough for "⌘⇧↩  ^⇧↩  ⇧F5".
 const keyColumn = 22
 
-// familiarWidth bounds the packed block of keys a reader already knows, at
-// the conventional terminal's width rather than a measured one.
-const familiarWidth = 80
+// familiarWidth bounds the packed block's content, at the conventional
+// terminal's width rather than a measured one. The two subtracted are the
+// indent printKeys adds: without them a line reaches 82 cells and wraps
+// there, and a wrapped line costs two rows — undoing the packing it wrapped.
+const familiarWidth = 80 - 2
 
 func (a *App) printKeys(km *keymap.Map) {
 	mac := runtime.GOOS == "darwin"
@@ -102,7 +104,7 @@ func (a *App) printKeys(km *keymap.Map) {
 			note = "  (not built yet)"
 		}
 		if action == keymap.ActionCommandPalette {
-			note = "  ← this one reaches the rest"
+			note += "  ← this one reaches the rest"
 		}
 		// Padded by display width rather than rune count: ⌘ and ⇥ take more
 		// than one cell, and %-Ns would leave the column ragged.

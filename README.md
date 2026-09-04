@@ -260,6 +260,7 @@ before it can be used: `F3` opens the command palette. See
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
 | Explain the statement under the cursor | `⌘E` | `Ctrl+E` |
+| Analyze the statement under the cursor | `⌘⇧E` | `Ctrl+Shift+E` |
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | List what else is running | `⌘⇧U` | `Ctrl+Shift+U` |
 | Stop another connection's statement | `⌘⇧W` | `Ctrl+Shift+W` |

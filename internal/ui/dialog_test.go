@@ -181,17 +181,7 @@ func TestEveryCommandNamesRealContexts(t *testing.T) {
 func TestTheHelpScreenPacksTheKeysAReaderAlreadyKnows(t *testing.T) {
 	body := helpReference(keymap.Default())
 
-	i := strings.Index(body, "Already what you expect")
-	if i < 0 {
-		t.Fatalf("the help screen has no section for familiar keys:\n%s", body)
-	}
-
-	packed := body[i:]
-	if end := strings.Index(packed, "\n\n"); end > 0 {
-		packed = packed[:end]
-	}
-	// The slice starts at the heading, which is not one of the packed lines.
-	block := strings.Split(strings.TrimSpace(packed), "\n")[1:]
+	block := packedRows(t, body)
 
 	_, known := keymap.SplitByFamiliarity(keymap.AllActions())
 	// The point of packing is that these keys cost less than a row each.
@@ -201,6 +191,22 @@ func TestTheHelpScreenPacksTheKeysAReaderAlreadyKnows(t *testing.T) {
 	if len(block) >= len(known) {
 		t.Errorf("the familiar block spends %d lines on %d actions — that is not packing",
 			len(block), len(known))
+	}
+}
+
+// A packed row that wraps costs two rows, which undoes the packing. The
+// budget is derived here rather than written as 80 so the test moves if the
+// dialog's geometry does, instead of drifting from the constant it checks.
+func TestTheFamiliarBlockFitsTheDialogAtEightyColumns(t *testing.T) {
+	body := helpReference(keymap.Default())
+
+	block := packedRows(t, body)
+
+	const usable = 80 - 2*dialogMargin - 2 // the dialog's inner width at eighty columns
+	for _, line := range block {
+		if w := keymap.LabelWidth(line); w > usable {
+			t.Errorf("a packed row is %d cells wide, wider than the dialog's %d:\n%s", w, usable, line)
+		}
 	}
 }
 
@@ -227,4 +233,25 @@ func TestEveryActionIsStillOnTheRenderedHelpScreen(t *testing.T) {
 			t.Errorf("%s appears %d times in the rendered reference, want 1", action, n)
 		}
 	}
+}
+
+// packedRows returns the rendered rows of the familiar-keys section, which
+// begins after its heading.
+//
+// Two tests read the same rows — one counts them, one measures their width —
+// and have to agree on which they are. Written out at each of them, they once
+// did not.
+func packedRows(t *testing.T, body string) []string {
+	t.Helper()
+
+	i := strings.Index(body, "Already what you expect")
+	if i < 0 {
+		t.Fatalf("the help screen has no section for familiar keys:\n%s", body)
+	}
+
+	packed := body[i:]
+	if end := strings.Index(packed, "\n\n"); end > 0 {
+		packed = packed[:end]
+	}
+	return strings.Split(strings.TrimSpace(packed), "\n")[1:]
 }

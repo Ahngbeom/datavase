@@ -178,7 +178,7 @@ func centredText(p tview.Primitive, text string, width, height int) tview.Primit
 // startHere is the whole of what someone needs on the first screenful.
 //
 // The reference below is complete, which is what makes it useless as an
-// opening: seven groups and forty commands answer "which key does X" and never
+// opening: six groups and thirty commands answer "which key does X" and never
 // answer "what do I do now". These five do, and each appears again in its own
 // group further down — the repetition is the point, not an oversight.
 //
@@ -288,8 +288,9 @@ func (a *App) helpText() string {
 	return b.String()
 }
 
-// keyReferenceLine renders one action's row in the key reference: its bindings,
-// padded to a column, and what it does.
+// keyReferenceLine is shared by helpText's opening list and helpReference's
+// groups, so the two render one action's row identically instead of each
+// carrying its own closure that could drift from the other.
 func keyReferenceLine(km *keymap.Map, action keymap.Action) string {
 	labels := make([]string, 0, 3)
 	for _, binding := range km.DisplayBindings(action) {
@@ -304,8 +305,8 @@ func keyReferenceLine(km *keymap.Map, action keymap.Action) string {
 // already knows.
 //
 // It takes the map rather than reading the App's so the reference can be
-// checked without building an interface: what it renders depends on the
-// keyboard and nothing else.
+// checked without building an interface: what it renders depends only on
+// that map and the package-level onMac, neither of which needs a terminal.
 func helpReference(km *keymap.Map) string {
 	var b strings.Builder
 	var known []keymap.Action

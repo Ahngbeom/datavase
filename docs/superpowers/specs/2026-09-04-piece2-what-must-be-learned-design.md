@@ -179,6 +179,29 @@ Already what you expect — 16 keys, nothing new
 nothing to learn must not cost sixteen lines — that is the same defect in a
 new arrangement. Three lines is the budget.
 
+> **Corrected during implementation.** Three lines proved unreachable, and the
+> example above is why: it gets there by cutting each description to a single
+> word *and* by merging pairs of actions into one entry — `⌥←→ by word` stands
+> for two. Neither survives contact with the tests this piece needs. Cutting
+> the descriptions deletes the one fact in the block a reader does not already
+> know, that `⌘F` searches the results as well as the editor, and it breaks an
+> existing test that asserts that description appears. Merging pairs leaves no
+> action that a per-action check can find.
+>
+> Measured, with the descriptions and every key label intact:
+>
+> | | macOS | Linux, and macOS inside tmux |
+> |---|---|---|
+> | `dv keys`, width 80 | 9 lines | 12 lines |
+> | help screen, width 72 | 10 lines | 12 lines |
+> | not packed at all | 16 lines | 16 lines |
+>
+> So the saving is four to seven rows rather than thirteen. The tests assert
+> the property instead of a number: the block must spend strictly fewer lines
+> than there are familiar actions. An absolute ceiling only ever describes the
+> platform it was measured on, and one written on a Mac broke Linux CI once
+> during this work before being removed.
+
 The `F3` line is the lever this piece turns. The palette has reached every
 command by name since Piece 1; the reference has never said so, so a reader
 counting keys had no reason to believe the count was optional.
@@ -217,8 +240,10 @@ Everything here is a pure function over strings. No terminal, no database.
   drift.
 - No action appears in both sections of `dv keys`, and none is missing from
   both.
-- The familiar block fits in three lines: the packing is the feature, and a
-  test that only checked content would pass while it silently unpacked.
+- The familiar block spends strictly fewer lines than there are familiar
+  actions: the packing is the feature, and a test that only checked content
+  would pass while it silently unpacked. This replaces the three-line budget,
+  which measurement showed unreachable — see the correction above.
 - The `F3` entry states that it reaches the rest.
 - The help screen's `startHere` five are unchanged.
 
@@ -226,7 +251,11 @@ Everything here is a pure function over strings. No terminal, no database.
 
 - `dv keys` opens with the list of things `dv` actually teaches, and that list
   is 30 lines rather than 52.
-- The keys a user already knows are present, findable, and take three lines.
+- The keys a user already knows are present, findable, and cost meaningfully
+  less than a row each: nine to twelve lines for sixteen keys, depending on how
+  the platform spells its modifiers. The three-line target this document
+  originally set was not reachable without deleting information; see the
+  correction above.
 - A reader is told, inside the list, that one key reaches the rest.
 - No key handling changed: `Lookup`, `Bindings`, `Apply` and every preset are
   untouched, and the input path in `internal/ui` has no diff.
@@ -244,11 +273,20 @@ would be wrong and nothing would fail. The pinned tests make each call visible
 and deliberate, but they cannot make it true. This is why the tie-break rule
 favours teaching.
 
-**Packing is a presentation choice that fights terminal width.** Three lines
-of packed keys assume roughly eighty columns. Narrower than that, the block
-wraps or truncates. `dv keys` writes to stdout rather than a laid-out screen,
-so this is not the status bar's shedding problem — but it has not been tested
-below eighty columns and should be, before anyone claims it degrades well.
+**Packing is a presentation choice that fights terminal width.** Packed keys
+assume roughly eighty columns. Narrower than that, the block wraps or
+truncates. `dv keys` writes to stdout rather than a laid-out screen, so this is
+not the status bar's shedding problem.
+
+This was tested during implementation rather than left as a worry. The help
+screen is the case that bites: its dialog is `min(84, screen - 2*dialogMargin)`
+wide, its border takes two more columns and the block is indented two, so an
+eighty-column terminal leaves seventy-two. Packing to eighty there wrapped
+every line, and a wrapped line costs two rows — eleven lines became up to
+twenty-two, worse than not packing at all. The help screen now packs to
+seventy-two, derived from `dialogMargin` so it moves if the dialog does.
+`dv keys` keeps eighty, because it writes to a pipe as often as a screen and
+has no rect to ask.
 
 **A prefix mode is still unbuilt.** If evidence appears that the F-key
 fallbacks are insufficient — a terminal that eats those too, or a user who

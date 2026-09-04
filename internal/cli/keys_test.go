@@ -5,7 +5,19 @@ import (
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/keymap"
 )
+
+// runKeys runs `dv keys` against a fresh harness and returns stdout.
+func runKeys(t *testing.T) string {
+	t.Helper()
+
+	h := newHarness(t)
+	if code := h.app.Run([]string{"keys"}); code != 0 {
+		t.Fatalf("Run(keys) = %d, want 0; stderr = %q", code, h.err)
+	}
+	return h.out.String()
+}
 
 func TestKeysListsActionsAndTheirBindings(t *testing.T) {
 	h := newHarness(t)
@@ -225,4 +237,96 @@ func TestKeysOmitsTheVimCommandsElsewhere(t *testing.T) {
 	if strings.Contains(h.out.String(), "insert before the cursor") {
 		t.Errorf("the vim reference is shown on a non-modal keyboard:\n%s", h.out)
 	}
+}
+
+// The sixteen keys that cost nothing to learn must not cost sixteen rows
+// above the thirty that do — the same defect this change exists to remove.
+func TestKeysLeadsWithWhatDVTeachesAndPacksTheRest(t *testing.T) {
+	out := runKeys(t)
+
+	ours := strings.Index(out, "that are dv's own")
+	known := strings.Index(out, "Already what you expect")
+	if ours < 0 || known < 0 {
+		t.Fatalf("the two sections are not both present:\n%s", out)
+	}
+	if ours > known {
+		t.Errorf("the familiar keys come before the ones dv teaches:\n%s", out)
+	}
+
+	_, familiar := keymap.SplitByFamiliarity(keymap.AllActions())
+
+	block := packedRows(t, out)
+
+	// The point of packing is that these keys cost less than a row each.
+	// There is deliberately no absolute ceiling: how few lines are reachable
+	// depends on how the platform spells its modifiers, so a number measured
+	// on one would fail on the other with nothing actually wrong.
+	if len(block) >= len(familiar) {
+		t.Errorf("the familiar block spends %d lines on %d keys, so it is not packed at all",
+			len(block), len(familiar))
+	}
+}
+
+// A packed line that wraps costs two rows, which undoes the packing. The
+// budget lives in a constant whose comment does the arithmetic; nothing ran
+// it until this test, and the same slip survived on the other surface for a
+// while because of that.
+func TestTheFamiliarBlockFitsAConventionalTerminal(t *testing.T) {
+	out := runKeys(t)
+
+	block := packedRows(t, out)
+
+	for _, line := range block {
+		if w := keymap.LabelWidth(line); w > 80 {
+			t.Errorf("a packed row is %d cells wide and wraps at eighty:\n%s", w, line)
+		}
+	}
+}
+
+// One key reaches every command by name, and a reader counting keys has no
+// reason to believe the count is optional unless the list says so.
+func TestKeysSaysThePaletteReachesTheRest(t *testing.T) {
+	out := runKeys(t)
+
+	i := strings.Index(out, "that are dv's own")
+	if i < 0 {
+		t.Fatalf("no section for what dv teaches:\n%s", out)
+	}
+	if !strings.Contains(out[i:], "reaches the rest") {
+		t.Errorf("the list never says one key reaches the others:\n%s", out)
+	}
+}
+
+// Every action stays reachable in the reference: one dropped from both
+// sections is one nobody can discover.
+func TestKeysStillListsEveryAction(t *testing.T) {
+	out := runKeys(t)
+
+	for _, a := range keymap.AllActions() {
+		if !strings.Contains(out, a.Describe()) {
+			t.Errorf("%q is missing from dv keys:\n%s", a, out)
+		}
+	}
+}
+
+// packedRows returns the rendered rows of the familiar-keys section, which
+// begins after its heading.
+//
+// Two tests read the same rows and have to agree on which they are. Written
+// out at each of them, they did not: both counted the heading as a row, and
+// the line budget that followed was one too high — enough to break Linux CI,
+// where the labels are long enough for one row to make the difference.
+func packedRows(t *testing.T, out string) []string {
+	t.Helper()
+
+	i := strings.Index(out, "Already what you expect")
+	if i < 0 {
+		t.Fatalf("no section for familiar keys:\n%s", out)
+	}
+
+	packed := out[i:]
+	if end := strings.Index(packed, "\n\n"); end > 0 {
+		packed = packed[:end]
+	}
+	return strings.Split(strings.TrimSpace(packed), "\n")[1:]
 }

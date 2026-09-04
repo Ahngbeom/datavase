@@ -234,21 +234,16 @@ differ, DataGrip wins. **`⌘` and `Ctrl` do the same thing** — use whichever
 your hands reach for. Inside tmux the interface shows the `Ctrl` spelling even
 on a Mac, since tmux does not forward `⌘` to the program it hosts.
 
+One key reaches every command by name, so nothing below has to be memorised
+before it can be used: `F3` opens the command palette. See
+[When something else has taken the key](#when-something-else-has-taken-the-key).
+
 | Action | macOS | Windows / Linux |
 |---|---|---|
 | Run the statement under the cursor | `⌘↩` | `Ctrl+↩` |
 | Run everything | `⌘⇧↩` | `Ctrl+Shift+↩` |
 | Cancel the running statement | `⌘F2` | `Ctrl+F2` |
 | Copy what has focus, or cancel a running statement | `⌘C` | `Ctrl+C` |
-| Cut / paste | `⌘X` `⌘V` | `Ctrl+X` `Ctrl+V` |
-| Undo / redo | `⌘Z` `⌘⇧Z` | `Ctrl+Z` `Ctrl+Shift+Z` |
-| Select all | `⌘A` | `Ctrl+A` |
-| Move one word | `⌥←` `⌥→` | `Ctrl+←` `Ctrl+→` |
-| Extend the selection one word | `⌥⇧←` `⌥⇧→` | `Ctrl+Shift+←/→` |
-| Start / end of line | `⌘←` `⌘→` | `Home` `End` |
-| Select to start / end of line | `⌘⇧←` `⌘⇧→` | `Shift+Home` `Shift+End` |
-| Delete the word before the cursor | `⌥⌫` | `Ctrl+⌫` |
-| Delete to the start of the line | `⌘⌫` | — |
 | Comment or uncomment | `⌘/` | `Ctrl+/` |
 | Duplicate the line | `⌘D` | `Ctrl+D` |
 | Delete the line | `⌘Y` | `Ctrl+Y` |
@@ -258,15 +253,14 @@ on a Mac, since tmux does not forward `⌘` to the program it hosts.
 | Choose the schema | `⌘⇧N` | `Ctrl+Shift+N` |
 | Switch datasource | `⌘⇧D` | `Ctrl+Shift+D` |
 | Complete the word at the cursor | `^Space` | `Ctrl+Space` |
-| Find in the editor or the results | `⌘F` | `Ctrl+F` |
 | Next / previous match | `⌘G` `⌘⇧G` | `Ctrl+G` `Ctrl+Shift+G` |
 | Search the query history | `⌘⇧F` or `F9` | `Ctrl+Shift+F` or `F9` |
 | Jump to a table | `⌘N` | `Ctrl+N` |
 | Open a file from the worktree | `⌘⇧O` | `Ctrl+Shift+O` |
-| Save the open file | `⌘S` | `Ctrl+S` |
 | Command palette | `⌘⇧A` or `F3` | `Ctrl+Shift+A` or `F3` |
 | Show the selected table or row in full | `⌘I` | `Ctrl+Shift+I` |
 | Explain the statement under the cursor | `⌘E` | `Ctrl+E` |
+| Analyze the statement under the cursor | `⌘⇧E` | `Ctrl+Shift+E` |
 | Sort the results by a column | `⌘⇧S` | `Ctrl+Shift+S` |
 | List what else is running | `⌘⇧U` | `Ctrl+Shift+U` |
 | Stop another connection's statement | `⌘⇧W` | `Ctrl+Shift+W` |
@@ -274,7 +268,31 @@ on a Mac, since tmux does not forward `⌘` to the program it hosts.
 | Switch tab in the focused pane | `Ctrl+⇥` | `Ctrl+⇥` |
 | Key reference | `F1` | `F1` |
 | Detach, leaving the session running | `⌘\` | `Ctrl+\` |
+
+Already what you expect — the rest are the same key every editor and every
+macOS application already uses:
+
+| Action | macOS | Windows / Linux |
+|---|---|---|
+| Cut / paste | `⌘X` `⌘V` | `Ctrl+X` `Ctrl+V` |
+| Undo / redo | `⌘Z` `⌘⇧Z` | `Ctrl+Z` `Ctrl+Shift+Z` |
+| Select all | `⌘A` | `Ctrl+A` |
+| Move one word | `⌥←` `⌥→` | `Ctrl+←` `Ctrl+→` |
+| Extend the selection one word | `⌥⇧←` `⌥⇧→` | `Ctrl+Shift+←/→` |
+| Start / end of line | `⌘←` `⌘→` | `Home` `End` |
+| Select to start / end of line | `⌘⇧←` `⌘⇧→` | `Shift+Home` `Shift+End` |
+| Delete the word before the cursor | `⌥⌫` | `Ctrl+⌫` |
+| Delete to the start of the line | `⌘⌫` | — |
+| Find in the editor or the results | `⌘F` | `Ctrl+F` |
+| Save the open file | `⌘S` | `Ctrl+S` |
 | Quit | `⌘Q` | `Ctrl+Q` |
+
+Cursor movement is the one place `⌘` and `Ctrl` are **not** interchangeable,
+because macOS uses them for different things: `⌘←` goes to the start of the
+line while `⌥←` and `Ctrl+←` move by word.
+
+A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
+`_` and `id`, which is how a generic text editor would split it.
 
 `F5` runs, `F2` saves, `F4` shows a definition, `F6` switches tab, `F7` chooses
 the schema, `F8` opens a file, `F9` searches the history, `F10` quits,
@@ -286,13 +304,6 @@ rather than merely awkward: `⌘⇥` is the macOS application switcher, and
 
 Run `dv keys` for the current map, which reflects the preset and any
 customisation.
-
-Cursor movement is the one place `⌘` and `Ctrl` are **not** interchangeable,
-because macOS uses them for different things: `⌘←` goes to the start of the
-line while `⌥←` and `Ctrl+←` move by word.
-
-A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
-`_` and `id`, which is how a generic text editor would split it.
 
 ### When something else has taken the key
 

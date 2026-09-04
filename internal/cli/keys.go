@@ -80,11 +80,20 @@ func printVimKeys(out io.Writer, km *keymap.Map) {
 // keyColumn is the width of the key column. Wide enough for "⌘⇧↩  ^⇧↩  ⇧F5".
 const keyColumn = 22
 
+// familiarWidth bounds the packed block's content, at the conventional
+// terminal's width rather than a measured one. The two subtracted are the
+// indent printKeys adds: without them a line reaches 82 cells and wraps
+// there, and a wrapped line costs two rows — undoing the packing it wrapped.
+const familiarWidth = 80 - 2
+
 func (a *App) printKeys(km *keymap.Map) {
 	mac := runtime.GOOS == "darwin"
 	term := os.Getenv("TERM")
 
-	for _, action := range keymap.AllActions() {
+	ours, known := keymap.SplitByFamiliarity(keymap.AllActions())
+
+	fmt.Fprintf(a.Out, "The %d that are dv's own\n", len(ours))
+	for _, action := range ours {
 		labels := make([]string, 0, 3)
 		for _, b := range km.DisplayBindings(action) {
 			labels = append(labels, b.Label(mac))
@@ -94,11 +103,19 @@ func (a *App) printKeys(km *keymap.Map) {
 		if action.Reserved() {
 			note = "  (not built yet)"
 		}
+		if action == keymap.ActionCommandPalette {
+			note += "  ← this one reaches the rest"
+		}
 		// Padded by display width rather than rune count: ⌘ and ⇥ take more
 		// than one cell, and %-Ns would leave the column ragged.
-		fmt.Fprintf(a.Out, "%s  %s%s\n",
+		fmt.Fprintf(a.Out, "  %s  %s%s\n",
 			keymap.PadLabel(strings.Join(labels, "  "), keyColumn),
 			action.Describe(), note)
+	}
+
+	fmt.Fprintf(a.Out, "\nAlready what you expect — %d keys, nothing new\n", len(known))
+	for _, line := range keymap.PackFamiliar(km, known, mac, familiarWidth) {
+		fmt.Fprintf(a.Out, "  %s\n", line)
 	}
 
 	printVimKeys(a.Out, km)

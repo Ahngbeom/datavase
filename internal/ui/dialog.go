@@ -178,7 +178,7 @@ func centredText(p tview.Primitive, text string, width, height int) tview.Primit
 // startHere is the whole of what someone needs on the first screenful.
 //
 // The reference below is complete, which is what makes it useless as an
-// opening: seven groups and forty commands answer "which key does X" and never
+// opening: six groups and thirty commands answer "which key does X" and never
 // answer "what do I do now". These five do, and each appears again in its own
 // group further down — the repetition is the point, not an oversight.
 //
@@ -262,31 +262,15 @@ var helpGroups = []struct {
 func (a *App) helpText() string {
 	var b strings.Builder
 
-	line := func(action keymap.Action) {
-		labels := make([]string, 0, 3)
-		for _, binding := range a.keys.DisplayBindings(action) {
-			labels = append(labels, binding.Label(onMac))
-		}
-		fmt.Fprintf(&b, "  %s  %s\n",
-			keymap.PadLabel(strings.Join(labels, "  "), helpKeyColumn),
-			action.Describe())
-	}
-
 	b.WriteString(tag(colourAccent, "datavase") + "\n")
 
 	b.WriteString("\n" + headingTag("Start here") + "\n")
 	for _, action := range startHere {
-		line(action)
+		b.WriteString(keyReferenceLine(a.keys, action))
 	}
 	b.WriteString(a.modalEscapeHatch())
 
-	for _, group := range helpGroups {
-		fmt.Fprintf(&b, "\n%s\n", headingTag(group.title))
-
-		for _, action := range group.actions {
-			line(action)
-		}
-	}
+	b.WriteString(helpReference(a.keys))
 
 	b.WriteString(commandHelpText(a.keyLabel(keymap.ActionCommandPalette)))
 	b.WriteString(a.vimHelp())
@@ -301,6 +285,50 @@ func (a *App) helpText() string {
 	}
 
 	b.WriteString("\n" + tag(colourMuted, "Press Escape to close."))
+	return b.String()
+}
+
+// keyReferenceLine is shared by helpText's opening list and helpReference's
+// groups, so the two render one action's row identically instead of each
+// carrying its own closure that could drift from the other.
+func keyReferenceLine(km *keymap.Map, action keymap.Action) string {
+	labels := make([]string, 0, 3)
+	for _, binding := range km.DisplayBindings(action) {
+		labels = append(labels, binding.Label(onMac))
+	}
+	return fmt.Sprintf("  %s  %s\n",
+		keymap.PadLabel(strings.Join(labels, "  "), helpKeyColumn),
+		action.Describe())
+}
+
+// helpReference renders the key groups and, below them, the keys a reader
+// already knows.
+//
+// It takes the map rather than reading the App's so the reference can be
+// checked without building an interface: what it renders depends only on
+// that map and the package-level onMac, neither of which needs a terminal.
+func helpReference(km *keymap.Map) string {
+	var b strings.Builder
+	var known []keymap.Action
+
+	for _, group := range helpGroups {
+		ours, groupKnown := keymap.SplitByFamiliarity(group.actions)
+		known = append(known, groupKnown...)
+		if len(ours) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(&b, "\n%s\n", headingTag(group.title))
+		for _, action := range ours {
+			b.WriteString(keyReferenceLine(km, action))
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%s\n", headingTag("Already what you expect"))
+	for _, line := range keymap.PackFamiliar(km, known, onMac, familiarWidth) {
+		fmt.Fprintf(&b, "  %s\n", line)
+	}
+
 	return b.String()
 }
 
@@ -368,6 +396,13 @@ func (a *App) modalEscapeHatch() string {
 
 // helpKeyColumn is the width of the key column on the help screen.
 const helpKeyColumn = 20
+
+// familiarWidth keeps the packed block from wrapping on an eighty-column
+// terminal, the narrowest this reference is meant to be read on. A wrapped
+// line costs two rows, which undoes the packing it wrapped. At that size the
+// dialog is 80-2*dialogMargin wide, its border takes two columns and the
+// block is indented two.
+const familiarWidth = 80 - 2*dialogMargin - 2 - 2
 
 func (a *App) showHelp() {
 	text := a.helpText()

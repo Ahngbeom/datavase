@@ -202,6 +202,74 @@ var descriptions = map[Action]string{
 // must announce itself rather than appear dead.
 var reserved = map[Action]bool{}
 
+// familiar says whether an action's binding is the one every editor and every
+// macOS application already uses, so it is not something dv teaches.
+//
+// The test is sameness, not shape: ⌘D looks conventional and means "select
+// the next occurrence" in VS Code, which is the most expensive kind of
+// difference — a user believes they already know it. Where a call is close,
+// it goes here as false, because a key wrongly listed as known is a key
+// nobody is taught.
+//
+// It is a property of the action rather than of the chord. A preset may
+// rebind anything; what a reader already knows does not move with it.
+var familiar = map[Action]bool{
+	// Cursor movement and selection, identical in every text field.
+	ActionWordLeft:          true,
+	ActionWordRight:         true,
+	ActionSelectWordLeft:    true,
+	ActionSelectWordRight:   true,
+	ActionLineStart:         true,
+	ActionLineEnd:           true,
+	ActionSelectLineStart:   true,
+	ActionSelectLineEnd:     true,
+	ActionDeleteWordLeft:    true,
+	ActionDeleteToLineStart: true,
+
+	// The clipboard, and the keys that mean the same thing everywhere.
+	// ⌘C is deliberately absent: its action is CopyOrCancel.
+	ActionCut:       true,
+	ActionPaste:     true,
+	ActionSelectAll: true,
+	ActionSaveFile:  true,
+	ActionFind:      true,
+	ActionQuit:      true,
+
+	ActionRun:              false,
+	ActionRunAll:           false,
+	ActionCancel:           false,
+	ActionCopyOrCancel:     false,
+	ActionToggleComment:    false,
+	ActionDuplicateLine:    false,
+	ActionDeleteLine:       false,
+	ActionNextPane:         false,
+	ActionPrevPane:         false,
+	ActionToggleSidebar:    false,
+	ActionRefreshSchema:    false,
+	ActionUseSchema:        false,
+	ActionComplete:         false,
+	ActionFindNext:         false,
+	ActionFindPrev:         false,
+	ActionSearchHistory:    false,
+	ActionCommandPalette:   false,
+	ActionGoToTable:        false,
+	ActionFindFile:         false,
+	ActionCycleTab:         false,
+	ActionInspect:          false,
+	ActionSortColumn:       false,
+	ActionSwitchDataSource: false,
+	ActionExplain:          false,
+	ActionAnalyze:          false,
+	ActionSessions:         false,
+	ActionKillSession:      false,
+	ActionLocks:            false,
+	ActionHelp:             false,
+	ActionDetach:           false,
+}
+
+// Familiar reports that dv does not have to teach this action's key.
+func (a Action) Familiar() bool { return familiar[a] }
+
 // order fixes how actions appear on the help screen, grouped by purpose.
 var order = []Action{
 	ActionRun, ActionRunAll, ActionCancel, ActionExplain, ActionAnalyze,

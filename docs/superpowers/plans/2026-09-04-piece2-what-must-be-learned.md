@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `dv keys` and the help screen show the 29 keys `dv` actually teaches first, pack the 19 a user already knows into three lines, and say inside that list that the palette reaches everything else.
+**Goal:** `dv keys` and the help screen show the 30 keys `dv` actually teaches first, pack the 16 a user already knows into three lines, and say inside that list that the palette reaches everything else.
 
 **Architecture:** `Action` gains a `Familiar()` classification beside its existing `Describe()` and `Reserved()`, backed by a `familiar` map that a test requires every bindable action to appear in. A pure splitting function in `keymap` divides the action list by that classification; `internal/cli/keys.go` and `internal/ui/dialog.go` each render the two groups their own way. **No key handling changes** — `Lookup`, `Bindings`, `Apply` and the presets are untouched.
 
@@ -15,9 +15,10 @@
 Every task's requirements implicitly include this section.
 
 - **No key handling changes.** Do not touch `Map.Lookup`, `Map.Bindings`, `Map.Apply`, `internal/keymap/preset.go`, or any binding table. If a change seems to need one, stop and report — it is out of scope.
-- **The classification is 19 familiar / 29 dv's own**, totalling the 48 bindable actions. The five judgement calls are fixed by the spec: `⌘/` (toggle comment), `⌘D` (duplicate line), `⌘Y` (delete line) and `⇥`/`⇧⇥` (next/previous pane) are **dv's own**; `⌘S` (save) and `⌘F` (find) are **familiar**. `⌘⇧F` (search history) is **dv's own**.
+- **The classification is 16 familiar / 30 dv's own**, totalling the 46 actions `AllActions()` returns. (`dv keys` prints 52 lines; the tail is the vim reference, not actions.) The judgement calls are fixed by the spec: `⌘/` (toggle comment), `⌘D` (duplicate line), `⌘Y` (delete line), `⇥`/`⇧⇥` (next/previous pane) and `⌘C` (`CopyOrCancel` — with nothing selected it cancels the running statement) are **dv's own**; `⌘S` (save) and `⌘F` (find) are **familiar**. `⌘⇧F` (search history) is **dv's own**.
+- **There is no undo or redo action.** `tview`'s text area handles both, so they never reach `keymap` and must not appear in the map.
 - **When a call is close, classify as dv's own.** The costs are asymmetric: wrongly marking something dv's own adds a line to a list; wrongly marking it familiar means a key is never taught.
-- **The familiar block is packed, not enumerated.** Three lines is the budget. Nineteen actions that cost nothing to learn must not cost nineteen lines.
+- **The familiar block is packed, not enumerated.** Three lines is the budget. Sixteen actions that cost nothing to learn must not cost sixteen lines.
 - **`Familiar()` is a property of the action, not the chord.** A preset may rebind anything; the classification does not consult bindings.
 - Do not change `dv keys --debug`, `dv keys --tmux`, `startHere` (`internal/ui/dialog.go:188`), or the first-run card.
 - **Comments say why, not what** (`CLAUDE.md`), and the rule is strict: a comment earns its place only when it says what *quietly* breaks the next edit at that line. History, counts and diff voice belong in the commit message.
@@ -88,7 +89,7 @@ func TestEveryActionIsClassified(t *testing.T) {
 
 // The classification counts what a user must be taught. If it drifts, the
 // key reference silently starts teaching the wrong list.
-func TestTheClassificationSplitsFortyEightIntoNineteenAndTwentyNine(t *testing.T) {
+func TestTheClassificationSplitsFortySixIntoSixteenAndThirty(t *testing.T) {
 	var known, ours int
 	for _, a := range AllActions() {
 		if a.Familiar() {
@@ -98,8 +99,8 @@ func TestTheClassificationSplitsFortyEightIntoNineteenAndTwentyNine(t *testing.T
 		ours++
 	}
 
-	if known != 19 || ours != 29 {
-		t.Errorf("classified %d familiar and %d dv's own, want 19 and 29", known, ours)
+	if known != 16 || ours != 30 {
+		t.Errorf("classified %d familiar and %d dv's own, want 16 and 30", known, ours)
 	}
 }
 
@@ -117,6 +118,7 @@ func TestTheJudgementCallsHold(t *testing.T) {
 		{ActionDeleteLine, false, "a DataGrip convention, not a universal one"},
 		{ActionNextPane, false, "universal in GUI dialogs, not in terminal applications"},
 		{ActionPrevPane, false, "universal in GUI dialogs, not in terminal applications"},
+		{ActionCopyOrCancel, false, "with nothing selected ⌘C cancels the running statement"},
 		{ActionSaveFile, true, "saving is saving"},
 		{ActionFind, true, "finding is finding; that it also searches results is a description, not a class"},
 		{ActionSearchHistory, false, "searching history is not what that chord means elsewhere"},
@@ -162,14 +164,11 @@ var familiar = map[Action]bool{
 	ActionDeleteWordLeft:    true,
 	ActionDeleteToLineStart: true,
 
-	// The clipboard and undo, and the two file and session keys that mean
-	// the same thing everywhere.
-	ActionCopy:      true,
+	// The clipboard, and the keys that mean the same thing everywhere.
+	// ⌘C is deliberately absent: its action is CopyOrCancel.
 	ActionCut:       true,
 	ActionPaste:     true,
 	ActionSelectAll: true,
-	ActionUndo:      true,
-	ActionRedo:      true,
 	ActionSaveFile:  true,
 	ActionFind:      true,
 	ActionQuit:      true,
@@ -210,7 +209,7 @@ var familiar = map[Action]bool{
 func (a Action) Familiar() bool { return familiar[a] }
 ```
 
-**Two things to check before you trust that list.** First, `ActionUndo` and `ActionRedo` are written above from the spec's classification, but this plan's author did not confirm those constant names exist — read `internal/keymap/action.go`'s const block and use the real names. Second, the list must cover exactly the actions `AllActions()` returns; `TestEveryActionIsClassified` is what tells you if it does not, and `TestTheClassification…` tells you if the counts are off. If the real total is not 48, or the split is not 19/29, **stop and report** rather than adjusting the numbers to fit — the spec's counts came from the shipped binary and a mismatch means something moved.
+**Check the list against the real enumeration before trusting it.** It must cover exactly the actions `AllActions()` returns — no more, no fewer. `TestEveryActionIsClassified` tells you if an action is missing; `TestTheClassificationSplitsFortySixIntoSixteenAndThirty` tells you if the counts are off. The 46/16/30 figures were measured against this worktree's binary. If what you find differs, **stop and report** rather than adjusting the numbers to fit — a mismatch means an action moved, and that is a decision, not an arithmetic correction.
 
 - [ ] **Step 4: Run them and watch them pass**
 
@@ -492,7 +491,7 @@ Then write `packFamiliar` in the same file:
 ```go
 // packFamiliar renders the keys a reader already knows as a few dense lines.
 //
-// One line each would spend nineteen rows on the half of the reference that
+// One line each would spend sixteen rows on the half of the reference that
 // teaches nothing, which is the shape this section exists to replace. The
 // width is the conventional terminal's, because `dv keys` writes to a pipe
 // as often as to a screen and has no rect to ask.
@@ -689,7 +688,7 @@ The spec's closing claims, each with the test that holds it:
 
 | Claim | Held by |
 |---|---|
-| `dv keys` opens with what dv teaches, 29 lines not 52 | `TestKeysLeadsWithWhatDVTeachesAndPacksTheRest` (Task 3) |
+| `dv keys` opens with what dv teaches, 30 lines not 52 | `TestKeysLeadsWithWhatDVTeachesAndPacksTheRest` (Task 3) |
 | The familiar keys are present and take three lines | the packing assertion in the same test, and Task 4's for the help screen |
 | A reader is told one key reaches the rest | `TestKeysSaysThePaletteReachesTheRest` (Task 3) |
 | Every action stays discoverable | `TestKeysStillListsEveryAction` (Task 3), `TestEveryActionAppearsOnTheHelpScreen` (unchanged) |
@@ -698,7 +697,6 @@ The spec's closing claims, each with the test that holds it:
 
 ## Where to stop and report rather than improvise
 
-- **The counts do not come out 19/29 over 48.** The spec's numbers came from the shipped binary. A mismatch means an action was added or removed since; report it rather than adjusting the expected numbers to match what you find.
-- **`ActionUndo`/`ActionRedo` are not the real constant names.** Use whatever the const block actually declares — but if there is no undo action at all, the familiar list is wrong by two and the counts need revisiting with the user.
-- **Nineteen entries will not pack into three lines** even with short descriptions. Report the shortest you achieved and let the budget be a decision, not a silent widening.
+- **The counts do not come out 16/30 over 46.** The spec's numbers came from the shipped binary. A mismatch means an action was added or removed since; report it rather than adjusting the expected numbers to match what you find.
+- **Sixteen entries will not pack into three lines** even with short descriptions. Report the shortest you achieved and let the budget be a decision, not a silent widening.
 - **`packFamiliar` needs to move to `internal/keymap`** for Task 4 to reuse it. That is expected and fine — but it makes `keymap` render a line of output, which is a boundary this repository guards. Say so in your report so the reviewer judges it deliberately.

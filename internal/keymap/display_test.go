@@ -86,3 +86,51 @@ func TestLabelWidthCountsDisplayCells(t *testing.T) {
 		t.Errorf("LabelWidth(%q) = %d, want at least 2", "⌘↩", got)
 	}
 }
+
+// The reference leads with what has to be learned, so the split must keep
+// dv's own actions first and must not quietly drop or duplicate any: an
+// action in neither group is one nobody can discover.
+func TestTheSplitKeepsEveryActionExactlyOnce(t *testing.T) {
+	all := AllActions()
+	ours, known := SplitByFamiliarity(all)
+
+	if len(ours)+len(known) != len(all) {
+		t.Fatalf("split %d actions into %d + %d", len(all), len(ours), len(known))
+	}
+
+	seen := make(map[Action]int, len(all))
+	for _, a := range ours {
+		seen[a]++
+		if a.Familiar() {
+			t.Errorf("%q is familiar but was put in dv's own", a)
+		}
+	}
+	for _, a := range known {
+		seen[a]++
+		if !a.Familiar() {
+			t.Errorf("%q is dv's own but was put in the familiar group", a)
+		}
+	}
+	for _, a := range all {
+		if seen[a] != 1 {
+			t.Errorf("%q appears %d times across the two groups, want 1", a, seen[a])
+		}
+	}
+}
+
+// The help screen's grouping is deliberate, so the split must not reorder
+// what it is handed.
+func TestTheSplitPreservesTheOrderItWasGiven(t *testing.T) {
+	// The input interleaves the two groups, and the expected output of each is
+	// in descending Action order: an implementation that sorted, rather than
+	// keeping what it was handed, would pass an ascending expectation by luck.
+	in := []Action{ActionExplain, ActionPaste, ActionRun, ActionCut}
+	ours, known := SplitByFamiliarity(in)
+
+	if len(ours) != 2 || ours[0] != ActionExplain || ours[1] != ActionRun {
+		t.Errorf("dv's own = %v, want [explain run] in that order", ours)
+	}
+	if len(known) != 2 || known[0] != ActionPaste || known[1] != ActionCut {
+		t.Errorf("familiar = %v, want [paste cut] in that order", known)
+	}
+}

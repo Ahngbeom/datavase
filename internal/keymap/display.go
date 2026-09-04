@@ -54,3 +54,19 @@ func spaces(n int) string {
 	}
 	return string(out)
 }
+
+// SplitByFamiliarity divides actions into the ones dv has to teach and the
+// ones a reader already knows, keeping each group in the order given.
+//
+// The order is the caller's: the help screen groups by purpose and `dv keys`
+// follows the reference order, and neither wants this to have an opinion.
+func SplitByFamiliarity(actions []Action) (ours, known []Action) {
+	for _, a := range actions {
+		if a.Familiar() {
+			known = append(known, a)
+			continue
+		}
+		ours = append(ours, a)
+	}
+	return ours, known
+}

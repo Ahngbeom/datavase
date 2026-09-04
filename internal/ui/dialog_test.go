@@ -174,3 +174,57 @@ func TestEveryCommandNamesRealContexts(t *testing.T) {
 		}
 	}
 }
+
+// The help screen exists to be read in one sitting. Keys a reader already
+// knows still belong on it — they are findable there — but they must not
+// spend a row each pushing what dv teaches off the bottom.
+func TestTheHelpScreenPacksTheKeysAReaderAlreadyKnows(t *testing.T) {
+	body := helpReference(keymap.Default())
+
+	i := strings.Index(body, "Already what you expect")
+	if i < 0 {
+		t.Fatalf("the help screen has no section for familiar keys:\n%s", body)
+	}
+
+	packed := body[i:]
+	if end := strings.Index(packed, "\n\n"); end > 0 {
+		packed = packed[:end]
+	}
+	// The slice starts at the heading, which is not one of the packed lines.
+	block := strings.Split(strings.TrimSpace(packed), "\n")[1:]
+
+	_, known := keymap.SplitByFamiliarity(keymap.AllActions())
+	// The point of packing is that these keys cost less than a row each.
+	// There is deliberately no absolute ceiling: how few lines are reachable
+	// depends on how the platform spells its modifiers, so a number measured
+	// on one would fail on the other with nothing actually wrong.
+	if len(block) >= len(known) {
+		t.Errorf("the familiar block spends %d lines on %d actions — that is not packing",
+			len(block), len(known))
+	}
+}
+
+// Every action in the Cursor group is one a reader already knows, so
+// filtering empties it. A heading with nothing under it reads as a section
+// that failed to load.
+func TestAGroupWithNothingLeftToTeachLeavesNoHeading(t *testing.T) {
+	body := helpReference(keymap.Default())
+
+	if strings.Contains(body, "Cursor") {
+		t.Errorf("the emptied Cursor group still has a heading:\n%s", body)
+	}
+}
+
+// The groups are filtered before they are rendered now, so the check above —
+// which reads the group list rather than the screen — no longer proves an
+// action can be found. A key with no way to discover it is the failure the
+// help screen exists to prevent.
+func TestEveryActionIsStillOnTheRenderedHelpScreen(t *testing.T) {
+	body := helpReference(keymap.Default())
+
+	for _, action := range keymap.AllActions() {
+		if n := strings.Count(body, action.Describe()); n != 1 {
+			t.Errorf("%s appears %d times in the rendered reference, want 1", action, n)
+		}
+	}
+}

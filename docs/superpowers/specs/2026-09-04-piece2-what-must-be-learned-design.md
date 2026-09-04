@@ -17,11 +17,14 @@ was:
 > There are too many shortcuts to learn.
 
 That is true as the interface presents it, and false as the interface works.
-`dv keys` prints 52 lines covering 48 actions, in one undifferentiated run.
-But roughly a third of those are keys every editor and every macOS application
-already uses — `⌘Z`, `⌘X`, `⌘C`, `⌘V`, `⌘A`, `⌥←`, `Home`, `⌘S`. Nobody
-learns those here; they arrive knowing them. Printing them beside `F5` and
-`⌘⇧U` is what makes the list look like 48 things to memorise.
+`dv keys` prints 52 lines covering 46 actions, in one undifferentiated run.
+But a third of those are keys every editor and every macOS application already
+uses — `⌘X`, `⌘V`, `⌘A`, `⌥←`, `Home`, `⌘S`, `⌘F`. Nobody learns those here;
+they arrive knowing them. Printing them beside `F5` and `⌘⇧U` is what makes
+the list look like 46 things to memorise.
+
+(Undo and redo are not in that count: `tview`'s text area handles them itself,
+so they never reach `keymap` and never appear in the reference.)
 
 And of the rest, one — the command palette — reaches every other by name.
 Piece 1 built that (`command.covers`, and a test proving no action is
@@ -36,7 +39,7 @@ Piece 1's roadmap called this piece "escaping key theft — a prefix mode,
 means, not the end, and the means answers a different question.
 
 A prefix mode (tmux's `Ctrl+B`) solves **keys the terminal or multiplexer
-eats**. It moves 48 actions behind a leader key; there are still 48. It would
+eats**. It moves 46 actions behind a leader key; there are still 46. It would
 also change `Map.Lookup`'s contract from "one event is one action" to a
 sequence, which reaches its four consumers in `internal/ui` and `internal/cli`
 and sits next to the vim state machine.
@@ -112,18 +115,18 @@ This is the fourth, not a new idea.
 The boundary is **"is this key the same in every application?"** — not "does
 it look conventional".
 
-**Familiar — 19 actions.**
+**Familiar — 16 actions.**
 
 | Group | Count | Actions |
 |---|---|---|
 | Cursor | 8 | word left/right, select word left/right, line start/end, select to line start/end |
-| Editing | 6 | undo, redo, cut, copy, paste, select all |
 | Deleting | 2 | delete word left, delete to line start |
+| Clipboard | 3 | cut, paste, select all |
 | Finding | 1 | find in the editor or results |
 | Files | 1 | save file |
 | Session | 1 | quit |
 
-**dv's own — 29 actions.** Everything else, including four that look
+**dv's own — 30 actions.** Everything else, including five that look
 conventional and are not:
 
 | Action | Why it is dv's to teach |
@@ -132,12 +135,17 @@ conventional and are not:
 | `⌘D` duplicate line | VS Code uses the same chord for "select next occurrence". Same key, different result — the most dangerous kind. |
 | `⌘Y` delete line | A DataGrip convention, not a universal one. |
 | `⇥` / `⇧⇥` next/previous pane | Universal in web forms and GUI dialogs, not in terminal applications. |
+| `⌘C` copy **or cancel** | The action is `CopyOrCancel`: with nothing selected it cancels the running statement. The chord is the most conventional there is and the behaviour is not — the same trap as `⌘D`, and higher-stakes. |
 
 `⌘S` (save) and `⌘F` (find) are Familiar: saving is saving, and finding is
 finding. That `⌘F` searches the results as well as the editor is a difference
 the description carries, not the classification. `⌘⇧F` (search the query
 history) is dv's own — searching *history* is not what that chord means
 elsewhere.
+
+Undo and redo are absent from the classification because they are absent from
+`keymap`: `tview`'s text area handles them, so they are neither taught nor
+listed. Nothing in this piece changes that.
 
 **When a call is close, classify it as dv's own.** The costs are asymmetric: a
 familiar action wrongly marked dv's own adds one line to a list, while an
@@ -155,19 +163,20 @@ Its job is completeness, so it shows both — ordered and titled so the shorter,
 harder list comes first.
 
 ```
-The 29 that are dv's own
+The 30 that are dv's own
   F5              run the statement under the cursor
   F3              every command by name — this one reaches the rest
   ⌘B              show or hide the schema tree
   …
 
-Already what you expect — 19 keys, nothing new
-  ⌘Z ⌘⇧Z undo/redo · ⌘X ⌘C ⌘V cut/copy/paste · ⌘A select all
-  ⌥←→ by word · Home/End · ⌥⌫ ⌘⌫ delete · ⌘S save · ⌘Q quit
+Already what you expect — 16 keys, nothing new
+  ⌘X cut · ⌘V paste · ⌘A select all · ⌘S save · ⌘F find · ⌘Q quit
+  ⌥←→ by word · ⇧⌥←→ select by word · Home/End · ⇧Home/⇧End select
+  ⌥⌫ delete word · ⌘⌫ delete to line start
 ```
 
-**The familiar block is packed, not enumerated.** Nineteen actions that cost
-nothing to learn must not cost nineteen lines — that is the same defect in a
+**The familiar block is packed, not enumerated.** Sixteen actions that cost
+nothing to learn must not cost sixteen lines — that is the same defect in a
 new arrangement. Three lines is the budget.
 
 The `F3` line is the lever this piece turns. The palette has reached every
@@ -216,7 +225,7 @@ Everything here is a pure function over strings. No terminal, no database.
 ## What must be true when this is done
 
 - `dv keys` opens with the list of things `dv` actually teaches, and that list
-  is 29 lines rather than 52.
+  is 30 lines rather than 52.
 - The keys a user already knows are present, findable, and take three lines.
 - A reader is told, inside the list, that one key reaches the rest.
 - No key handling changed: `Lookup`, `Bindings`, `Apply` and every preset are

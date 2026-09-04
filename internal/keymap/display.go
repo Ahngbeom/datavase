@@ -1,6 +1,8 @@
 package keymap
 
 import (
+	"strings"
+
 	"github.com/mattn/go-runewidth"
 )
 
@@ -69,4 +71,38 @@ func SplitByFamiliarity(actions []Action) (ours, known []Action) {
 		ours = append(ours, a)
 	}
 	return ours, known
+}
+
+// PackFamiliar renders keys a reader already knows as a few dense lines
+// instead of the one-row-each table the rest of the reference uses.
+//
+// width is a parameter rather than a constant because its two callers have
+// different ones: `dv keys` guesses at a conventional terminal, while the
+// help screen has an actual rect to ask.
+func PackFamiliar(km *Map, actions []Action, mac bool, width int) []string {
+	var (
+		lines   []string
+		current string
+	)
+	for _, a := range actions {
+		labels := make([]string, 0, 3)
+		for _, b := range km.DisplayBindings(a) {
+			labels = append(labels, b.Label(mac))
+		}
+		entry := strings.Join(labels, " ") + " " + a.Describe()
+
+		switch {
+		case current == "":
+			current = entry
+		case LabelWidth(current)+3+LabelWidth(entry) <= width:
+			current += " · " + entry
+		default:
+			lines = append(lines, current)
+			current = entry
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
 }

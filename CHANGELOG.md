@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.8.0 — 2026-09-07
 
 **One thing to check before upgrading: `preset` in your config.** Anyone who
 left it unset was on the modal keyboard, `vim`, without having chosen it —
@@ -30,6 +30,14 @@ row each, and the command palette's entry says what has been true since the
 last release: it reaches every other command by name. Nothing was removed or
 rebound, and the README's key table follows the same split.
 
+**Key labels stop naming keys the terminal cannot deliver.** tmux never
+forwards `⌘` to the program it hosts, but every label in the interface kept
+teaching the glyph anyway — so a Mac user inside tmux read "⌘ doesn't work"
+as the program being broken. The `Ctrl` form was bound to the same action the
+whole time and did arrive; only the label lied. Labels now read the terminal
+as well as the operating system, and show the spelling that can actually
+reach the program.
+
 ### Added
 
 **Clicks mean something.** A datasource, a schema or `keys` in the top bar
@@ -46,6 +54,40 @@ selects text by dragging: mouse reporting in a terminal disables its own
 native selection, so a click that means something is a regression rather
 than a feature for them. Everything the mouse could reach stays reachable
 from the keyboard.
+
+**The results grid draws a line between columns.** Cells were separated by
+expansion padding alone, so there was no way to tell where one ended before
+copying it. The rule is drawn in the same muted colour as the rest of the
+screen.
+
+**`dv server stop` waits for the session to actually go away.** It used to
+write the stop message and return at once, reporting success even when the
+server never read it — a session that was wedged stayed up and could only be
+recovered with `kill`. It now waits for the socket to disappear, and past a
+deadline names the process holding it instead of hanging silently. `dv server
+stop --force` signals that process; without `--force` nothing is ever
+signalled, so the deadline reports the problem and leaves the choice to you.
+
+### Fixed
+
+**A session could land on a table's definition with no way back to the
+results.** Opening a table showed its DDL without moving the keyboard there,
+and on a terminal that eats the run key there was nothing on screen saying
+how to return — one user stopped using the tool at that point. `Esc` now
+returns to the results, focus follows what was opened, and the hint that says
+so appears only where it is true.
+
+**`dv keys --tmux` told you to kill your tmux server.** `tmux kill-server`
+destroys every session on the socket, not just the one being configured. The
+snippet now says `tmux source-file ~/.tmux.conf`, run from inside tmux, and
+says which of its two settings needs that at all.
+
+**A rebuilt binary could silently drive the previous build's session.** Two
+development builds report the same version, so the handshake accepted a
+client built after the server started — meaning you could read new source
+while running old code. The handshake now also compares the running
+executable, and refuses with the same remedy a version mismatch already
+gives. Release builds are unaffected.
 
 ## v0.7.0 — 2026-08-28
 

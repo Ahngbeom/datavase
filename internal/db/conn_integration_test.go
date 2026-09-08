@@ -5,8 +5,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -833,4 +835,100 @@ func TestAPooledConnectionIsOnlyOursWhileItIsHeld(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Errorf("connection %d is still claimed as ours after the statement finished", id)
+}
+
+// A caller waiting for the control connection has to be able to give up.
+//
+// The wait used to be an ordinary mutex, so a context deadline only started
+// counting once the lock had been won. When the control connection went to a
+// server that had stopped answering — a router reaping an idle connection, a
+// network that dropped — the holder stayed in its write for as long as TCP
+// took to notice, and every later caller waited behind it forever no matter
+// what timeout it had set. Reading a table's definition, listing what else is
+// running and cancelling a statement all take this lock, so one dead
+// connection took the interface with it.
+func TestAWaitingControlCallerGivesUpWhenItsContextDoes(t *testing.T) {
+	conn := openTestConn(t)
+
+	// The holder keeps the connection for longer than the waiter will wait.
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		_ = conn.WithControl(context.Background(), func(*sql.Conn) error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	defer close(release)
+	<-held
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.WithControl(ctx, func(*sql.Conn) error {
+			return fmt.Errorf("the waiter must never reach the connection")
+		})
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("a waiter whose context expired returned %v, want %v",
+				err, context.DeadlineExceeded)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a waiter whose context expired after 100ms was still blocked five seconds later")
+	}
+}
+
+// Only one caller may hold the control connection at a time.
+//
+// The existing protocol test relies on a corrupted connection actually
+// surfacing an error, which needs two callers to overlap on the wire and so
+// does not always happen. This watches the overlap directly. It matters more
+// since the lock became a buffered channel: "one at a time" is now a capacity
+// that can be mistyped, where a sync.Mutex could not express anything else.
+func TestOnlyOneCallerHoldsTheControlConnectionAtATime(t *testing.T) {
+	conn := openTestConn(t)
+	ctx := context.Background()
+
+	var (
+		mu      sync.Mutex
+		inside  int
+		overlap int
+	)
+
+	const workers = 16
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = conn.WithControl(ctx, func(*sql.Conn) error {
+				mu.Lock()
+				inside++
+				if inside > 1 {
+					overlap++
+				}
+				mu.Unlock()
+
+				time.Sleep(2 * time.Millisecond)
+
+				mu.Lock()
+				inside--
+				mu.Unlock()
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+
+	if overlap != 0 {
+		t.Errorf("%d callers held the control connection while another already did; "+
+			"concurrent use desynchronises the MySQL protocol and the driver then "+
+			"discards the connection for good", overlap)
+	}
 }

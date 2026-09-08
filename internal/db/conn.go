@@ -39,7 +39,10 @@ type Conn struct {
 	// cancellation and every catalog read down with it. Handing out the
 	// *sql.Conn made that failure possible, so the connection is reached only
 	// through WithControl.
-	controlMu sync.Mutex
+	//
+	// A channel rather than a sync.Mutex because the wait has to be
+	// abandonable: see WithControl.
+	controlMu chan struct{}
 	control   *sql.Conn
 
 	// txMu guards the transaction below. It is never held across a round
@@ -107,7 +110,8 @@ func Open(ctx context.Context, ds *config.DataSource, password, addr string) (*C
 		return nil, fmt.Errorf("connecting to %s: %w", ds.Name, err)
 	}
 
-	c := &Conn{ds: ds, pool: pool, control: control, version: version}
+	c := &Conn{ds: ds, pool: pool, control: control, version: version,
+		controlMu: make(chan struct{}, 1)}
 	// The control connection's id is held for the session's lifetime. Killing
 	// it would take cancellation and every catalog read with it, and there is
 	// no way back from that short of reconnecting.
@@ -129,10 +133,23 @@ func (c *Conn) ServerVersion() string { return c.version }
 // concurrent use — which would corrupt the protocol and kill the connection
 // for good — cannot be expressed.
 //
+// The wait for the connection honours ctx, which a sync.Mutex cannot express.
+// When the server behind this connection stops answering — a router reaping an
+// idle connection, a network that drops — the holder stays in its write for as
+// long as TCP takes to give up, which is minutes. Every caller queued behind it
+// used to wait that out whatever deadline it had set, because the deadline only
+// began once the lock was won. Reading a definition, listing what else is
+// running and cancelling a statement all take this, so one dead connection
+// silently took all three with it.
+//
 // fn must not retain the connection beyond its return.
 func (c *Conn) WithControl(ctx context.Context, fn func(*sql.Conn) error) error {
-	c.controlMu.Lock()
-	defer c.controlMu.Unlock()
+	select {
+	case c.controlMu <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-c.controlMu }()
 
 	if err := ctx.Err(); err != nil {
 		return err

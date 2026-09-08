@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## v0.8.0 — 2026-09-07
+## v0.8.0 — 2026-09-08
 
 **One thing to check before upgrading: `preset` in your config.** Anyone who
 left it unset was on the modal keyboard, `vim`, without having chosen it —

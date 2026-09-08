@@ -82,11 +82,6 @@ homebrew_casks:
     homepage: https://github.com/Ahngbeom/datavase
     description: A terminal MySQL/MariaDB client. Single static binary, no runtime, no IDE.
 
-    # The archives live on github.com while the homepage is the repository, and
-    # `brew audit` wants to be told that on purpose.
-    url:
-      verified: github.com/Ahngbeom/datavase/
-
     # The binary is signed ad-hoc by the Go linker and notarized by nobody, so
     # macOS refuses to run it once Homebrew's download has been quarantined.
     # Without this hook `brew install` appears to succeed and `dv` is killed on

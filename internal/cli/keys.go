@@ -3,13 +3,11 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/vim"
 )
 
 // keys prints the key map, or configuration for making a terminal deliver it.
@@ -61,22 +59,6 @@ func (a *App) keymap() (*keymap.Map, error) {
 	return km, nil
 }
 
-// printVimKeys lists the modal commands, which are the state machine's rather
-// than the keymap's and so are not in the table above.
-func printVimKeys(out io.Writer, km *keymap.Map) {
-	if !km.Modal() {
-		return
-	}
-
-	for _, group := range vim.Reference() {
-		fmt.Fprintf(out, "\n%s\n", group.Title)
-		for _, entry := range group.Entries {
-			fmt.Fprintf(out, "%s  %s\n",
-				keymap.PadLabel(entry.Keys, keyColumn), entry.Description)
-		}
-	}
-}
-
 // keyColumn is the width of the key column. Wide enough for "⌘⇧↩  ^⇧↩  ⇧F5".
 const keyColumn = 22
 
@@ -114,8 +96,6 @@ func (a *App) printKeys(km *keymap.Map) {
 	for _, line := range keymap.PackFamiliar(km, known, mac, familiarWidth) {
 		fmt.Fprintf(a.Out, "  %s\n", line)
 	}
-
-	printVimKeys(a.Out, km)
 
 	// The advice matters more than the table when the terminal cannot deliver
 	// the primary bindings, so it goes last where it will be read.

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -199,46 +198,6 @@ func helpReference(km *keymap.Map) string {
 	}
 
 	return b.String()
-}
-
-// vimHelp renders the modal commands, and the way out of them.
-//
-// The escape hatch is not an afterthought: someone who did not choose a modal
-// editor and cannot type into it needs to be told how to leave in the same
-// place they went looking for help.
-func (a *App) vimHelp() string {
-	if !a.keys.Modal() {
-		return ""
-	}
-
-	var b strings.Builder
-	for _, group := range vim.Reference() {
-		fmt.Fprintf(&b, "\n%s\n", headingTag(group.Title))
-		for _, entry := range group.Entries {
-			fmt.Fprintf(&b, "  %s  %s\n",
-				keymap.PadLabel(entry.Keys, helpKeyColumn), entry.Description)
-		}
-	}
-
-	b.WriteString("\n" + tag(colourMuted, "To keep this keyboard, put `keymap: {preset: vim}` in\n"+
-		"~/.config/datavase/config.yaml.") + "\n")
-	return b.String()
-}
-
-// modalEscapeHatch is the way out of a modal editor nobody asked for.
-//
-// It sits under "Start here" rather than at the foot of the vim reference,
-// which is where it used to be. Someone who cannot type into the editor opens
-// the help and reads the top of it; putting the answer past forty keys and a
-// full vim table meant scrolling through the thing they were trying to leave
-// to find out that they could.
-func (a *App) modalEscapeHatch() string {
-	if !a.keys.Modal() {
-		return ""
-	}
-	return "\n" + tag(colourMuted, "Typing does nothing? This editor is modal — press i first.\n"+
-		"For an ordinary editor, put `keymap: {preset: datagrip}` in\n"+
-		"~/.config/datavase/config.yaml.") + "\n"
 }
 
 // helpKeyColumn is the width of the key column on the help screen.

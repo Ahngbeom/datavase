@@ -155,11 +155,10 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, pre
 	}
 	t.Cleanup(func() { hist.Close() })
 
-	// The keyboard is stated rather than taken from the default. These tests
-	// are about behaviour that predates the modal editor — typing into the
-	// editor, undo, completion — and would otherwise start failing the day
-	// the default changed, for reasons that have nothing to do with them.
-	// Modal behaviour has its own harness.
+	// The keyboard is stated rather than taken from the default, so these
+	// tests — typing into the editor, undo, completion — do not start failing
+	// the day the default changes, for reasons that have nothing to do with
+	// them.
 	keys, err := keymap.ForPreset(keymap.PresetDataGrip)
 	if err != nil {
 		t.Fatalf("ForPreset(datagrip) error = %v", err)
@@ -594,6 +593,28 @@ func (h *harness) undo() {
 func (h *harness) moveCaret(offset int) {
 	h.t.Helper()
 	h.app.app.QueueUpdateDraw(func() { h.app.editor.Select(offset, offset) })
+	h.settle()
+}
+
+// buffer puts text in the editor with the caret at an offset, focused.
+//
+// The caret is placed in a later tick on purpose. TextArea rebuilds its row
+// index lazily, and a Select issued in the same tick as SetText is resolved
+// against the row index of the text that has just been thrown away — it
+// lands on the wrong line.
+func (h *harness) buffer(text string, caret int) {
+	h.t.Helper()
+
+	h.inspect(func(a *App) bool {
+		a.editor.SetText(text, false)
+		a.app.SetFocus(a.editor)
+		return true
+	})
+	h.inspect(func(a *App) bool {
+		a.editor.Select(caret, caret)
+		a.clearAnchor()
+		return true
+	})
 	h.settle()
 }
 

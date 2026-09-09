@@ -22,7 +22,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
-	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -52,15 +51,7 @@ type App struct {
 	topBar    *topBar
 	statusBar *statusBar
 
-	// vim is the modal input state. It exists whatever the preset is, so
-	// switching to the vim keyboard mid-session starts from normal mode
-	// rather than from whatever the last session left behind.
-	vim              *vim.State
-	register         string
-	registerLinewise bool
-	// listPending holds a half-typed sequence for the panels that are lists.
-	listPending rune
-	pages       *tview.Pages
+	pages *tview.Pages
 
 	buf *result.Buffer
 	// content is held rather than handed to the table and forgotten, because
@@ -149,9 +140,6 @@ type App struct {
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
 
-	// lastChange is what "." repeats.
-	lastChange change
-
 	// batch is a "run everything" in flight, nil otherwise. Like running, it
 	// is touched only from the UI goroutine: each statement resumes the batch
 	// from the same callback that reports the last one finished.
@@ -239,7 +227,6 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		cache:           deps.Cache,
 		history:         deps.History,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
-		vim:             vim.New(),
 		selectionAnchor: noAnchor,
 		mouseEnabled:    cfg.Defaults.Mouse == nil || *cfg.Defaults.Mouse,
 	}
@@ -383,13 +370,7 @@ func (a *App) editorPlaceholder() string {
 		// that works everywhere.
 		binding = bindings[len(bindings)-1]
 	}
-	hint := "SELECT … then " + binding.Label(onMac) + " to run"
-	if a.keys.Modal() {
-		// The empty buffer is exactly where a modal editor is most confusing:
-		// typing does nothing until insert mode is entered.
-		return "press i to type · " + hint
-	}
-	return hint
+	return "SELECT … then " + binding.Label(onMac) + " to run"
 }
 
 // Run starts the event loop and blocks until the user quits.
@@ -458,7 +439,6 @@ func (a *App) buildWidgets() {
 	a.topBar = newTopBar(a.currentTopBar)
 	a.topBar.record = a.hits.set
 	a.statusBar = newStatusBar(a.currentStatus)
-	a.statusBar.record = a.hits.set
 }
 
 // schemaDetail is the trailing note on the schema pane's header, read at draw
@@ -700,10 +680,9 @@ func (a *App) bindKeys() {
 //
 // Esc is deliberately not a keymap.Action: making it one would let it be
 // rebound away from every dialog that already relies on it as the one
-// universal way out, so it is intercepted here, ahead of dispatch. The
-// editor keeps its own Esc — leaving insert mode — which is why this steps
-// aside whenever the editor holds focus rather than deciding purely from
-// which tab is showing.
+// universal way out, so it is intercepted here, ahead of dispatch. It steps
+// aside whenever the editor holds focus, or Escape while typing would
+// silently steal focus to the results tab.
 func (a *App) returnToResults(ev *tcell.EventKey) bool {
 	if ev.Key() != tcell.KeyEscape {
 		return false
@@ -1101,16 +1080,8 @@ func (a *App) refreshStatus() {
 func (a *App) renderStatus() {}
 
 // currentStatus is what the status bar renders.
-//
-// The modal fields are filled in here rather than pushed on every keystroke:
-// the bar reads this at draw time, so the mode and any half-typed sequence
-// are always the live ones without anything having to remember to update it.
 func (a *App) currentStatus() status {
 	s := a.status
-	if a.keys.Modal() {
-		s.vimMode = a.vim.Mode().String()
-		s.vimPending = a.vim.Pending()
-	}
 	s.columnsLeft = a.columnsOffView()
 	return s
 }

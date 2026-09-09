@@ -16,12 +16,6 @@ func (a *App) bindEditor() {
 		if a.editorAction(a.keys.Lookup(ev)) {
 			return nil
 		}
-		// The bound keys are all chords, so they are resolved first and the
-		// modal machine never sees them: ⌘Y still deletes a line on the vim
-		// keyboard, and a plain letter still reaches vim.
-		if a.keys.Modal() {
-			return a.vimKey(ev)
-		}
 		return ev
 	})
 }

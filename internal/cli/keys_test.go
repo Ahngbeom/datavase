@@ -207,38 +207,6 @@ func TestKeysRejectsAnUnknownPreset(t *testing.T) {
 	}
 }
 
-// `dv keys` is what someone runs from outside the application when they
-// cannot work out what a key does — including, on the vim keyboard, the vim
-// keys themselves.
-func TestKeysListsTheVimCommandsOnTheVimPreset(t *testing.T) {
-	h := newHarness(t)
-	h.app.Config.Keymap = config.Keymap{Preset: "vim"}
-
-	if code := h.app.Run([]string{"keys"}); code != 0 {
-		t.Fatalf("Run(keys) = %d, want 0; stderr = %q", code, h.err)
-	}
-
-	out := h.out.String()
-	for _, want := range []string{"dd", "cw", "gg", "insert before the cursor"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the vim reference is missing %q:\n%s", want, out)
-		}
-	}
-}
-
-// And it must not appear on the keyboards that are not modal, where "dd" is
-// just two letters.
-func TestKeysOmitsTheVimCommandsElsewhere(t *testing.T) {
-	h := newHarness(t)
-	h.app.Config.Keymap = config.Keymap{Preset: "datagrip"}
-
-	h.app.Run([]string{"keys"})
-
-	if strings.Contains(h.out.String(), "insert before the cursor") {
-		t.Errorf("the vim reference is shown on a non-modal keyboard:\n%s", h.out)
-	}
-}
-
 // The sixteen keys that cost nothing to learn must not cost sixteen rows
 // above the thirty that do — the same defect this change exists to remove.
 func TestKeysLeadsWithWhatDVTeachesAndPacksTheRest(t *testing.T) {

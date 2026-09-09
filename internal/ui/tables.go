@@ -89,10 +89,6 @@ func (a *App) buildTablesTab() tview.Primitive {
 	})
 
 	a.tableList.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		ev = a.vimListKey(ev)
-		if ev == nil {
-			return nil
-		}
 		if ev.Key() == tcell.KeyUp && a.tableList.GetCurrentItem() == 0 {
 			a.app.SetFocus(a.tableFilter)
 			return nil

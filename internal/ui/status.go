@@ -31,10 +31,6 @@ const (
 // It is a plain value with a pure render method, so what the user is told
 // about a production database can be tested without starting a terminal.
 type status struct {
-	// vimMode and vimPending describe the modal keyboard, and are empty on
-	// the keyboards that do not have one.
-	vimMode    string
-	vimPending string
 	// inTransaction says the connection is pinned and the work so far is
 	// undoable, which changes what several other fields mean.
 	inTransaction bool
@@ -77,9 +73,6 @@ type field struct {
 	expendable  bool
 	expendRank  int // higher goes first when space runs out
 	visibleCost int
-	// target is what a click on this field answers. zoneNone for every field
-	// today — nothing on the bar currently answers a click.
-	target zoneTarget
 }
 
 // defaultStatusWidth is used when the real width is not known yet, on the
@@ -88,8 +81,7 @@ const defaultStatusWidth = 100
 
 // render produces the line at the bar's default width.
 func (s status) render() string {
-	line, _ := s.renderWidth(defaultStatusWidth)
-	return line
+	return s.renderWidth(defaultStatusWidth)
 }
 
 // Separators, widest first. Tightening the spacing costs nothing, so it is
@@ -101,12 +93,8 @@ const (
 )
 
 // renderWidth produces the line, tightening and then dropping fields until
-// it fits, and the zones a click on the result can land in.
-//
-// A zone's columns are known only after the join, since dropping and
-// tightening both happen first — the same reason topBarState.renderWidth
-// accumulates them here rather than in fields().
-func (s status) renderWidth(width int) (string, []zone) {
+// it fits.
+func (s status) renderWidth(width int) string {
 	fields := s.fields()
 
 	separator := wideSeparator
@@ -118,32 +106,20 @@ func (s status) renderWidth(width int) (string, []zone) {
 	for statusWidth(fields, sepCost) > width && dropOne(&fields) {
 	}
 
-	var (
-		line  strings.Builder
-		zones []zone
-		at    int
-	)
+	var line strings.Builder
 	for i, f := range fields {
 		if i > 0 {
 			line.WriteString(separator)
-			at += sepCost
-		}
-		if f.target != zoneNone {
-			zones = append(zones, zone{from: at, to: at + f.visibleCost, target: f.target, index: -1})
 		}
 		line.WriteString(f.text)
-		at += f.visibleCost
 	}
 
 	// On a terminal too narrow even for the warnings, something has to give.
-	// Truncating is the last resort and keeps the leftmost fields, which are
-	// the mode indicator and whatever warning followed it. Truncating drops
-	// the zones with the columns they described — a partially cut field has
-	// nothing intact left for a click to mean.
+	// Truncating is the last resort and keeps the leftmost fields.
 	if out := line.String(); visibleCost(out) > width {
-		return truncateMarkup(out, width), nil
+		return truncateMarkup(out, width)
 	}
-	return line.String(), zones
+	return line.String()
 }
 
 // truncateMarkup shortens a tagged string to a visible width, leaving colour
@@ -245,17 +221,7 @@ func (s status) fields() []field {
 		})
 	}
 
-	// The mode comes first, before anything that can be dropped: on a modal
-	// keyboard it is what explains why an ordinary letter did nothing, so it
-	// has to survive both the dropping and the truncating.
 	var out []field
-	if s.vimMode != "" {
-		mode := s.vimMode
-		if s.vimPending != "" {
-			mode += " " + s.vimPending
-		}
-		out = add(out, tag(colourNotice, mode), false, 0)
-	}
 
 	// Never dropped. Whether the work so far can be undone is not a detail
 	// that should vanish because the terminal got narrow.
@@ -405,9 +371,6 @@ func formatElapsed(d time.Duration) string {
 type statusBar struct {
 	*tview.TextView
 	current func() status
-	// record hands the zones of this frame to the application's hitmap,
-	// offset into screen columns. Nil in a bar nobody is clicking.
-	record func(row int, zones []zone)
 }
 
 func newStatusBar(current func() status) *statusBar {
@@ -418,16 +381,12 @@ func newStatusBar(current func() status) *statusBar {
 }
 
 func (b *statusBar) Draw(screen tcell.Screen) {
-	x, y, width, _ := b.GetInnerRect()
+	_, _, width, _ := b.GetInnerRect()
 	if width <= 0 {
 		width = defaultStatusWidth
 	}
 
-	text, zones := b.current().renderWidth(width)
-	b.SetText(text)
-	if b.record != nil {
-		b.record(y, offsetZones(zones, x))
-	}
+	b.SetText(b.current().renderWidth(width))
 	b.TextView.Draw(screen)
 }
 

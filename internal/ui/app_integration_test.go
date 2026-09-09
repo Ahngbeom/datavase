@@ -1282,6 +1282,27 @@ func TestATypedRollbackUndoesTheWork(t *testing.T) {
 	}
 }
 
+// Session state runs inside a transaction because the connection is pinned
+// for its length, unlike the pooled connections an ordinary statement runs
+// on — where a SET would be silently discarded the moment it was handed back.
+func TestSetRunsInsideATransaction(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("BEGIN")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to open", func(a *App) bool { return a.status.inTransaction })
+
+	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
+	h.do(keymap.ActionRun)
+	h.waitFor("the SET to run", func(a *App) bool {
+		return a.status.phase == phaseDone && a.status.err == nil
+	})
+
+	h.typeSQL("ROLLBACK")
+	h.do(keymap.ActionRun)
+	h.waitFor("the transaction to close", func(a *App) bool { return !a.status.inTransaction })
+}
+
 func rowCount(t *testing.T, h *harness, table string) int {
 	t.Helper()
 

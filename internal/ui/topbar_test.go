@@ -58,7 +58,7 @@ func TestTopBarKeepsTheSchemaWhereverItFits(t *testing.T) {
 // side by side read as a repetition rather than as two facts.
 func TestTheSchemaIsMarkedWithAnAt(t *testing.T) {
 	got, _ := baseTopBar().renderWidth(120)
-	if !strings.Contains(visibleText(got), "prod-app  @app_db") {
+	if !strings.Contains(visibleText(got), "prod-app @app_db") {
 		t.Errorf("%q does not join the datasource and the schema", got)
 	}
 }

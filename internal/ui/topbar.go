@@ -77,7 +77,7 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 	mark(before, zoneDataSource)
 
 	if t.schema != "" {
-		line += " @"
+		line += "@"
 		before := line
 		line += result.EscapeTags(t.schema)
 		mark(before, zoneSchema)

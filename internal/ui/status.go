@@ -24,10 +24,9 @@ const (
 
 // status is what just happened.
 //
-// Where the session is — the environment, the datasource, the schema, the
-// branch — lives on the top bar, and the open file on the editor's own header.
-// Splitting them is what stopped a schema name and a row count competing for
-// the same space, with the loser silently gone.
+// Where the session is — the environment, the datasource, the schema — lives
+// on the top bar. Splitting them is what stopped a schema name and a row
+// count competing for the same space, with the loser silently gone.
 //
 // It is a plain value with a pure render method, so what the user is told
 // about a production database can be tested without starting a terminal.

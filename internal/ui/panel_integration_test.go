@@ -85,22 +85,6 @@ func TestTablesTabFilters(t *testing.T) {
 	}
 }
 
-// Choosing a table writes a starter query, the same as go-to-table does.
-func TestTablesTabOpensATable(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-
-	h.focusSchemaPane()
-	h.do(keymap.ActionCycleTab)
-	h.typeInto("invoices")
-	h.press(tcell.KeyDown)
-	h.press(tcell.KeyEnter)
-
-	if got := h.editorText(); !strings.Contains(got, "invoices") {
-		t.Errorf("editor holds %q, want a query against the chosen table", got)
-	}
-}
-
 // buildLayout puts schemaTabs and rightPane in one horizontal Flex, so with
 // the sidebar open their headers can land on the same screen row. The
 // hitmap used to be keyed by row alone and replace whatever a row already

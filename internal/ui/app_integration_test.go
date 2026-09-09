@@ -770,8 +770,8 @@ func TestRunningASelectFillsTheGrid(t *testing.T) {
 	}
 }
 
-// A file of migrations is the reason the worktree exists, and a migration
-// file is almost never one statement. Run-everything has to run all of them.
+// A migration file is almost never one statement. Run-everything has to run
+// all of them.
 func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	h.typeSQL("SELECT 1; SELECT 2; SELECT 3")

@@ -31,8 +31,8 @@ type tabbed struct {
 	// abbreviated to fit.
 	width int
 
-	// detail is the trailing note this region owns — the open file, a hint
-	// that no statement has run yet.
+	// detail is the trailing note this region owns — a hint that no
+	// statement has run yet, say.
 	//
 	// It is a function read at draw time rather than a string pushed on every
 	// change: with no box to double, the header is the only cue a region has,

@@ -146,8 +146,8 @@ func truncatedNotice(detail string) searchItem {
 	return message("…the listing was cut short", detail)
 }
 
-// newSearchBox builds the "type to filter, arrow down to choose" pairing used
-// by the history and go-to-table dialogs.
+// newSearchBox builds the "type to filter, arrow down to choose" pairing
+// every finder dialog shares — history, the command palette, and the rest.
 //
 // tview's InputField reports Enter, Tab and Escape through SetDoneFunc but not
 // the arrow keys, so moving from the search field into the results — which is

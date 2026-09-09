@@ -366,8 +366,9 @@ func formatElapsed(d time.Duration) string {
 //
 // The width has to be read during Draw: asking the widget earlier returns the
 // zero rect it holds before tview lays it out, and rendering against that
-// drops every field but the mode indicator. Drawing per frame also means
-// the bar re-flows when the window is resized.
+// drops every field that is allowed to go, leaving only what must never be
+// hidden. Drawing per frame also means the bar re-flows when the window is
+// resized.
 type statusBar struct {
 	*tview.TextView
 	current func() status

@@ -11,11 +11,12 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// searchFor opens the prompt with "/" and types a pattern, without confirming.
+// searchFor opens the prompt through ActionFind and types a pattern, without
+// confirming.
 func (h *harness) searchFor(pattern string) {
 	h.t.Helper()
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
+	h.do(keymap.ActionFind)
 	h.waitFor("the search prompt", func(a *App) bool {
 		name, _ := a.pages.GetFrontPage()
 		return name == pageSearch
@@ -116,12 +117,12 @@ func TestRepeatingStepsForwardsAndBack(t *testing.T) {
 		return a.caretOffset(a.editor.GetText()) == first
 	})
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, 'n', tcell.ModNone))
+	h.do(keymap.ActionFindNext)
 	h.waitFor("the second match", func(a *App) bool {
 		return a.caretOffset(a.editor.GetText()) == second
 	})
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, 'N', tcell.ModNone))
+	h.do(keymap.ActionFindPrev)
 	h.waitFor("the first match again", func(a *App) bool {
 		return a.caretOffset(a.editor.GetText()) == first
 	})

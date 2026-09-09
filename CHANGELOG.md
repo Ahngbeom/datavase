@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## v0.9.0 — Unreleased
+## v0.9.0 — 2026-09-09
 
 **This release removes most of what v0.8 did.** Anyone who uses the modal
 editor, the command palette, the production guard, explain, the process

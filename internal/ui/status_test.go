@@ -371,7 +371,7 @@ func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
 // nothing on screen to say it was cut rather than finished.
 func TestATruncatedBarSaysItWasTruncated(t *testing.T) {
 	s := baseStatus()
-	s.message = "server 11.4.12-MariaDB · F1 for keys · ^B for the schema tree"
+	s.message = "server 11.4.12-MariaDB · F1 for keys · ^B hides the schema tree"
 
 	got := s.renderWidth(30)
 	if !strings.HasSuffix(visibleText(got), "…") {
@@ -431,7 +431,7 @@ func TestTheOpeningLineDropsWholeClausesRatherThanCuttingOne(t *testing.T) {
 	for _, width := range []int{80, 60, 40, 30} {
 		line := s.renderWidth(width)
 		got := visibleText(line)
-		if strings.Contains(got, "for the s") && !strings.Contains(got, "for the schema tree") {
+		if strings.Contains(got, "hides the s") && !strings.Contains(got, "hides the schema tree") {
 			t.Errorf("width %d: a clause was cut rather than dropped: %q", width, got)
 		}
 		if strings.Contains(got, "…") {
@@ -450,7 +450,7 @@ func TestTheOpeningLineNamesEveryClauseGivenRoom(t *testing.T) {
 	})
 
 	line := s.renderWidth(200)
-	for _, want := range []string{"F1 for keys", "^B for the schema tree", "11.4.12-MariaDB-ubu2404"} {
+	for _, want := range []string{"F1 for keys", "^B hides the schema tree", "11.4.12-MariaDB-ubu2404"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the opening line does not mention %q: %q", want, line)
 		}
@@ -532,5 +532,30 @@ func TestHintsGiveWayToAnythingThatActuallyHappened(t *testing.T) {
 		if got := s.renderWidth(120); strings.Contains(got, "click a column") {
 			t.Errorf("the hints survived %s", name)
 		}
+	}
+}
+
+// The server's words are the fact and the direction is a convenience, so a
+// line with room for one carries the fact.
+func TestANarrowFailureKeepsTheServerAndDropsTheDirection(t *testing.T) {
+	s := status{
+		phase: phaseFailed,
+		err:   errors.New("Error 1146 (42S02): Table 'app.orders' doesn't exist"),
+	}
+
+	wide := visibleText(s.renderWidth(120))
+	if !strings.Contains(wide, "the tree lists what is there") {
+		t.Errorf("a wide line dropped the direction: %q", wide)
+	}
+
+	narrow := visibleText(s.renderWidth(70))
+	if !strings.Contains(narrow, "Error 1146") {
+		t.Errorf("a narrow line lost the server's message: %q", narrow)
+	}
+	if strings.Contains(narrow, "the tree lists") {
+		t.Errorf("a narrow line kept the direction at the message's expense: %q", narrow)
+	}
+	if strings.Contains(narrow, "…") {
+		t.Errorf("a narrow line truncated rather than shed: %q", narrow)
 	}
 }

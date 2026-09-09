@@ -39,6 +39,12 @@ func TestTheResultPaneSaysWhyAWriteLeftNoRows(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	seedRows(t, h, 1)
 
+	// The sentence is what this test is about, so it needs the room to be
+	// drawn whole: the schema pane takes a third of the width, and the
+	// region header abbreviates its detail before it drops it.
+	h.do(keymap.ActionToggleSidebar)
+	h.waitFor("the width back", func(a *App) bool { return !a.sidebarVisible })
+
 	h.typeSQL("UPDATE dv_ui SET n = 2 WHERE n = 1")
 	h.do(keymap.ActionRun)
 	h.waitFor("the write to finish", func(a *App) bool { return a.status.written != nil })

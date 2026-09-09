@@ -8,6 +8,12 @@ import (
 	"github.com/Ahngbeom/datavase/internal/result"
 )
 
+// says makes a fixed string into the detail the header asks for, for tests
+// that are not about how a hint adapts to its room.
+func says(text string) func(int) string {
+	return func(int) string { return text }
+}
+
 // stripTags removes tview colour tags so assertions see what a user does.
 func stripTags(s string) string {
 	var (
@@ -113,7 +119,7 @@ func TestTabZonesAgreeWithTheAbbreviatedNames(t *testing.T) {
 	const active = 1
 
 	for _, width := range []int{60, 30, 18, 12, 8} {
-		header, zones := regionHeader(names, active, true, "", zoneNone, width)
+		header, zones := regionHeader(names, active, true, says(""), zoneNone, width)
 		plain := []rune(visibleText(header))
 
 		tabs := 0
@@ -156,7 +162,7 @@ func TestTabZonesAgreeWithTheAbbreviatedNames(t *testing.T) {
 // A tab strip of one is what the editor has: no tab to switch to, so nothing
 // there should answer a click as though there were.
 func TestASingleUnnamedTabPublishesNoTabZone(t *testing.T) {
-	_, zones := regionHeader([]string{""}, 0, false, "002_add_index.sql *", zoneNone, 60)
+	_, zones := regionHeader([]string{""}, 0, false, says("002_add_index.sql *"), zoneNone, 60)
 
 	for _, z := range zones {
 		if z.target == zoneTab {
@@ -181,7 +187,7 @@ func TestRegionHeaderPublishesAZoneForTheWholeHeader(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		_, zones := regionHeader(c.names, 0, false, "", zoneNone, width)
+		_, zones := regionHeader(c.names, 0, false, says(""), zoneNone, width)
 
 		var found bool
 		for _, z := range zones {
@@ -199,7 +205,7 @@ func TestRegionHeaderPublishesAZoneForTheWholeHeader(t *testing.T) {
 // zone has to come after every tab zone or a tab would never be reachable —
 // every click on it would resolve to "focus the region" instead.
 func TestRegionHeaderTriesTabZonesBeforeTheRegionName(t *testing.T) {
-	_, zones := regionHeader([]string{"results", "b"}, 0, true, "", zoneNone, 60)
+	_, zones := regionHeader([]string{"results", "b"}, 0, true, says(""), zoneNone, 60)
 
 	var sawTab, sawRegionAfterTab bool
 	for _, z := range zones {
@@ -219,7 +225,7 @@ func TestRegionHeaderTriesTabZonesBeforeTheRegionName(t *testing.T) {
 }
 
 func TestADetailWithATargetIsAZone(t *testing.T) {
-	_, zones := regionHeader([]string{"results"}, 0, false, "⌘⇧C copy", zoneCopyResult, 60)
+	_, zones := regionHeader([]string{"results"}, 0, false, says("⌘⇧C copy"), zoneCopyResult, 60)
 	var found bool
 	for _, z := range zones {
 		if z.target == zoneCopyResult && z.to > z.from {

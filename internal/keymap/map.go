@@ -197,6 +197,11 @@ func baseMap() *Map {
 	// Shift+C beside the plain copy key, so "copy more" is the same hand
 	// shape as "copy". F3 is the fallback for a terminal that cannot send a
 	// shifted control letter.
+	// Shift+R beside the copy key: R for the row. F8 is the fallback, free
+	// since the file finder went.
+	m.bind(ActionCopyRow,
+		append(ctrlAndCmdRune('r', tcell.ModShift), Binding{Key: tcell.KeyF8})...)
+
 	m.bind(ActionCopyResult,
 		append(ctrlAndCmdRune('c', tcell.ModShift), Binding{Key: tcell.KeyF3})...)
 

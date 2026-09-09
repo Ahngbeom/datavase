@@ -99,3 +99,62 @@ func TestWithNothingRunningTheKeyCopiesWhateverHasFocus(t *testing.T) {
 		})
 	}
 }
+
+// Focus decides, not what the editor happens to still be holding.
+//
+// A selection outlives the pane it was made in: running with ⌘A selected, or
+// with a dragged selection, leaves one behind. Reading it before the grid
+// meant that from the moment a query had been selected, the copy key in the
+// results copied the SQL — and the only way to reach a cell was to go back
+// and unselect. Nobody guesses that rule; they conclude cell copy is broken.
+func TestOnTheGridTheKeyCopiesTheCellEvenWithASelectionLeftInTheEditor(t *testing.T) {
+	ctx := copyContext{onGrid: true, hasSelection: true}
+	if got := ctx.resolve(); got != intentCell {
+		t.Errorf("resolve() = %v, want intentCell — the grid has focus", got)
+	}
+}
+
+// A row is pasted somewhere that understands columns — a spreadsheet, another
+// terminal — and alignment drawn with spaces stops being alignment the moment
+// it lands there.
+func TestCopyingARowSeparatesItsValuesWithTabs(t *testing.T) {
+	buf := bufferWith([]string{"id", "email", "note"},
+		[]any{int64(1), "a@example.com", nil})
+
+	got, ok := rowValues(buf, 0)
+	if !ok {
+		t.Fatal("rowValues reported nothing to copy")
+	}
+	if want := "1\ta@example.com\tNULL"; got != want {
+		t.Errorf("rowValues() = %q, want %q", got, want)
+	}
+}
+
+// The same reason a cell is copied from the buffer: the grid cuts long values
+// and doubles brackets for the markup parser, and a pasted row must carry
+// neither.
+func TestACopiedRowIsNeitherTruncatedNorEscaped(t *testing.T) {
+	long := strings.Repeat("y", result.CellLimit*2)
+	buf := bufferWith([]string{"bio", "v"}, []any{long, "[red]literal"})
+
+	got, _ := rowValues(buf, 0)
+	if !strings.Contains(got, long) {
+		t.Error("the row was truncated the way the grid draws it")
+	}
+	if !strings.Contains(got, "[red]literal") {
+		t.Errorf("the row was escaped for the screen: %q", got)
+	}
+}
+
+func TestARowThatIsNotThereIsNotCopied(t *testing.T) {
+	buf := bufferWith([]string{"id"}, []any{int64(1)})
+
+	for _, row := range []int{-1, 1, 99} {
+		if _, ok := rowValues(buf, row); ok {
+			t.Errorf("rowValues(row %d) reported something to copy", row)
+		}
+	}
+	if _, ok := rowValues(nil, 0); ok {
+		t.Error("rowValues(nil buffer) reported something to copy")
+	}
+}

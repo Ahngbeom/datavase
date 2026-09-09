@@ -253,7 +253,13 @@ func (s status) fields() []field {
 
 	case phaseFailed:
 		if s.err != nil {
-			out = add(out, tag(colourDanger, oneLine(s.err.Error())), false, 0)
+			message := oneLine(s.err.Error())
+			out = add(out, tag(colourDanger, message), false, 0)
+			// Shed before anything else: the server's words are the fact, and
+			// a narrow line must never cut them to keep this.
+			if where := failureDirection(message); where != "" {
+				out = add(out, tag(colourMuted, where), true, 5)
+			}
 		}
 	}
 

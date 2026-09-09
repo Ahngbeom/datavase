@@ -67,11 +67,10 @@ type App struct {
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
 	// around when it is toggled. sidebarRule is the hairline beside it.
 	//
-	// It starts false. This application already chose overlay finders as its
-	// way around — a datasource, a schema and a history entry each have a key
-	// that opens a searchable list — and a permanent tree on top of them is a
-	// third of the screen spent saying what those already answer. It is one
-	// key away.
+	// It starts true. Knowing what is in the database is the first thing
+	// anyone wants from a client they have just opened, and a tree that has
+	// to be asked for is a tree most people never learn is there. ⌘B takes it
+	// back for the session when the width is wanted for the result.
 	sidebarVisible bool
 	sidebarRule    *rule
 	body           *tview.Flex
@@ -225,6 +224,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		history:         deps.History,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		selectionAnchor: noAnchor,
+		sidebarVisible:  true,
 		mouseEnabled:    cfg.Defaults.Mouse == nil || *cfg.Defaults.Mouse,
 	}
 	if deps.Cache != nil {
@@ -287,22 +287,21 @@ type opening struct {
 //
 // The order decides what survives, and it is the whole of the ranking: a
 // clause's position in this slice is its shedding priority, most protected
-// first. The schema tree comes first — the sidebar starts hidden, so this is
-// the only place its existence is announced, and losing it is losing the one
-// way a first-time user finds it at all. F1 comes next: it reaches the full
-// reference. The server version brings up the rear: it is a greeting rather
-// than an instruction, and knowing which MariaDB answered has never stood
-// between anyone and their first query.
+// first. F1 comes first: it reaches the full reference, and every other key
+// with it. The schema tree follows — it is on screen, so this says how to
+// get the width back rather than that it exists. The server version brings
+// up the rear: it is a greeting rather than an instruction, and knowing
+// which MariaDB answered has never stood between anyone and their first
+// query.
 func openingClauses(o opening) []string {
 	var out []string
 
-	// The schema tree is not on screen, so this is where anyone learns it
-	// exists at all.
-	if o.sidebarKey != "" {
-		out = append(out, o.sidebarKey+" for the schema tree")
-	}
 	if o.helpKey != "" {
 		out = append(out, o.helpKey+" for keys")
+	}
+	// The tree is on screen; what is worth saying is how to put it away.
+	if o.sidebarKey != "" {
+		out = append(out, o.sidebarKey+" hides the schema tree")
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)
@@ -330,13 +329,18 @@ func (a *App) keyLabel(action keymap.Action) string {
 	return bindings[0].Label(onMac)
 }
 
-// editorPlaceholder names the run key.
+// editorPlaceholder is what an empty editor offers.
+//
+// It names the other way in rather than the run key: the header a row above
+// already says how to run, and repeating it wastes the one line a reader
+// looks at before they have typed anything. A table in the tree is the
+// fastest thing anyone new can do here, and nothing else on screen says the
+// gesture exists.
 func (a *App) editorPlaceholder() string {
-	bindings := a.keys.DisplayBindings(keymap.ActionRun)
-	if len(bindings) == 0 {
+	if !a.sidebarVisible {
 		return "SELECT …"
 	}
-	return "SELECT … then " + bindings[0].Label(onMac) + " to run"
+	return "SELECT … or double-click a table"
 }
 
 // Run starts the event loop and blocks until the user quits.
@@ -389,7 +393,7 @@ func (a *App) buildWidgets() {
 
 	// Every region shares one component so they cannot drift apart in
 	// behaviour, including the editor, which has no tabs at all.
-	a.editorRegion = newTabbed()
+	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
 	a.editorRegion.record = a.recorderFor(a.editorRegion)
 
@@ -415,7 +419,62 @@ func (a *App) buildWidgets() {
 
 // schemaDetail is the trailing note on the schema pane's header, read at draw
 // time like the other two regions'.
-func (a *App) schemaDetail() string {
+// affordances are the key labels the header hints name, read from the map in
+// force rather than written out, so a rebinding moves the hint with the key.
+func (a *App) affordances() affordanceKeys {
+	k := affordanceKeys{
+		run:      a.keyLabel(keymap.ActionRun),
+		runAll:   a.keyLabel(keymap.ActionRunAll),
+		complete: a.keyLabel(keymap.ActionComplete),
+		history:  a.keyLabel(keymap.ActionSearchHistory),
+		copy:     a.keyLabel(keymap.ActionCopyResult),
+		sort:     a.keyLabel(keymap.ActionSortColumn),
+		inspect:  a.keyLabel(keymap.ActionInspect),
+		row:      a.keyLabel(keymap.ActionCopyRow),
+	}
+	k.short.run = a.shortKeyLabel(keymap.ActionRun)
+	k.short.complete = a.shortKeyLabel(keymap.ActionComplete)
+	k.short.copy = a.shortKeyLabel(keymap.ActionCopyResult)
+	k.short.sort = a.shortKeyLabel(keymap.ActionSortColumn)
+	k.short.inspect = a.shortKeyLabel(keymap.ActionInspect)
+	k.short.row = a.shortKeyLabel(keymap.ActionCopyRow)
+	return k
+}
+
+// shortKeyLabel is an action's briefest label, for a header too narrow for
+// the one this application teaches.
+//
+// Briefest is usually the function key, which is also the one that reaches
+// every terminal — so where the space runs out, what is left is the binding
+// most likely to work.
+func (a *App) shortKeyLabel(action keymap.Action) string {
+	best := ""
+	for _, b := range a.keys.DisplayBindings(action) {
+		if label := b.Label(onMac); best == "" || visibleCost(label) < visibleCost(best) {
+			best = label
+		}
+	}
+	return best
+}
+
+// editorDetail offers what the editor does beyond taking the typing.
+func (a *App) editorDetail(room int) string {
+	return editorAffordance(a.editor.HasFocus(), room, a.affordances())
+}
+
+// schemaDetail explains the marker, or offers the preview while the tree has
+// the keyboard.
+//
+// One or the other, never both: the pane is thirty-four columns wide and the
+// tab strip has most of them, so the two together are truncated into saying
+// neither. The legend answers a question the marker raises, and it can wait —
+// the marker is still there when the keyboard moves on, and the hint names a
+// gesture nothing else on screen mentions.
+func (a *App) schemaDetail(int) string {
+	if hint := treeAffordance(a.schemaTabs.current() == tabTree && a.tree.HasFocus(),
+		a.affordances()); hint != "" {
+		return hint
+	}
 	return schemaPaneDetail(a.schemaTabs.current(), a.currentSchema())
 }
 
@@ -438,15 +497,22 @@ func schemaPaneDetail(tab, currentSchema string) string {
 
 // resultDetail says what the empty results tab would otherwise not say, or
 // offers the copy key once there is something to copy.
-func (a *App) resultDetail() string {
+func (a *App) resultDetail(room int) string {
+	k := a.affordances()
+
 	if a.buf.ColumnCount() > 0 && a.running == nil {
-		return a.keyLabel(keymap.ActionCopyResult) + " copy"
+		// With the keyboard here, all three things a result can do; without
+		// it, the copy label alone, because that one is also a click target.
+		if hint := gridAffordance(a.grid.HasFocus(), true, room, k); hint != "" {
+			return hint
+		}
+		return k.copy + " copy"
 	}
 	return resultHint(resultState{
 		columns: a.buf.ColumnCount(),
 		running: a.running != nil,
 		wrote:   a.status.written != nil,
-	})
+	}, k)
 }
 
 // resultState is everything the hint depends on.
@@ -467,7 +533,7 @@ type resultState struct {
 // statement was running and the bar two rows below said so. A pane telling
 // the user to do the thing they are watching happen is the same contradiction
 // the finders opened with.
-func resultHint(s resultState) string {
+func resultHint(s resultState, k affordanceKeys) string {
 	if s.columns > 0 {
 		return ""
 	}
@@ -480,7 +546,10 @@ func resultHint(s resultState) string {
 		// which the bar reports and the pane otherwise contradicts.
 		return "no rows: that statement changed data"
 	default:
-		return "run a statement to see rows here"
+		// An invitation rather than a description of the gap: the reader can
+		// see the pane is empty, and what they cannot see is which key fills
+		// it.
+		return k.run + " runs the statement"
 	}
 }
 
@@ -685,6 +754,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.inspect()
 	case keymap.ActionSortColumn:
 		a.sortColumn()
+	case keymap.ActionCopyRow:
+		a.copyRow()
 	case keymap.ActionCopyResult:
 		a.showCopyFormats()
 	case keymap.ActionSwitchDataSource:

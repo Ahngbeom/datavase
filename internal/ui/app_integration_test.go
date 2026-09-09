@@ -112,6 +112,13 @@ func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
 
+	// Copying reaches the local clipboard through pbcopy and its equivalents,
+	// which would put a test's rows on the clipboard of whoever is running
+	// the suite and throw away what they had. Every copy test reads the
+	// session-local copy, so nothing here needs the helper to run; a session
+	// that looks remote skips it.
+	t.Setenv("SSH_CONNECTION", "test-harness")
+
 	t.Cleanup(func() { sess.Close() })
 
 	cfg := &config.Config{
@@ -661,24 +668,24 @@ func TestInterfaceShowsTheDataSource(t *testing.T) {
 	}
 }
 
-// The schema tree is one key away rather than a third of the screen, because
-// completion already answers "where is that table" the moment its name is
-// typed.
-func TestTheSchemaPaneStartsHiddenAndComesBackOnRequest(t *testing.T) {
+// What is in the database is the first thing anyone wants from a client they
+// have just opened, so the tree is there without being asked for — and the
+// opening line says which key takes the width back.
+func TestTheSchemaPaneStartsOnScreenAndCanBePutAway(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
-	if h.inspect(func(a *App) bool { return a.sidebarVisible }) {
-		t.Fatal("the schema pane is on screen before anyone asked for it")
+	if !h.inspect(func(a *App) bool { return a.sidebarVisible }) {
+		t.Fatal("the schema pane is not on screen at the start of a session")
 	}
-	// The opening line is the only place its existence is announced.
+	if !h.waitForScreen("tree") {
+		t.Errorf("the schema pane is not drawn:\n%s", h.text())
+	}
 	if !strings.Contains(h.text(), "schema tree") {
-		t.Errorf("nothing says the schema tree exists:\n%s", h.text())
+		t.Errorf("nothing says how to put the schema tree away:\n%s", h.text())
 	}
 
-	h.showSidebar()
-	if !h.waitForScreen("tree") {
-		t.Errorf("the schema pane did not come back:\n%s", h.text())
-	}
+	h.do(keymap.ActionToggleSidebar)
+	h.waitFor("the schema pane to go", func(a *App) bool { return !a.sidebarVisible })
 }
 
 func TestRunningASelectFillsTheGrid(t *testing.T) {
@@ -908,22 +915,24 @@ func TestEditingActionsAreASingleUndoStep(t *testing.T) {
 }
 
 // The sidebar toggle also has to move focus off a pane that disappeared.
-// The pane starts hidden, so the first press brings it and the second takes it
-// away. The screen has to agree with the state both times — the pane names
-// itself in its tab strip now, having no border title to do it.
+// The pane starts on screen, so the first press takes it away and the second
+// brings it back. The screen has to agree with the state both times — the
+// pane names itself in its tab strip, having no border title to do it.
 func TestSidebarToggle(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
-	h.do(keymap.ActionToggleSidebar)
 	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
-	if !strings.Contains(h.text(), tabTables) {
-		t.Errorf("the schema pane is not on screen after toggling it on:\n%s", h.text())
-	}
 
 	h.do(keymap.ActionToggleSidebar)
 	h.waitFor("the schema pane to go", func(a *App) bool { return !a.sidebarVisible })
 	if strings.Contains(h.text(), tabTables) {
 		t.Errorf("the schema pane is still visible after toggling it off:\n%s", h.text())
+	}
+
+	h.do(keymap.ActionToggleSidebar)
+	h.waitFor("the schema pane to come back", func(a *App) bool { return a.sidebarVisible })
+	if !strings.Contains(h.text(), tabTables) {
+		t.Errorf("the schema pane did not come back:\n%s", h.text())
 	}
 }
 

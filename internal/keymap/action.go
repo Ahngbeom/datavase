@@ -63,6 +63,10 @@ const (
 	// ActionSortColumn orders the results by the selected column, and back
 	// again — the third press restores the order the server sent.
 	ActionSortColumn
+	// ActionCopyRow puts the row under the grid's cursor on the clipboard,
+	// tab separated, so it lands in a spreadsheet as columns.
+	ActionCopyRow
+
 	// ActionCopyResult puts the whole result on the clipboard, in a format
 	// chosen when the key is pressed.
 	ActionCopyResult
@@ -111,6 +115,7 @@ var actionNames = map[Action]string{
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
+	ActionCopyRow:           "copy-row",
 	ActionCopyResult:        "copy-result",
 	ActionSwitchDataSource:  "switch-datasource",
 	ActionHelp:              "help",
@@ -122,7 +127,7 @@ var descriptions = map[Action]string{
 	ActionRun:               "run the statement under the cursor",
 	ActionRunAll:            "run every statement in the editor",
 	ActionCancel:            "cancel the running statement",
-	ActionCopyOrCancel:      "copy the selection, or cancel if nothing is selected",
+	ActionCopyOrCancel:      "copy what has focus, or cancel what is running",
 	ActionWordLeft:          "move one word left",
 	ActionWordRight:         "move one word right",
 	ActionSelectWordLeft:    "extend the selection one word left",
@@ -144,7 +149,7 @@ var descriptions = map[Action]string{
 	ActionPrevPane:          "move to the previous pane",
 	ActionToggleSidebar:     "show or hide the schema tree",
 	ActionRefreshSchema:     "reload the schema tree",
-	ActionUseSchema:         "choose the schema unqualified names resolve against",
+	ActionUseSchema:         "choose the schema for unqualified names",
 	ActionComplete:          "complete the word at the cursor",
 	ActionFind:              "find in the editor or results",
 	ActionFindNext:          "go to the next match",
@@ -152,9 +157,10 @@ var descriptions = map[Action]string{
 	ActionSearchHistory:     "search the query history",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected result row in full",
-	ActionSortColumn:        "sort the results by the selected column",
-	ActionCopyResult:        "copy the whole result as Markdown or JSON",
-	ActionSwitchDataSource:  "open the datasource list: connect, add, edit, delete",
+	ActionSortColumn:        "sort by the selected column",
+	ActionCopyRow:           "copy the selected row, tab separated",
+	ActionCopyResult:        "copy the whole result",
+	ActionSwitchDataSource:  "open the datasource list",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -177,7 +183,7 @@ var order = []Action{
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
 	ActionInspect,
-	ActionSortColumn, ActionCopyResult,
+	ActionSortColumn, ActionCopyRow, ActionCopyResult,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,
 	ActionHelp, ActionQuit,

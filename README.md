@@ -11,8 +11,9 @@ Four things, and no more:
 - **Look at a table.** Double-click one in the tree, or Enter on one in the
   tables tab, for its first hundred rows.
 - **Run a statement** with `⌘↩` (`Ctrl+↩`, or `F5`).
-- **Read the answer** in a grid, and copy the whole of it as Markdown or JSON
-  with `⌘⇧C`.
+- **Read the answer** in a grid, and copy what you need out of it: the cell
+  with `⌘C`, the row with `⌘⇧R`, the whole result as Markdown or JSON with
+  `⌘⇧C`.
 
 Also there, because the four need them: an SSH tunnel to a bastion, table and
 column completion, a searchable history of what you ran, passwords in the OS
@@ -173,11 +174,12 @@ does not forward `⌘` to the program it hosts.
 | Cancel the running statement | `⌘F2`, or `⌘C` while one is running | |
 | Preview a table (`LIMIT 100`) | `↩` in the tables tab | double-click it in the tree, click it in the tables tab |
 | Copy the selection or the cell | `⌘C` | |
+| Copy the selected row, tab separated | `⌘⇧R` · `F8` | |
 | Copy the whole result as Markdown or JSON | `⌘⇧C` · `F3` | `copy` on the result header |
 | Datasource list | `⌘⇧D` · `F11` | the datasource name in the top bar |
 | Choose the schema | `⌘⇧N` · `F7` | the schema name in the top bar |
 | Reload the schema tree | `⌘R` | |
-| Show or hide the schema tree | `⌘B` | |
+| Hide or show the schema tree | `⌘B` | |
 | Move between panes | `⇥` / `⇧⇥` | a pane's name |
 | Switch tab in the focused pane | `Ctrl+⇥` · `F6` | a tab |
 | Complete the word at the cursor | `^Space` | |
@@ -261,6 +263,16 @@ flat, filterable list of the current schema's tables with row estimates, read
 from the local cache so it fills instantly, and `↩` there previews a table too.
 A preview never touches the editor — the text in it is yours.
 
+**The schema tree** is there when a session opens, on the left, with a tables
+tab beside it. `⌘B` puts it away when the width is wanted for the result, for
+that session. The wheel moves the selection through it, so wherever you stop
+is where a click lands.
+
+**Each pane names its own keys** in its header, while the keyboard is in it —
+running and completion in the editor, the preview in the tree, copy and sort
+and row in the result. Move between panes with `⇥` to see the rest; `F1` has
+all of it at once.
+
 **The editor** is an ordinary one: typing types, and there is no mode to leave
 first. **The grid** streams the result as it arrives, sorts on a column and
 opens one row down the page rather than across it.
@@ -270,6 +282,24 @@ does what pressing its key does; a tab or a region name moves focus there; a
 column header sorts by it; `copy` on the result header copies the whole result;
 double-clicking a result row opens it in full, and double-clicking a table in
 the tree previews it.
+
+**Three sizes of copy.** `⌘C` in the results takes the cell under the cursor;
+`⌘⇧R` takes that whole row, tab separated, so it lands in a spreadsheet as
+columns; `⌘⇧C` takes the entire result as Markdown or JSON. `⌘C` in the editor
+takes the selection, as it does anywhere else.
+
+**Copying** goes two ways at once. The terminal is asked to take the text —
+the only route that reaches your own clipboard when `dv` is running over SSH —
+and a local session also hands it to `pbcopy`, `wl-copy` or `xclip`, whichever
+is installed. That second route is there because the first is a request the
+terminal may refuse: Ghostty asks before allowing it, iTerm2 keeps it off until
+"Applications in terminal may access clipboard" is ticked, tmux drops it
+without `set -g set-clipboard on`, and Terminal.app has never implemented it.
+
+Over SSH only the terminal route is used. Running a helper on the far end would
+put the text on a clipboard nobody is sitting at, so if the terminal refuses
+there, the copy has nowhere to go — that is the one case where the setting
+above has to be found.
 
 Set `mouse: false` under `defaults` to turn all of that off, for anyone who
 selects text by dragging: mouse reporting in a terminal disables its own native

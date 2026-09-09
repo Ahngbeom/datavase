@@ -19,7 +19,7 @@ func TestTheResultHint(t *testing.T) {
 		{
 			name:  "nothing has been run",
 			state: resultState{},
-			want:  "run a statement to see rows here",
+			want:  "⌘↩ runs the statement",
 		},
 		{
 			name:  "a statement is running",
@@ -43,7 +43,7 @@ func TestTheResultHint(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := resultHint(tt.state); got != tt.want {
+			if got := resultHint(tt.state, testKeys()); got != tt.want {
 				t.Errorf("resultHint() = %q, want %q", got, tt.want)
 			}
 		})

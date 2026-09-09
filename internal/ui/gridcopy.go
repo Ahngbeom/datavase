@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/Ahngbeom/datavase/internal/result"
 )
 
@@ -35,18 +37,22 @@ type copyContext struct {
 // quietly stop being the way to halt a runaway statement the moment the
 // results had focus — and stopping one matters more than copying from it.
 //
-// It also makes the rule sayable in a sentence: while something is running
-// the key cancels, otherwise it copies whatever has focus. It used to depend
-// on which pane you were in, which is not a rule anyone could hold in mind.
+// Below that, focus decides. An editor selection outlives the pane it was
+// made in: ⌘A before running leaves one behind, and reading it first meant
+// the key in the results copied the SQL instead of the cell under the cursor,
+// for as long as that selection stood.
+//
+// The rule is one sentence: while something is running the key cancels,
+// otherwise it copies from wherever the keyboard is.
 func (c copyContext) resolve() copyIntent {
 	if c.running {
 		return intentCancel
 	}
 	switch {
-	case c.hasSelection:
-		return intentSelection
 	case c.onGrid:
 		return intentCell
+	case c.hasSelection:
+		return intentSelection
 	}
 	return intentNothing
 }
@@ -57,6 +63,23 @@ func cellValue(buf *result.Buffer, row, col int) (string, bool) {
 		return "", false
 	}
 	return result.Format(buf.Raw(row, col)), true
+}
+
+// rowValues is one row, tab separated.
+//
+// Tabs rather than anything prettier because a copied row is pasted somewhere
+// that understands columns — a spreadsheet, another terminal — and alignment
+// drawn with spaces stops being alignment the moment it lands there.
+func rowValues(buf *result.Buffer, row int) (string, bool) {
+	if buf == nil || row < 0 || row >= buf.RowCount() {
+		return "", false
+	}
+
+	values := make([]string, buf.ColumnCount())
+	for col := range values {
+		values[col] = result.Format(buf.Raw(row, col))
+	}
+	return strings.Join(values, "\t"), true
 }
 
 // copyCell puts the selected value on the clipboard, reporting whether there
@@ -72,4 +95,25 @@ func (a *App) copyCell() bool {
 	a.setClipboard(value)
 	a.notice("value copied")
 	return true
+}
+
+// copyRow puts the whole row under the grid's cursor on the clipboard.
+//
+// It answers only for the results: the key means one row, and there is no row
+// to mean anywhere else.
+func (a *App) copyRow() {
+	if a.app.GetFocus() != a.grid {
+		a.notice("select a result row first")
+		return
+	}
+
+	row, _ := a.grid.GetSelection()
+	values, ok := rowValues(a.buf, a.content.bufferRow(row))
+	if !ok {
+		a.notice("no row selected")
+		return
+	}
+
+	a.setClipboard(values)
+	a.notice(plural(a.buf.ColumnCount(), "value") + " copied, tab separated")
 }

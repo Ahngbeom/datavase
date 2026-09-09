@@ -5,6 +5,79 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.9.1 — Unreleased
+
+**Nothing to do before upgrading.** No configuration changes and no keys moved.
+
+### Added
+
+**Each pane says what it can do, while the keyboard is in it.** The header
+each region already draws now carries its keys: the editor offers running and
+completion, the tree names the double-click that previews a table, and a
+result with rows offers copy, sort and opening a row. Only the focused region
+speaks, so the screen stays quiet and moving between panes is how the rest is
+found. Nothing on screen had said that completion or the preview existed.
+
+**An empty result invites the statement** rather than describing the gap, and
+a failure that names a missing table points at the tree — after the server's
+own words, and only when the line has room for both.
+
+**The key reference stops wrapping.** Three descriptions were wider than the
+dialog, and the tail of each landed under the key column reading as an entry
+of its own.
+
+**The schema tree is on screen when a session opens.** It was a key away, on
+the reasoning that the finders already answer "where is that table" — but a
+tree nobody sees is a tree nobody knows to ask for, and what is in the
+database is the first thing anyone wants from a client they have just opened.
+`⌘B` still puts it away for the session.
+
+**The selected row copies on its own,** with `⌘⇧R` or `F8`, tab separated so a
+paste lands in a spreadsheet as columns. v0.8 could do this only through the
+command palette, which v0.9.0 removed; the whole-result copy is not always
+what someone wants out of a grid.
+
+### Fixed
+
+**The schema pane stays where the wheel put it, and a click lands on the row
+you are looking at.** Scrolling the tree or the tables tab moved the view
+without moving the selection, and the next redraw — anything at all, a status
+message, a finished query — pulled the view back to wherever the selection
+still was. The rows slid out from under the pointer between looking and
+clicking, so some other table was selected. The wheel now carries the
+selection with it, which is what holds the view in place.
+
+**A second quick click in the schema pane selects the row it landed on.**
+Clicking one row and then another — quickly, because the eye has already found
+it — left the selection on the first: the terminal library reads two presses
+inside half a second as a double click wherever each one landed, and neither
+its tree nor its list does anything with one. The second press reached
+nothing. It now selects what is under the pointer, and on a table it previews.
+
+**The copy key in the results takes the cell, not whatever the editor still
+had selected.** Selecting a query — with `⌘A`, or by dragging — and running it
+leaves that selection in place, and the copy key read it before the grid. From
+then on `⌘C` in the results copied the SQL, and the only way to reach a value
+was to go back to the editor and unselect. Focus decides now: in the results
+the key means the cell, in the editor it means the selection, and while a
+statement runs it still cancels.
+
+**Copying now reaches the clipboard on terminals that refuse to pass it on.**
+`dv` asked the terminal to take the text, which is the only route that works
+over SSH — but that request is one a terminal may decline, and several decline
+by default: Ghostty asks first, iTerm2 keeps it off until a setting is found,
+tmux drops it without `set-clipboard on`, and Terminal.app has never
+implemented it. Nothing said so; the copy simply went nowhere. A local session
+now also hands the text to `pbcopy`, `wl-copy` or `xclip`, whichever is
+installed, which no terminal setting can veto.
+
+A session over SSH still uses only the terminal route, deliberately: a helper
+on the far end would copy to a clipboard nobody is sitting at.
+
+**The installer no longer sends a fresh install to `dv init`,** a command
+v0.9.0 removed. Running `dv` with no configuration opens the datasource list
+itself.
+
 ## v0.9.0 — 2026-09-09
 
 **This release removes most of what v0.8 did.** Anyone who uses the modal

@@ -45,12 +45,11 @@ func run() int {
 	}
 
 	cfg, err := config.Load(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		cfg, err = config.Empty(), nil
+	}
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			fmt.Fprintf(os.Stderr, "no configuration at %s\n", path)
-			return 1
-		}
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 
@@ -65,7 +64,10 @@ func run() int {
 		Err:          os.Stderr,
 		ReadPassword: readPassword,
 		Probe:        probe,
-		OpenUI:       openUI,
+		OpenUI: func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
+			return openUI(ctx, ds, password, cfg, path)
+		},
+		Launch: func() error { return launch(cfg, path) },
 	}
 	return app.Run(flag.Args())
 }
@@ -73,12 +75,37 @@ func run() int {
 // openUI connects and hands control to the terminal interface. The context
 // bounds the connection attempt only; the interface itself runs until the
 // user quits.
-func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
+func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config, path string) error {
+	sess, err := session.Open(ctx, ds, password)
+	if err != nil {
+		return err
+	}
+	return openSession(sess, cfg, path)
+}
+
+// launch shows the datasource list, then opens the interface on the session
+// it produced.
+func launch(cfg *config.Config, path string) error {
+	sess, err := ui.Launch(ui.LaunchDeps{
+		Config: cfg, ConfigPath: path, Secrets: secrets(), Probe: probe, Connect: connectTo,
+	})
+	if err != nil || sess == nil {
+		return err
+	}
+	return openSession(sess, cfg, path)
+}
+
+// openSession hands an already-open session to the terminal interface.
+//
+// The interface owns the session from here: switching datasource closes the
+// one it leaves, and a session closed twice or by nobody is how a tunnel
+// outlives the thing it was carrying.
+func openSession(sess *session.Session, cfg *config.Config, path string) error {
 	// The schema cache is optional: a read-only home directory should cost
 	// completion, not the whole session.
 	var cache *catalog.Cache
-	if path, err := catalog.DefaultCachePath(); err == nil {
-		if opened, err := catalog.OpenCache(path); err == nil {
+	if p, err := catalog.DefaultCachePath(); err == nil {
+		if opened, err := catalog.OpenCache(p); err == nil {
 			cache = opened
 			defer cache.Close()
 		} else {
@@ -88,21 +115,13 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 
 	// History is optional for the same reason as the cache.
 	var hist *history.Store
-	if path, err := history.DefaultPath(); err == nil {
-		if opened, err := history.Open(path); err == nil {
+	if p, err := history.DefaultPath(); err == nil {
+		if opened, err := history.Open(p); err == nil {
 			hist = opened
 			defer hist.Close()
 		}
 	}
 
-	sess, err := session.Open(ctx, ds, password)
-	if err != nil {
-		return err
-	}
-
-	// The interface owns the session from here: switching datasource closes
-	// the one it leaves, and a session closed twice or by nobody is how a
-	// tunnel outlives the thing it was carrying.
 	return ui.New(sess, cfg, ui.Deps{
 		Cache:   cache,
 		History: hist,
@@ -138,15 +157,6 @@ func connectTo(ctx context.Context, ds *config.DataSource) (*session.Session, er
 // probe verifies reachability, raising the tunnel first when one is needed,
 // so `dv check` tests the same path the interface will take.
 func probe(ctx context.Context, ds *config.DataSource, password string) (string, error) {
-	// History is optional for the same reason as the cache.
-	var hist *history.Store
-	if path, err := history.DefaultPath(); err == nil {
-		if opened, err := history.Open(path); err == nil {
-			hist = opened
-			defer hist.Close()
-		}
-	}
-
 	sess, err := session.Open(ctx, ds, password)
 	if err != nil {
 		return "", err

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -203,5 +204,26 @@ func TestRmDeletesStoredPassword(t *testing.T) {
 
 	if _, err := h.app.Secrets.Get("prod-app"); err == nil {
 		t.Error("password still present after auth -rm")
+	}
+}
+
+func TestOpeningWithNoNameAndSeveralDatasourcesLaunchesTheList(t *testing.T) {
+	launched := false
+	app := &App{
+		Config: &config.Config{DataSources: []config.DataSource{{Name: "a"}, {Name: "b"}}},
+		Out:    io.Discard, Err: io.Discard,
+		Launch: func() error { launched = true; return nil },
+	}
+	if code := app.Run(nil); code != exitOK || !launched {
+		t.Errorf("Run() = %d, launched = %v; want the list", code, launched)
+	}
+}
+
+func TestOpeningWithNoDatasourcesLaunchesTheList(t *testing.T) {
+	launched := false
+	app := &App{Config: config.Empty(), Out: io.Discard, Err: io.Discard,
+		Launch: func() error { launched = true; return nil }}
+	if code := app.Run(nil); code != exitOK || !launched {
+		t.Errorf("Run() = %d, launched = %v; a first run must open the list", code, launched)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
@@ -43,6 +42,11 @@ type App struct {
 	// OpenUI connects and runs the terminal interface. It is a field so the
 	// dispatch logic can be tested without starting a terminal.
 	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error
+
+	// Launch shows the datasource list without a session and opens the
+	// interface on whichever entry the user connects to. It is how a machine
+	// with no configuration gets one.
+	Launch func() error
 }
 
 // HandleVersion answers a request for the version, reporting whether it did.
@@ -93,7 +97,8 @@ func (a *App) usage() {
 	fmt.Fprint(a.Out, `datavase — terminal MySQL client
 
 usage:
-  dv [open <name>]      open the interface
+  dv                    open the interface; the datasource list when there is more than one
+  dv open <name>        open a named datasource
   dv ls                 list configured datasources
   dv auth <name>        store a datasource password in the keychain
   dv auth -rm <name>    remove a stored password
@@ -133,22 +138,20 @@ func (a *App) openCmd(args []string) int {
 
 // open connects and hands control to the TUI.
 //
-// With no name given it picks the single configured datasource; guessing
-// among several would risk opening production when dev was meant.
+// With no name given it picks the single configured datasource; with none or
+// several it defers to Launch instead of guessing, which would risk opening
+// production when dev was meant.
 func (a *App) open(name string) int {
-	if name == "" && len(a.Config.DataSources) == 0 {
-		fmt.Fprintln(a.Err, "no datasources are configured; add one to the config file")
-		return exitUsage
-	}
-
 	if name == "" {
-		if len(a.Config.DataSources) != 1 {
-			fmt.Fprintf(a.Err,
-				"more than one datasource is configured; name the one to open:\n  dv open <name>\n\nconfigured: %s\n",
-				strings.Join(a.Config.Names(), ", "))
-			return exitUsage
+		if len(a.Config.DataSources) == 1 {
+			name = a.Config.DataSources[0].Name
+		} else {
+			if err := a.Launch(); err != nil {
+				fmt.Fprintln(a.Err, err)
+				return exitError
+			}
+			return exitOK
 		}
-		name = a.Config.DataSources[0].Name
 	}
 
 	ds, err := a.Config.Find(name)

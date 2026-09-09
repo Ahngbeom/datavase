@@ -271,6 +271,19 @@ column header sorts by it; `copy` on the result header copies the whole result;
 double-clicking a result row opens it in full, and double-clicking a table in
 the tree previews it.
 
+**Copying** goes two ways at once. The terminal is asked to take the text —
+the only route that reaches your own clipboard when `dv` is running over SSH —
+and a local session also hands it to `pbcopy`, `wl-copy` or `xclip`, whichever
+is installed. That second route is there because the first is a request the
+terminal may refuse: Ghostty asks before allowing it, iTerm2 keeps it off until
+"Applications in terminal may access clipboard" is ticked, tmux drops it
+without `set -g set-clipboard on`, and Terminal.app has never implemented it.
+
+Over SSH only the terminal route is used. Running a helper on the far end would
+put the text on a clipboard nobody is sitting at, so if the terminal refuses
+there, the copy has nowhere to go — that is the one case where the setting
+above has to be found.
+
 Set `mouse: false` under `defaults` to turn all of that off, for anyone who
 selects text by dragging: mouse reporting in a terminal disables its own native
 selection, so a click that means something is a regression rather than a

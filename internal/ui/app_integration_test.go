@@ -112,6 +112,13 @@ func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
 
+	// Copying reaches the local clipboard through pbcopy and its equivalents,
+	// which would put a test's rows on the clipboard of whoever is running
+	// the suite and throw away what they had. Every copy test reads the
+	// session-local copy, so nothing here needs the helper to run; a session
+	// that looks remote skips it.
+	t.Setenv("SSH_CONNECTION", "test-harness")
+
 	t.Cleanup(func() { sess.Close() })
 
 	cfg := &config.Config{

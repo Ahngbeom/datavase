@@ -5,6 +5,28 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.9.1 — Unreleased
+
+**Nothing to do before upgrading.** No configuration changes and no keys moved.
+
+### Fixed
+
+**Copying now reaches the clipboard on terminals that refuse to pass it on.**
+`dv` asked the terminal to take the text, which is the only route that works
+over SSH — but that request is one a terminal may decline, and several decline
+by default: Ghostty asks first, iTerm2 keeps it off until a setting is found,
+tmux drops it without `set-clipboard on`, and Terminal.app has never
+implemented it. Nothing said so; the copy simply went nowhere. A local session
+now also hands the text to `pbcopy`, `wl-copy` or `xclip`, whichever is
+installed, which no terminal setting can veto.
+
+A session over SSH still uses only the terminal route, deliberately: a helper
+on the far end would copy to a clipboard nobody is sitting at.
+
+**The installer no longer sends a fresh install to `dv init`,** a command
+v0.9.0 removed. Running `dv` with no configuration opens the datasource list
+itself.
+
 ## v0.9.0 — 2026-09-09
 
 **This release removes most of what v0.8 did.** Anyone who uses the modal

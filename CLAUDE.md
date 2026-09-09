@@ -67,6 +67,9 @@ what it deliberately does *not* know, and those boundaries are load-bearing:
   table it is about to read.
 - `keymap` — key events → named `Action`s. The UI switches on actions, never
   on keys.
+- `clipboard` — the machine's own clipboard, and nothing about terminals.
+  `Copy` reports whether a helper existed rather than failing when none did:
+  a headless box has no clipboard to write to, and OSC 52 has already gone.
 - `complete`, `result`, `export`, `config` — same pattern.
 
 `ui` is the largest package and is split by concern rather than by widget:

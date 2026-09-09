@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/Ahngbeom/datavase/internal/clipboard"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/gdamore/tcell/v2"
 )
@@ -214,8 +215,12 @@ func (a *App) paste() {
 
 // setClipboard writes to the system clipboard and to the session-local copy.
 //
-// The terminal is reached with OSC 52, which works across SSH where a helper
-// such as pbcopy would only ever reach the remote machine.
+// Both routes are taken. OSC 52 is the only one that crosses SSH, reaching
+// the clipboard of the machine someone is actually sitting at — but it is a
+// request the terminal may refuse, and several refuse by default, silently.
+// A local session therefore also hands the text to the platform's own helper,
+// which no terminal setting can veto. See internal/clipboard for why a remote
+// session gets no helper.
 //
 // Reading back is deliberately not attempted: OSC 52 answers asynchronously
 // and most terminals refuse clipboard reads outright, since that is how a
@@ -227,6 +232,20 @@ func (a *App) setClipboard(text string) {
 
 	if a.screen != nil {
 		a.screen.SetClipboard([]byte(text))
+	}
+	a.copyLocally(text)
+}
+
+// copyLocally is the helper half of setClipboard, reporting nothing when
+// there is no helper to run: OSC 52 has already gone, and a machine with no
+// clipboard of its own has nothing to say about it.
+//
+// A helper that ran and failed is worth a line, because the copy the user
+// asked for may have gone nowhere at all.
+func (a *App) copyLocally(text string) {
+	ran, err := clipboard.Copy(text)
+	if ran && err != nil {
+		a.notice("the clipboard helper failed: " + err.Error())
 	}
 }
 

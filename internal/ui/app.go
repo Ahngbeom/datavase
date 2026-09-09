@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
@@ -25,7 +24,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
-	"github.com/Ahngbeom/datavase/internal/snapshot"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/Ahngbeom/datavase/internal/worktree"
@@ -47,10 +45,6 @@ type App struct {
 	// does not have to know where a password comes from, and so a test can
 	// switch without a keychain.
 	connect func(context.Context, *config.DataSource) (*session.Session, error)
-
-	// detach leaves the terminal to whatever is holding the session. Nil in a
-	// monolithic run.
-	detachFn func()
 
 	// spine is the environment colour down the left. Held because it is the
 	// one piece of the frame that has to be repainted when the datasource
@@ -205,15 +199,6 @@ type App struct {
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
 	running *db.Stream
-	// runningSQL is the statement a.running is executing. Held because the
-	// stream does not carry it and something outside the interface has to be
-	// able to say what the database is being asked to do.
-	runningSQL string
-	// startedAt is when a.running was sent. status.elapsed only advances as
-	// row batches land, so a statement that has produced no rows yet — a long
-	// ALTER, an Exec, a SELECT before its first chunk — would otherwise be
-	// reported as taking however long the previous one did.
-	startedAt time.Time
 
 	// lastChange is what "." repeats.
 	lastChange change
@@ -280,10 +265,6 @@ type Deps struct {
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
-	// Detach leaves the terminal without ending the session. Nil means there
-	// is no server holding one — a monolithic run — and the action says so
-	// rather than appearing dead.
-	Detach func()
 	// IntroPath is where "the first-run card has been shown" is recorded.
 	// Empty means never show it, which is what a session with no usable state
 	// directory gets — and what every test that is not about the card gets.
@@ -313,7 +294,6 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		sess:            sess,
 		conn:            conn,
 		connect:         deps.Connect,
-		detachFn:        deps.Detach,
 		cfg:             cfg,
 		keys:            keys,
 		presetAssumed:   deps.PresetAssumed,
@@ -1028,8 +1008,6 @@ func (a *App) dispatch(action keymap.Action) bool {
 
 	case keymap.ActionHelp:
 		a.showHelp()
-	case keymap.ActionDetach:
-		a.detach()
 	case keymap.ActionQuit:
 		a.quit()
 
@@ -1120,19 +1098,6 @@ func (a *App) refreshHints() {
 // hintsShown is how many commands a region offers on the bar. Three is what
 // fits beside a schema name on a narrow terminal; the menu holds the rest.
 const hintsShown = 3
-
-// detach leaves the terminal and keeps the session.
-//
-// It asks about nothing. Quitting asks about an open transaction and an
-// unsaved buffer because quitting destroys them; detaching destroys nothing,
-// and a session left running is exactly what the person pressing this wants.
-func (a *App) detach() {
-	if a.detachFn == nil {
-		a.notice("this session has no server to leave; it was started with --no-session")
-		return
-	}
-	a.detachFn()
-}
 
 // quit leaves, asking first when the buffer holds unsaved file changes.
 //
@@ -1391,8 +1356,6 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 		Exec: !stmt.Kind().ReturnsRows(),
 	})
 	a.running = stream
-	a.runningSQL = sql
-	a.startedAt = started
 
 	// Whether the answer is a plan is settled here, from the statement that
 	// was sent, rather than remembered from the key that asked: a confirmation
@@ -1431,8 +1394,6 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plan
 
 	a.app.QueueUpdateDraw(func() {
 		a.running = nil
-		a.runningSQL = ""
-		a.startedAt = time.Time{}
 		a.status.rows = rows
 		a.status.elapsed = elapsed
 		a.status.truncated = truncated
@@ -1651,140 +1612,4 @@ func (a *App) inspect() {
 		return
 	}
 	a.inspectTable()
-}
-
-// RuntimeState is what something outside the interface may need to know
-// before it changes the session underneath it.
-type RuntimeState struct {
-	DataSource string
-	Busy       bool
-}
-
-// State reports the session's datasource and whether a statement is in
-// flight.
-//
-// It goes through the interface's own goroutine because that is who owns
-// a.running and the connection; reading them from anywhere else is a race.
-// The context bounds the wait: a caller deciding whether it may take the
-// session somewhere else must be able to give up and refuse, which is the
-// safe answer when the interface is not talking.
-func (a *App) State(ctx context.Context) (RuntimeState, error) {
-	out := make(chan RuntimeState, 1)
-
-	// The goroutine outlives this call if the interface never runs the
-	// update. That is a wedged application, and one leaked goroutine is not
-	// the problem worth solving in that situation.
-	go a.app.QueueUpdate(func() {
-		out <- RuntimeState{
-			DataSource: a.conn.DataSource().Name,
-			Busy:       a.running != nil,
-		}
-	})
-
-	select {
-	case s := <-out:
-		return s, nil
-	case <-ctx.Done():
-		return RuntimeState{}, ctx.Err()
-	}
-}
-
-// Snapshot describes the session for something outside it.
-//
-// Like State, it runs on the interface's own goroutine: a.running, the
-// connection, the buffer and the vim state all belong to it, and reading them
-// from anywhere else is a race. The context bounds the wait, because whatever
-// asked has to be able to give up and say so.
-func (a *App) Snapshot(ctx context.Context) (*snapshot.Session, error) {
-	out := make(chan *snapshot.Session, 1)
-
-	go a.app.QueueUpdate(func() { out <- a.snapshot() })
-
-	select {
-	case s := <-out:
-		return s, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-// snapshot reads the session. Only the interface's goroutine may call it.
-func (a *App) snapshot() *snapshot.Session {
-	ds := a.conn.DataSource()
-
-	// While a statement is in flight the question being asked is "how long has
-	// this been going", which status.elapsed only answers once rows have
-	// arrived. Once it has finished, status.elapsed is the total and this
-	// clock has stopped.
-	elapsed := a.status.elapsed
-	if a.running != nil {
-		elapsed = time.Since(a.startedAt)
-	}
-
-	s := &snapshot.Session{
-		DataSource: snapshot.DataSource{
-			Name:          ds.Name,
-			Env:           string(ds.Env),
-			Host:          ds.Host,
-			Port:          ds.Port,
-			User:          ds.User,
-			Database:      ds.Database,
-			Tunnel:        ds.Tunnel != nil,
-			ServerVersion: a.conn.ServerVersion(),
-		},
-		Schema: a.selectedSchema,
-		Statement: snapshot.Statement{
-			Running:       a.running != nil,
-			ElapsedMS:     elapsed.Milliseconds(),
-			SQL:           a.runningSQL,
-			InjectedLimit: a.status.limitInjected,
-			Truncated:     a.status.truncated,
-		},
-		Result: snapshot.Result{
-			Columns:  a.buf.Columns(),
-			RowCount: a.buf.RowCount(),
-		},
-		Batch:         snapshot.Batch{},
-		Editor:        snapshot.Editor{Lines: strings.Count(a.editor.GetText(), "\n") + 1, Modified: a.fileDirty()},
-		Mode:          a.vim.Mode().String(),
-		WritesEnabled: a.status.writesEnabled,
-		InTransaction: a.conn.InTransaction(),
-	}
-
-	if a.status.err != nil {
-		s.Statement.Error = a.status.err.Error()
-	}
-
-	if a.batch != nil {
-		s.Batch = snapshot.Batch{Running: true, Completed: a.batch.ran, Total: len(a.batch.stmts)}
-	}
-
-	if a.wt != nil {
-		s.Worktree = &snapshot.Worktree{
-			Path:     a.wt.Root,
-			Branch:   a.wtSnap.Branch,
-			OpenFile: a.openFile.rel,
-			Modified: a.fileDirty(),
-		}
-	}
-
-	return s
-}
-
-// SwitchTo moves the session to a configured datasource by name.
-//
-// It hands off to the same switch the keyboard reaches, so an open
-// transaction is asked about and a running statement is refused, in front of
-// the person who will see the answer. Nothing is reported back: the interface
-// is where the outcome belongs.
-func (a *App) SwitchTo(name string) {
-	go a.app.QueueUpdate(func() {
-		for i := range a.cfg.DataSources {
-			if a.cfg.DataSources[i].Name == name {
-				a.switchTo(&a.cfg.DataSources[i])
-				return
-			}
-		}
-		a.notice(fmt.Sprintf("no datasource named %q", name))
-	})
 }

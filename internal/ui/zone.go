@@ -46,11 +46,8 @@ const (
 // off the goroutine running Application.Run — and that is a narrower
 // guarantee than it sounds: tview's own poll goroutine draws directly,
 // bypassing the event loop, if SetScreen is called again on an already-
-// running Application. dv never takes that path. daemon/serve.go calls
-// SetScreen exactly once, before the session's Run starts; a re-attach
-// reuses that same screen through Screen.Attach and Screen.Detach rather
-// than handing tview a new one. A future change that replaces the screen on
-// re-attach — an obvious thing to reach for — would put a draw on a second
+// running Application. dv never takes that path: SetScreen is called once,
+// before Run starts. Calling it again later would put a draw on a second
 // goroutine and make every read and write here a race, silently rather than
 // loudly, since a race like this one shows up as an occasional wrong click
 // rather than a crash.

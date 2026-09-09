@@ -88,7 +88,6 @@ const (
 
 	// Application.
 	ActionHelp
-	ActionDetach
 	ActionQuit
 )
 
@@ -139,7 +138,6 @@ var actionNames = map[Action]string{
 	ActionKillSession:       "kill-session",
 	ActionLocks:             "locks",
 	ActionHelp:              "help",
-	ActionDetach:            "detach",
 	ActionQuit:              "quit",
 }
 
@@ -190,7 +188,6 @@ var descriptions = map[Action]string{
 	ActionKillSession:       "stop another connection's statement",
 	ActionLocks:             "show which connections are waiting on which",
 	ActionHelp:              "show this help",
-	ActionDetach:            "leave the terminal, keeping the session running",
 	ActionQuit:              "quit",
 }
 
@@ -264,7 +261,6 @@ var familiar = map[Action]bool{
 	ActionKillSession:      false,
 	ActionLocks:            false,
 	ActionHelp:             false,
-	ActionDetach:           false,
 }
 
 // Familiar reports that dv does not have to teach this action's key.
@@ -284,7 +280,7 @@ var order = []Action{
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession, ActionLocks,
-	ActionHelp, ActionDetach, ActionQuit,
+	ActionHelp, ActionQuit,
 }
 
 func (a Action) String() string {

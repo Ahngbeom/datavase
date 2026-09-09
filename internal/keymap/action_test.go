@@ -25,8 +25,8 @@ func TestTheKeyReferenceDoesNotSilentlyStartTeachingTheWrongList(t *testing.T) {
 		ours++
 	}
 
-	if known != 16 || ours != 30 {
-		t.Errorf("classified %d familiar and %d dv's own, want 16 and 30", known, ours)
+	if known != 16 || ours != 29 {
+		t.Errorf("classified %d familiar and %d dv's own, want 16 and 29", known, ours)
 	}
 }
 

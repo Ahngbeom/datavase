@@ -472,13 +472,6 @@ func paletteCommands() []command {
 			run:      (*App).showHelp,
 		},
 		{
-			name:     "detach",
-			category: catOther,
-			summary:  "leave the terminal, keeping the session running",
-			covers:   keymap.ActionDetach,
-			run:      (*App).detach,
-		},
-		{
 			name:     "quit",
 			category: catOther,
 			summary:  "leave datavase",

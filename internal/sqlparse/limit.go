@@ -2,6 +2,18 @@ package sqlparse
 
 import "strings"
 
+// AutoLimit is the LIMIT to append to stmt, or zero to leave it alone.
+//
+// Only a SELECT with no LIMIT of its own at the top level gets one. A LIMIT
+// inside a subquery bounds nothing about the outer result, which is why the
+// check is HasTopLevelLimit rather than a search for the keyword.
+func AutoLimit(stmt Statement, n int) int {
+	if n <= 0 || stmt.IsEmpty() || stmt.Kind() != StmtSelect || stmt.HasTopLevelLimit() {
+		return 0
+	}
+	return n
+}
+
 // AppendLimit returns stmt's SQL with "LIMIT n" inserted, or the SQL
 // unchanged when doing so would be unsafe.
 //

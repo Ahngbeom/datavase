@@ -41,7 +41,6 @@ func TestTheResultPaneSaysWhyAWriteLeftNoRows(t *testing.T) {
 
 	h.typeSQL("UPDATE dv_ui SET n = 2 WHERE n = 1")
 	h.do(keymap.ActionRun)
-	confirmWrite(t, h)
 	h.waitFor("the write to finish", func(a *App) bool { return a.status.written != nil })
 
 	screen := h.text()

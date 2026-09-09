@@ -13,9 +13,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Env labels how dangerous a datasource is. The guard package keys its
-// policy off this value, so an unrecognised label must never silently
-// degrade into a permissive one.
+// Env is kept from earlier configurations for one reason: an absent "tls:"
+// defaults by it, and dropping that would quietly let a production
+// credential cross the wire in clear text. Nothing else reads it.
 type Env string
 
 const (
@@ -52,12 +52,12 @@ func (m TLSMode) verifies() bool {
 
 // DefaultTLSMode is what an absent "tls:" means.
 //
-// It follows env for the same reason the guard does. Production is where a
-// credential crossing the wire in clear text costs the most, and it is also
-// where the managed databases that refuse plain connections outright live, so
-// "required" is both the safer default and usually the working one. Anywhere
-// else the cost of being wrong is a connection that will not open on a
-// developer's laptop, which is why those get "preferred".
+// It follows env because production is where a credential crossing the wire
+// in clear text costs the most, and it is also where the managed databases
+// that refuse plain connections outright live, so "required" is both the
+// safer default and usually the working one. Anywhere else the cost of being
+// wrong is a connection that will not open on a developer's laptop, which is
+// why those get "preferred".
 func DefaultTLSMode(env Env) TLSMode {
 	if env == EnvProd {
 		return TLSRequired
@@ -77,7 +77,7 @@ type Tunnel struct {
 // here; they live in the OS keychain keyed by Name.
 type DataSource struct {
 	Name     string  `yaml:"name"`
-	Env      Env     `yaml:"env"`
+	Env      Env     `yaml:"env,omitempty"`
 	Host     string  `yaml:"host"`
 	Port     int     `yaml:"port"`
 	User     string  `yaml:"user"`
@@ -193,7 +193,7 @@ func (d *DataSource) validate(index int) error {
 		return fmt.Errorf("datasource #%d: name is required", index)
 	}
 	switch d.Env {
-	case EnvProd, EnvStage, EnvDev:
+	case "", EnvProd, EnvStage, EnvDev:
 	default:
 		return fmt.Errorf("datasource %q: env must be one of %q, %q, %q (got %q)",
 			d.Name, EnvProd, EnvStage, EnvDev, d.Env)

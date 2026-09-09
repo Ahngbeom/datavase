@@ -25,8 +25,8 @@ import (
 )
 
 // harness drives the real interface against a simulated terminal, so the
-// wiring between key presses, guard and the database is exercised end to
-// end without needing a tty.
+// wiring between key presses and the database is exercised end to end
+// without needing a tty.
 type harness struct {
 	app     *App
 	screen  tcell.SimulationScreen
@@ -686,20 +686,15 @@ func (h *harness) waitForScreen(want string) bool {
 	return false
 }
 
-func TestInterfaceShowsTheEnvironmentAndDataSource(t *testing.T) {
+func TestInterfaceShowsTheDataSource(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
 
 	got := h.text()
-	// The environment is set as a filled chip, in capitals, so that it cannot
-	// be mistaken for the red of an error message.
-	if !strings.Contains(strings.ToLower(got), "prod") {
-		t.Errorf("screen does not show the environment:\n%s", got)
-	}
 	if !strings.Contains(got, "integration") {
 		t.Errorf("screen does not show the datasource name:\n%s", got)
 	}
 	// The schema an unqualified statement reaches is on the top line beside
-	// the environment; nothing else on screen says which it is.
+	// the datasource; nothing else on screen says which it is.
 	if !strings.Contains(got, "@"+testmysql.DefaultDatabase) {
 		t.Errorf("screen does not show the current schema:\n%s", got)
 	}
@@ -784,96 +779,20 @@ func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
 	})
 }
 
-// A refusal stops the rest. The statements after it were written to follow
-// the one that did not run, and with no transaction to unwind what already
-// happened, the count of what ran is the only thing that says where to look.
-func TestRunEverythingStopsAtARefusalAndSaysHowFarItGot(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-	h.typeSQL("SELECT 1; DELETE FROM dv_seq; SELECT 3")
-
-	h.do(keymap.ActionRunAll)
-
-	h.waitFor("the batch to report where it stopped", func(a *App) bool {
-		return strings.Contains(a.status.message, "refused at statement 2")
-	})
-	h.waitFor("the third statement to have been left alone", func(a *App) bool {
-		return strings.Contains(a.status.message, "1 ran")
-	})
-
-	if !h.waitForScreen("Refused") {
-		t.Errorf("the refusal itself never reached the screen:\n%s", h.text())
-	}
-}
-
-// Declining the confirmation is a decision about the whole batch, not about
-// one statement: carrying on would run the statements that were written to
-// follow the one just refused.
-func TestDecliningAConfirmationStopsTheRestOfTheBatch(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("SELECT 1; DELETE FROM dv_seq WHERE id = 1; SELECT 3")
-
-	h.do(keymap.ActionRunAll)
-
-	if !h.waitForScreen("Run it?") {
-		t.Fatalf("no confirmation appeared:\n%s", h.text())
-	}
-
-	// Cancel is the button the dialog opens on, so Enter declines.
-	h.press(tcell.KeyEnter)
-
-	h.waitFor("the batch to stop where it was declined", func(a *App) bool {
-		return strings.Contains(a.status.message, "cancelled at statement 2") &&
-			strings.Contains(a.status.message, "1 ran")
-	})
-}
-
-// The guard stops the user and makes them agree to a write. Reporting "0
-// rows" afterwards told them nothing about what they had just agreed to.
+// A write reports how many rows it changed. Reporting "0 rows" would tell
+// the user nothing about what the statement actually did.
 func TestAWriteReportsHowManyRowsItChangedOnTheStatusBar(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	seedRows(t, h, 5)
 	h.typeSQL("UPDATE dv_ui SET n = n + 100 WHERE n <= 2")
 
 	h.do(keymap.ActionRun)
-	confirmWrite(t, h)
 
 	h.waitFor("the bar to say what the write changed", func(a *App) bool {
 		return a.status.written != nil && a.status.written.RowsAffected == 2
 	})
 	if !h.waitForScreen("2 rows affected") {
 		t.Errorf("the count never reached the screen:\n%s", h.text())
-	}
-}
-
-// The guard's decision has to reach the screen, not just the policy engine.
-func TestProductionDeleteIsRefusedOnScreen(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-	h.typeSQL("DELETE FROM dv_seq")
-
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if !strings.Contains(got, "Refused") {
-		t.Fatalf("no refusal dialog appeared:\n%s", got)
-	}
-	if !strings.Contains(strings.ToUpper(got), "WHERE") {
-		t.Errorf("the refusal does not explain the missing WHERE:\n%s", got)
-	}
-}
-
-// Outside production the same statement is possible, but only deliberately.
-func TestDevelopmentDeleteAsksForTypedConfirmation(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("DELETE FROM dv_seq")
-
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if !strings.Contains(strings.ToLower(got), "confirm") {
-		t.Fatalf("no confirmation dialog appeared:\n%s", got)
-	}
-	if !strings.Contains(got, "DELETE") {
-		t.Errorf("the dialog does not name the phrase to type:\n%s", got)
 	}
 }
 
@@ -1330,16 +1249,6 @@ func seedRows(t *testing.T, h *harness, n int) {
 	t.Cleanup(func() { h.app.conn.Exec(ctx, "DROP TABLE IF EXISTS dv_ui") })
 }
 
-// confirmWrite answers the guard's confirmation dialog with Run.
-func confirmWrite(t *testing.T, h *harness) {
-	t.Helper()
-	if !h.waitForScreen("Run it?") {
-		t.Fatalf("no confirmation appeared:\n%s", h.text())
-	}
-	h.press(tcell.KeyRight)
-	h.press(tcell.KeyEnter)
-}
-
 // The whole point, driven the way a DBA drives it: type BEGIN, change
 // something, look at it, change your mind. Before this the ROLLBACK reported
 // success and the row stayed.
@@ -1358,7 +1267,6 @@ func TestATypedRollbackUndoesTheWork(t *testing.T) {
 
 	h.typeSQL("DELETE FROM dv_ui WHERE n <= 2")
 	h.do(keymap.ActionRun)
-	confirmWrite(t, h)
 	h.waitFor("the delete to report what it removed", func(a *App) bool {
 		return a.status.written != nil && a.status.written.RowsAffected == 2
 	})
@@ -1372,34 +1280,6 @@ func TestATypedRollbackUndoesTheWork(t *testing.T) {
 	if got := rowCount(t, h, "dv_ui"); got != 3 {
 		t.Errorf("dv_ui has %d rows after ROLLBACK, want 3 — the delete was not undone", got)
 	}
-}
-
-// Session state was refused because it could not reach the next statement.
-// Inside a transaction the connection is held, so it can, and refusing would
-// now be the wrong answer.
-func TestSetIsRefusedOutsideATransactionAndAcceptedInside(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
-	h.do(keymap.ActionRun)
-	if !h.waitForScreen("Refused") {
-		t.Fatalf("SET was not refused outside a transaction:\n%s", h.text())
-	}
-	h.press(tcell.KeyEnter)
-
-	h.typeSQL("BEGIN")
-	h.do(keymap.ActionRun)
-	h.waitFor("the transaction to open", func(a *App) bool { return a.status.inTransaction })
-
-	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
-	h.do(keymap.ActionRun)
-	h.waitFor("the SET to run", func(a *App) bool {
-		return a.status.phase == phaseDone && a.status.err == nil
-	})
-
-	h.typeSQL("ROLLBACK")
-	h.do(keymap.ActionRun)
-	h.waitFor("the transaction to close", func(a *App) bool { return !a.status.inTransaction })
 }
 
 func rowCount(t *testing.T, h *harness, table string) int {

@@ -98,9 +98,9 @@ func TestThePaletteHeadingsAreDrawnAsHeadings(t *testing.T) {
 		found = true
 
 		// Weight, not colour. A category is not a state anyone could forget
-		// they are in, and it used to be drawn in the one cue reserved for
-		// those — leaving no colour that meant "writes are unlocked" and
-		// nothing else. Bold also survives a monochrome terminal.
+		// they are in, and drawing it in the notice colour would leave no
+		// colour that meant a state like that and nothing else. Bold also
+		// survives a monochrome terminal.
 		_, _, attrs := cells[row*width+col].Style.Decompose()
 		if attrs&tcell.AttrBold == 0 {
 			t.Errorf("the %q heading is drawn with no weight of its own", paletteCategories[0])

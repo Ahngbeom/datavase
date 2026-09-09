@@ -16,7 +16,7 @@ import (
 )
 
 // addProdDataSource configures a second datasource against the same test
-// server, differing only in the thing the guard reads.
+// server, differing only in name.
 //
 // The same server on purpose: what is being tested is that the interface moves
 // to the datasource it was told to, and a second server would let a passing
@@ -26,7 +26,6 @@ func (h *harness) addProdDataSource(t *testing.T) string {
 
 	ds, password := testmysql.DataSource(t)
 	ds.Name += "-prod"
-	ds.Env = config.EnvProd
 
 	h.inspect(func(a *App) bool {
 		a.cfg.DataSources = append(a.cfg.DataSources, *ds)
@@ -60,68 +59,6 @@ func (h *harness) switchToProd(t *testing.T) string {
 
 	h.waitFor("the switch", func(a *App) bool { return a.conn.DataSource().Name == name })
 	return name
-}
-
-// The acceptance for #13. A guard reading the environment of the datasource
-// you left is the failure this whole feature has to not have.
-func TestSwitchingDataSourceMovesTheGuardPolicy(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.switchToProd(t)
-
-	h.waitFor("the policy to name production", func(a *App) bool {
-		return a.policy().Env == config.EnvProd
-	})
-
-	// And the policy is not a field anyone reads for its own sake: an
-	// unbounded DELETE is confirmable on dev and refused outright on prod.
-	h.typeSQL("DELETE FROM dv_switch_probe")
-	h.do(keymap.ActionRun)
-
-	if !h.waitForScreen("Refused") {
-		t.Fatalf("an unbounded DELETE was not refused against production; screen:\n%s", h.text())
-	}
-}
-
-// The spine is the one thing here meant to be believed without reading, so a
-// stale one is worse than none at all. It used to be painted once, on the
-// stated grounds that the environment could not change mid-session.
-func TestSwitchingDataSourceRepaintsTheEnvironmentSpine(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	if got := h.spineColour(); got != spineDev {
-		t.Fatalf("the spine starts %v, want the dev colour", got)
-	}
-
-	h.switchToProd(t)
-
-	h.waitFor("the spine to turn", func(a *App) bool {
-		return a.spine.GetBackgroundColor() == spineProd
-	})
-}
-
-func (h *harness) spineColour() tcell.Color {
-	h.t.Helper()
-
-	var got tcell.Color
-	h.inspect(func(a *App) bool {
-		got = a.spine.GetBackgroundColor()
-		return true
-	})
-	return got
-}
-
-// The unlock is granted for a session and a datasource both. Carrying one
-// granted on dev over to production is the single way this feature could undo
-// the guard.
-func TestSwitchingDataSourceLocksWritesAgain(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.inspect(func(a *App) bool { a.enableWrites(); return true })
-	h.waitFor("writes to be unlocked", func(a *App) bool { return a.status.writesEnabled })
-
-	h.switchToProd(t)
-
-	h.waitFor("writes to be locked again", func(a *App) bool { return !a.status.writesEnabled })
 }
 
 // Connecting first and letting go second. A switch that closed what it had and

@@ -18,11 +18,6 @@ type zone struct {
 }
 
 // zoneTarget is what a click on a zone asks for.
-//
-// The environment is not here. It is the one visual thing standing between
-// the user and a production mistake, and a warning that is also a control
-// means a misclick on it looks like it changed the environment. Switching
-// datasource is on the name immediately beside it.
 type zoneTarget int
 
 const (
@@ -33,7 +28,6 @@ const (
 	zoneTab
 	zoneRegionName
 	zoneStatusMode
-	zoneStatusWrites
 )
 
 // hitmap is the zones of the last frame, by screen row.

@@ -5,131 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Ahngbeom/datavase/internal/guard"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/result"
-	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
-
-// refusalText is the whole of what a refused statement says, and it is a
-// plain function so a test can read it without a screen.
-//
-// The unlock is offered here rather than as a button. A button next to the
-// refusal is the "run anyway" this dialog exists not to have; making the user
-// leave, open the palette and name the command is the deliberateness that a
-// production write is supposed to cost.
-func refusalText(d guard.Decision, paletteKey string) string {
-	text := fmt.Sprintf("Refused\n\n%s", d.Reason)
-	if d.Unlockable {
-		text += "\n\n" + unlockHint(paletteKey)
-	}
-	return text
-}
-
-// unlockHint names the route past the production write lock.
-//
-// guard deliberately does not compose this: it cannot know which preset is in
-// force or which keys the terminal can deliver, and the reason it used to
-// carry named ":write", a command no preset has ever had.
-func unlockHint(paletteKey string) string {
-	return fmt.Sprintf("Writes can be unlocked for this session: %s, then %q.",
-		paletteKey, cmdEnableWrites)
-}
-
-// refuse tells the user why a statement will not run. There is no override
-// here on purpose: a dialog offering "run anyway" is a dialog people learn
-// to dismiss, which is exactly how the production accident happens.
-func (a *App) refuse(d guard.Decision) {
-	modal := newModal().
-		SetText(refusalText(d, a.keyLabel(keymap.ActionCommandPalette))).
-		AddButtons([]string{"OK"}).
-		SetDoneFunc(func(int, string) { a.closeDialog() })
-
-	modal.SetTextColor(colourDanger)
-	a.openDialog(modal)
-}
-
-// confirm asks before running a statement that changes data.
-//
-// When the guard supplies a phrase, the user has to type it. Requiring the
-// hands to spell out "DELETE" is what turns a reflex into a decision.
-func (a *App) confirm(stmt sqlparse.Statement, d guard.Decision) {
-	if d.TypeToConfirm == "" {
-		a.confirmWithButtons(stmt, d)
-		return
-	}
-	a.confirmByTyping(stmt, d)
-}
-
-func (a *App) confirmWithButtons(stmt sqlparse.Statement, d guard.Decision) {
-	modal := newModal().
-		SetText(fmt.Sprintf("%s\n\n%s\n\nRun it?", d.Reason, preview(stmt.SQL))).
-		AddButtons([]string{"Cancel", "Run"}).
-		SetDoneFunc(func(_ int, label string) {
-			a.closeDialog()
-			if label != "Run" {
-				a.abandonBatch()
-				return
-			}
-			a.start(stmt, d)
-		})
-
-	a.openDialog(modal)
-}
-
-func (a *App) confirmByTyping(stmt sqlparse.Statement, d guard.Decision) {
-	a.typeToConfirm(
-		fmt.Sprintf("%s\n\n%s", d.Reason, preview(stmt.SQL)),
-		d.TypeToConfirm, "Run",
-		func() { a.start(stmt, d) },
-		a.abandonBatch)
-}
-
-// typeToConfirm asks for a word to be spelled out before doing something.
-//
-// Requiring the hands to type it is what turns a reflex into a decision, and
-// it is the same demand wherever it appears — a production write, or stopping
-// somebody else's statement.
-func (a *App) typeToConfirm(message, phrase, verb string, confirm, cancel func()) {
-	form := tview.NewForm()
-	typed := ""
-
-	form.AddTextView("", message, 60, 6, true, false).
-		AddInputField(fmt.Sprintf("Type %s to proceed", phrase), "", 24,
-			nil, func(text string) { typed = text }).
-		AddButton("Cancel", func() {
-			a.closeDialog()
-			if cancel != nil {
-				cancel()
-			}
-		}).
-		AddButton(verb, func() {
-			// Comparison is case-insensitive: the point is deliberate
-			// effort, not exact keystrokes.
-			if !strings.EqualFold(strings.TrimSpace(typed), phrase) {
-				a.notice(fmt.Sprintf("type %s exactly to confirm", phrase))
-				return
-			}
-			a.closeDialog()
-			confirm()
-		})
-
-	form.SetBorder(true).SetTitle(" confirm ").SetTitleAlign(tview.AlignLeft)
-	form.SetBackgroundColor(tcell.ColorBlack)
-
-	a.openDialog(centred(form, 70, 15))
-}
-
-// preview shortens a statement for a dialog while keeping it recognisable.
-func preview(sql string) string {
-	const limit = 240
-
-	flat := strings.Join(strings.Fields(sql), " ")
-	return result.EscapeTags(result.Truncate(flat, limit))
-}
 
 // newModal is the one place a tview Modal is built, because it is the one
 // place its background can be set completely.
@@ -138,8 +19,7 @@ func preview(sql string) string {
 // SetBackgroundColor reaches only the last two. The Box is what draws the
 // border, so a Modal told to be black came out as a ring of the library's
 // blue around black text. Every other dialog here draws its border on the
-// background it was given; these four were the ones that did not, and one of
-// them is the guard's refusal.
+// background it was given; these were the ones that did not.
 func newModal() *tview.Modal {
 	modal := tview.NewModal()
 	modal.SetBackgroundColor(tcell.ColorBlack)

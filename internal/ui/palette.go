@@ -19,19 +19,6 @@ import (
 // summaries line up in a second column on the same row.
 const paletteNameColumn = 17
 
-// The two commands the guard's refusal has to be able to name. They are
-// constants so the message and the palette entry cannot drift apart — a test
-// checks the hint names a command the palette really offers.
-//
-// They say "writes" rather than "write" because a ":" command line resolves
-// these same names, and to a vim user ":write" saves the file. Leaving the
-// unlock called "write" would have put the most dangerous thing here behind
-// the most reflexive thing a vim user types.
-const (
-	cmdEnableWrites  = "unlock writes"
-	cmdDisableWrites = "lock writes"
-)
-
 // cmdGettingStarted reopens the first-run card. It is a constant because the
 // card names it as the way back to itself, and a name that drifted from the
 // command would be an instruction that does not work.
@@ -42,9 +29,8 @@ const cmdGettingStarted = "getting started"
 //
 // The order is what someone reaching for the palette most often wants first,
 // and it decides one thing besides reading: Enter on an unfiltered palette
-// runs the first command. That used to be "unlock writes" — the most dangerous
-// thing here, two keys away with nothing read. It is now "cancel", which does
-// nothing when nothing is running.
+// runs the first command, which is "cancel" — it does nothing when nothing
+// is running.
 var paletteCategories = []string{
 	catRunning,
 	catResults,
@@ -76,16 +62,6 @@ type command struct {
 	// only searchable is one you have to already know the name of something to
 	// use, which is the opposite of what it is for.
 	category string
-
-	// exact keeps the command off the ":" line's abbreviations, so only its
-	// whole name reaches it.
-	//
-	// The palette can afford to guess because it shows the row it picked and
-	// Enter chooses from a visible list. A command line runs on Enter, and a
-	// prefix that is unique today stops being unique the moment a command is
-	// added — which is a fine way to reach "history" and no way at all to
-	// reach an unlock on production.
-	exact bool
 
 	// covers names the action this command performs, where there is one.
 	//
@@ -143,20 +119,6 @@ var paletteExempt = map[keymap.Action]bool{
 // at run time.
 func paletteCommands() []command {
 	cmds := []command{
-		{
-			name:     cmdEnableWrites,
-			category: catWrites,
-			summary:  "allow writes to this production datasource for the session",
-			exact:    true,
-			run:      (*App).enableWrites,
-		},
-		{
-			name:     cmdDisableWrites,
-			category: catWrites,
-			summary:  "refuse them again",
-			contexts: []menuContext{ctxStatusBar},
-			run:      (*App).disableWrites,
-		},
 		{
 			name:     "begin",
 			category: catWrites,
@@ -577,21 +539,6 @@ func rankCommand(c command, term string) (tier, score int, ok bool) {
 		return tierCategory, score, true
 	}
 	return 0, 0, false
-}
-
-// enableWrites unlocks writes against production for this session only.
-//
-// It is never persisted: an unlock that outlived the session would quietly
-// become the default, which is precisely the state the guard exists to
-// prevent.
-func (a *App) enableWrites() {
-	a.status.writesEnabled = true
-	a.notice("writes unlocked for this session — the status bar will keep saying so")
-}
-
-func (a *App) disableWrites() {
-	a.status.writesEnabled = false
-	a.notice("writes locked")
 }
 
 func (a *App) enableMouse() {

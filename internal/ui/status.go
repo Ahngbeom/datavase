@@ -24,18 +24,17 @@ const (
 
 // status is what just happened.
 //
-// Where the session is — the environment, the datasource, the schema — lives
-// on the top bar. Splitting them is what stopped a schema name and a row
-// count competing for the same space, with the loser silently gone.
+// Where the session is — the datasource, the schema — lives on the top bar.
+// Splitting them is what stopped a schema name and a row count competing for
+// the same space, with the loser silently gone.
 //
 // It is a plain value with a pure render method, so what the user is told
 // about a production database can be tested without starting a terminal.
 type status struct {
 	// vimMode and vimPending describe the modal keyboard, and are empty on
 	// the keyboards that do not have one.
-	vimMode       string
-	vimPending    string
-	writesEnabled bool
+	vimMode    string
+	vimPending string
 	// inTransaction says the connection is pinned and the work so far is
 	// undoable, which changes what several other fields mean.
 	inTransaction bool
@@ -80,8 +79,7 @@ type field struct {
 	visibleCost int
 	// target is what a click on this field answers. zoneNone for most fields
 	// — a zone is only worth publishing for a state someone can forget they
-	// are in and a click can act on, which today is the mode and the
-	// unlocked-writes notice.
+	// are in and a click can act on, which today is the mode.
 	target zoneTarget
 }
 
@@ -140,9 +138,9 @@ func (s status) renderWidth(width int) (string, []zone) {
 
 	// On a terminal too narrow even for the warnings, something has to give.
 	// Truncating is the last resort and keeps the leftmost fields, which are
-	// the environment badge and whatever warning followed it. Truncating
-	// drops the zones with the columns they described — a partially cut field
-	// has nothing intact left for a click to mean.
+	// the mode indicator and whatever warning followed it. Truncating drops
+	// the zones with the columns they described — a partially cut field has
+	// nothing intact left for a click to mean.
 	if out := line.String(); visibleCost(out) > width {
 		return truncateMarkup(out, width), nil
 	}
@@ -263,12 +261,6 @@ func (s status) fields() []field {
 		out[len(out)-1].target = zoneStatusMode
 	}
 
-	if s.writesEnabled {
-		out = add(out, tag(colourNotice, "writes on"), false, 0)
-		// A state someone can forget they are in; a click is the shortest way
-		// back to locked.
-		out[len(out)-1].target = zoneStatusWrites
-	}
 	// Never dropped. Whether the work so far can be undone is not a detail
 	// that should vanish because the terminal got narrow.
 	if s.inTransaction {
@@ -412,7 +404,7 @@ func formatElapsed(d time.Duration) string {
 //
 // The width has to be read during Draw: asking the widget earlier returns the
 // zero rect it holds before tview lays it out, and rendering against that
-// drops every field but the environment badge. Drawing per frame also means
+// drops every field but the mode indicator. Drawing per frame also means
 // the bar re-flows when the window is resized.
 type statusBar struct {
 	*tview.TextView

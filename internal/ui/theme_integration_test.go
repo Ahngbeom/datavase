@@ -12,7 +12,7 @@ import (
 )
 
 // theme.go declares four roles and gives each one value, and the spine adds
-// three pinned ones. Anything else on screen is a colour nobody chose — which
+// two pinned ones. Anything else on screen is a colour nobody chose — which
 // is how the empty editor's placeholder came to be green, the colour every
 // other program on the machine uses for success.
 func (h *harness) unclaimedForegrounds() map[tcell.Color]string {
@@ -28,8 +28,7 @@ func (h *harness) unclaimedForegrounds() map[tcell.Color]string {
 		colourDanger: true,
 		colourMuted:  true,
 		// Text drawn on the spine's colour, and on a selection.
-		spineTextLoud:    true,
-		spineTextQuiet:   true,
+		spineText:        true,
 		tcell.ColorWhite: true,
 	}
 

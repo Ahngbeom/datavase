@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -15,9 +14,8 @@ import (
 // The top line carries the facts that do not change from keystroke to
 // keystroke; the bottom line carries what just happened. They used to share
 // one line, where a schema name and a row count competed for the same space
-// and the loser vanished — including, on a narrow terminal, the environment.
+// and the loser vanished — including, on a narrow terminal, the datasource.
 type topBarState struct {
-	env    config.Env
 	dsName string
 	schema string
 	// helpKey names the key that opens the reference, looked up rather than
@@ -33,14 +31,13 @@ type topBarState struct {
 // there — a dozen fields whose importance depends on what just happened — but
 // this line holds three things and a fixed opinion about the order they go
 // in, and a list says that opinion out loud.
-type topBarForm struct{ helpKey, dsName bool }
+type topBarForm struct{ helpKey bool }
 
-// topBarForms, most complete first. The environment and the schema appear in
-// none of them: those two are what a production mistake is made of, so they
-// are not on the table.
+// topBarForms, most complete first. The datasource chip and the schema are in
+// neither form's control: which server this is has to survive a terminal of
+// any width.
 var topBarForms = []topBarForm{
-	{helpKey: true, dsName: true},
-	{dsName: true},
+	{helpKey: true},
 	{},
 }
 
@@ -53,17 +50,17 @@ func (t topBarState) renderWidth(width int) (string, []zone) {
 		}
 	}
 
-	// Narrower than the environment and the schema together. Truncating keeps
-	// the leftmost, which is the environment — the one thing that has to
+	// Narrower than the datasource chip and the schema together. Truncating
+	// keeps the leftmost, which is the datasource — the one thing that has to
 	// survive a terminal of any size.
 	last, _ := t.line(topBarForms[len(topBarForms)-1], width)
 	// Truncating drops the zones with the columns they described: the line
-	// that survives is the environment, which is not a control.
+	// that survives is the datasource, which is not a control.
 	return truncateMarkup(last, width), nil
 }
 
 func (t topBarState) line(form topBarForm, width int) (string, []zone) {
-	line := t.chip()
+	line := ""
 	var zones []zone
 
 	// mark records a zone over the run just appended, measured against the
@@ -75,28 +72,15 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 		}
 	}
 
-	// The datasource and the schema written as one. A datasource is often
-	// named after its main schema, and the two side by side read as a
-	// repetition rather than as two facts — hence the "@", and hence dropping
-	// the datasource still leaves "@app_db" rather than a bare word. They are
-	// marked as separate zones so a click on either resolves to that field
-	// alone.
-	if (form.dsName && t.dsName != "") || t.schema != "" {
-		line += " "
-		if form.dsName && t.dsName != "" {
-			before := line
-			line += result.EscapeTags(t.dsName)
-			mark(before, zoneDataSource)
-		}
-		if t.schema != "" {
-			// The "@" precedes the schema whenever the schema is drawn, not
-			// only when the datasource half also survived: dropping the
-			// datasource must still leave "@app_db" rather than a bare word.
-			line += "@"
-			before := line
-			line += result.EscapeTags(t.schema)
-			mark(before, zoneSchema)
-		}
+	before := line
+	line += t.chip()
+	mark(before, zoneDataSource)
+
+	if t.schema != "" {
+		line += " @"
+		before := line
+		line += result.EscapeTags(t.schema)
+		mark(before, zoneSchema)
 	}
 
 	if form.helpKey && t.helpKey != "" {
@@ -113,21 +97,17 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 	return line, zones
 }
 
-// chip is the environment, filled rather than merely coloured.
-//
-// Filled because an error message is red text: if the environment were red
-// text too, the cue and the failure would be the same thing worn twice. The
-// chip also butts against the spine, so the two read as one band of colour.
+// chip is the datasource name, filled rather than merely coloured, so that
+// which server this is survives on a terminal of any width.
 func (t topBarState) chip() string {
-	style := envStyleFor(t.env)
-	return fmt.Sprintf("[%s] %s [-:-]", colourTag(style.fg, style.bg), strings.ToUpper(string(t.env)))
+	return fmt.Sprintf("[%s] %s [-:-]", colourTag(spineText, spineColour), result.EscapeTags(t.dsName))
 }
 
 // topBar draws the line at whatever width it actually has.
 //
 // The width is read during Draw for the same reason the status bar reads it
 // there: asking earlier returns the zero rect tview holds before layout, and
-// rendering against that sheds every field but the environment.
+// rendering against that sheds every field but the datasource.
 type topBar struct {
 	*tview.TextView
 	current func() topBarState

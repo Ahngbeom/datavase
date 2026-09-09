@@ -9,8 +9,8 @@ import (
 	"github.com/Ahngbeom/datavase/internal/db"
 )
 
-// baseStatus is an idle bar. Where the session is — the environment, the
-// datasource, the schema — is the top bar's business now; see topbar_test.go.
+// baseStatus is an idle bar. Where the session is — the datasource, the
+// schema — is the top bar's business now; see topbar_test.go.
 func baseStatus() status {
 	return status{}
 }
@@ -155,20 +155,6 @@ func TestStatusRendersOnASingleLine(t *testing.T) {
 	}
 }
 
-// The write lock is a mode the user can forget they turned on.
-func TestStatusShowsWhenProductionWritesAreUnlocked(t *testing.T) {
-	locked := baseStatus()
-	if got := locked.render(); strings.Contains(strings.ToLower(got), "writes on") {
-		t.Errorf("render() = %q, want no write indicator while locked", got)
-	}
-
-	unlocked := baseStatus()
-	unlocked.writesEnabled = true
-	if got := unlocked.render(); !strings.Contains(strings.ToLower(got), "writes on") {
-		t.Errorf("render() = %q, want it to warn that writes are unlocked", got)
-	}
-}
-
 func TestStatusShowsAMessage(t *testing.T) {
 	s := baseStatus()
 	s.message = "cancelled"
@@ -257,18 +243,18 @@ func TestABatchAlwaysSaysHowManyStatementsRan(t *testing.T) {
 			wantAll: []string{"5 statements", "5 ran"},
 		},
 		{
-			name:    "refused part-way",
+			name:    "failed part-way",
 			total:   5,
 			ran:     2,
-			why:     "refused at statement 3",
-			wantAll: []string{"5 statements", "2 ran", "refused at statement 3"},
+			why:     "failed at statement 3",
+			wantAll: []string{"5 statements", "2 ran", "failed at statement 3"},
 		},
 		{
-			name:    "the first statement was refused",
+			name:    "the first statement failed",
 			total:   4,
 			ran:     0,
-			why:     "refused at statement 1",
-			wantAll: []string{"0 ran", "refused at statement 1"},
+			why:     "failed at statement 1",
+			wantAll: []string{"0 ran", "failed at statement 1"},
 			// "0 ran" has to be said, not left to be inferred from silence.
 			wantNot: []string{"1 ran"},
 		},
@@ -414,8 +400,8 @@ func TestNoWarningsAddNothingToTheBar(t *testing.T) {
 // transaction it still can, and a summary that read the same either way would
 // leave the reader to guess the one thing that decides what to do next.
 func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
-	outside := batchSummary(5, 2, "refused at statement 3", false)
-	inside := batchSummary(5, 2, "refused at statement 3", true)
+	outside := batchSummary(5, 2, "failed at statement 3", false)
+	inside := batchSummary(5, 2, "failed at statement 3", true)
 
 	if strings.Contains(outside, "rollback") {
 		t.Errorf("outside a transaction: %q offers a rollback that does not exist", outside)
@@ -774,31 +760,5 @@ func TestTheModeFieldIsClickable(t *testing.T) {
 	}
 	if !found {
 		t.Error("the mode field publishes no zone")
-	}
-}
-
-// Unlocked writes is a state someone can forget they are in, and the notice
-// is the only reminder. Being able to click it off is the shortest path back.
-func TestTheUnlockedWritesNoticeIsClickable(t *testing.T) {
-	s := status{writesEnabled: true}
-
-	line, zones := s.renderWidth(120)
-	plain := []rune(visibleText(line))
-
-	var found bool
-	for _, z := range zones {
-		if z.target != zoneStatusWrites {
-			continue
-		}
-		found = true
-		if z.from < 0 || z.to > len(plain) || z.from >= z.to {
-			t.Fatalf("the writes zone %+v is outside %q", z, string(plain))
-		}
-		if covered := string(plain[z.from:z.to]); !strings.Contains(covered, "writes on") {
-			t.Errorf("the writes zone covers %q", covered)
-		}
-	}
-	if !found {
-		t.Error("the unlocked-writes notice publishes no zone")
 	}
 }

@@ -89,26 +89,3 @@ func TestACommandLineRunsAPaletteCommand(t *testing.T) {
 		return name == pageHistory
 	})
 }
-
-// The one command that must never answer to an abbreviation. A vim user types
-// ":u" meaning undo, and unlocking writes against production is the last thing
-// that should be one keystroke from a reflex.
-func TestTheCommandLineWillNotUnlockWritesFromAnAbbreviation(t *testing.T) {
-	h := newVimHarness(t)
-	h.buffer("", 0)
-
-	for _, line := range []string{"u", "un", "unlock", "unlock write"} {
-		h.runLine(line)
-
-		if h.inspect(func(a *App) bool { return a.status.writesEnabled }) {
-			t.Fatalf(":%s unlocked writes against production", line)
-		}
-	}
-
-	// And the whole name still works, so this is a rule about abbreviation
-	// rather than the command having been quietly removed.
-	h.runLine(cmdEnableWrites)
-	h.waitFor("writes to be unlocked by the full name", func(a *App) bool {
-		return a.status.writesEnabled
-	})
-}

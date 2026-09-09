@@ -121,30 +121,6 @@ func TestThePaletteFilterReachesACommandBelowTheFold(t *testing.T) {
 	}
 }
 
-// The write lock is the guard's escape hatch; unlocking must be visible.
-func TestUnlockingWritesIsAnnouncedAndVisible(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.enableWrites() })
-	h.settle()
-
-	if !strings.Contains(strings.ToLower(h.text()), "writes on") {
-		t.Errorf("the status bar does not show that writes are unlocked:\n%s", h.text())
-	}
-
-	// And an unlocked production write is now a confirmation, not a refusal.
-	h.typeSQL("UPDATE dv_seq SET n = n WHERE n = 1")
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if strings.Contains(got, "Refused") {
-		t.Errorf("the write was still refused after unlocking:\n%s", got)
-	}
-	if !strings.Contains(strings.ToLower(got), "run it?") {
-		t.Errorf("no confirmation appeared:\n%s", got)
-	}
-}
-
 func TestExportWritesACSVFile(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 

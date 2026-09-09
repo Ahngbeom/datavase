@@ -296,9 +296,6 @@ func (a *App) mouseAction(z zone, row int) bool {
 	case zoneStatusMode:
 		a.showKeyboardChooser()
 		return true
-	case zoneStatusWrites:
-		a.disableWrites()
-		return true
 	}
 	return false
 }

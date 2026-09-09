@@ -57,9 +57,7 @@ var vimQuitCommands = map[string]cmdIntent{
 // An abbreviation runs only while it names exactly one command. The palette
 // can afford to guess, because it shows the row it picked and Enter is a
 // choice from a visible list; a command line runs the moment Enter is pressed,
-// and "c" alone stands in front of both "cancel" and "commit". Refusing is
-// the same instinct the guard already has about a statement it cannot
-// classify.
+// and "c" alone stands in front of both "cancel" and "commit".
 func resolveCommandLine(line string, cmds []command) cmdResolution {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -71,12 +69,6 @@ func resolveCommandLine(line string, cmds []command) cmdResolution {
 		return cmdResolution{intent: intent, arg: strings.TrimSpace(rest)}
 	}
 
-	// An exact command still counts as a candidate here even though it can
-	// never be the answer. Leaving it out would not merely hide it: it would
-	// make everything sharing its first letters easier to reach than before,
-	// so ":u" would stop being the ambiguity it is and quietly become "use
-	// schema". Hiding a dangerous command must not change what the safe ones
-	// mean.
 	var prefixed []command
 	for _, c := range cmds {
 		if c.name == line {
@@ -88,7 +80,7 @@ func resolveCommandLine(line string, cmds []command) cmdResolution {
 	}
 
 	switch {
-	case len(prefixed) == 0 || (len(prefixed) == 1 && prefixed[0].exact):
+	case len(prefixed) == 0:
 		return cmdResolution{intent: cmdUnknown}
 	case len(prefixed) == 1:
 		return cmdResolution{intent: cmdPalette, name: prefixed[0].name}
@@ -120,8 +112,7 @@ func (a *App) showCommandLine() {
 		switch ev.Key() {
 		case tcell.KeyTab:
 			// Completing does not run: the point of finishing a name for
-			// someone is to let them read it before they commit to it, which
-			// matters most for the command this refuses to abbreviate.
+			// someone is to let them read it before they commit to it.
 			if whole, ok := completeCommand(input.GetText(), paletteCommands()); ok {
 				input.SetText(whole)
 			}

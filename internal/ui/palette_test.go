@@ -274,27 +274,6 @@ func TestTypingDropsTheHeadings(t *testing.T) {
 	}
 }
 
-// Enter on an opened palette runs the first row that does anything. What that
-// row is has to stay something a stray keypress can survive.
-//
-// It used to be "unlock writes" — the palette's first entry and the single
-// most dangerous thing here — reached by opening the palette and pressing
-// Enter, which is two keys and no reading.
-func TestEnterOnAnUnfilteredPaletteCannotUnlockWrites(t *testing.T) {
-	items := paletteItems("", noop)
-
-	for _, it := range items {
-		if it.accept == nil {
-			continue
-		}
-		if strings.HasPrefix(it.primary, cmdEnableWrites) {
-			t.Errorf("the first command Enter reaches is %q", cmdEnableWrites)
-		}
-		return
-	}
-	t.Fatal("the palette offers nothing to run")
-}
-
 // The palette is keyboard-only, so a command that rankCommand cannot match
 // against its own name has no way in at all — not a worse way, none.
 func TestEveryCommandCanBeFoundByTypingItsOwnName(t *testing.T) {
@@ -317,12 +296,8 @@ func TestEveryCommandCanBeFoundByTypingItsOwnName(t *testing.T) {
 
 // The ":" command line resolves palette command names, so a palette command
 // that borrows a vim command's name and means something else makes the line
-// lie about what it is about to do.
-//
-// "write" was the one that mattered: in vim it saves, and here it used to
-// unlock writes against production. A vim user types ":w" and then ":write"
-// without looking, which would have made the single most dangerous thing this
-// application can do the thing a reflex reaches.
+// lie about what it is about to do. A vim user types ":w" or ":write" without
+// looking, trusting muscle memory over what is actually on screen.
 //
 // "quit" is deliberately not listed. It means what vim means by it, so the
 // line saying "quit" and quitting is agreement, not collision.

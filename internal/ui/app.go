@@ -1,9 +1,9 @@
 // Package ui assembles the terminal interface.
 //
 // The rule this package follows is that widgets never hold application
-// state. Anything a decision depends on — the current statement, the guard
-// verdict, the result buffer — lives outside tview, so it can be tested
-// without a terminal. Widgets only render what they are handed.
+// state. Anything a decision depends on — the current statement, the
+// result buffer — lives outside tview, so it can be tested without a
+// terminal. Widgets only render what they are handed.
 package ui
 
 import (
@@ -17,7 +17,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/complete"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/db"
-	"github.com/Ahngbeom/datavase/internal/guard"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/result"
@@ -43,9 +42,8 @@ type App struct {
 	// switch without a keychain.
 	connect func(context.Context, *config.DataSource) (*session.Session, error)
 
-	// spine is the environment colour down the left. Held because it is the
-	// one piece of the frame that has to be repainted when the datasource
-	// changes, and a stale one is worse than none.
+	// spine is the column of colour down the left. Held so paintSpine can
+	// reach it after a datasource switch.
 	spine *tview.Box
 
 	tree      *tview.TreeView
@@ -186,9 +184,9 @@ type App struct {
 
 // batch is the state of a Run-everything.
 //
-// It is a queue rather than a loop because every step can stop to ask
-// something: the guard may refuse, or want a phrase typed, and both answers
-// arrive from a dialog long after the statement that raised them returned.
+// It is a queue rather than a loop because a statement's result arrives
+// asynchronously: each step resumes the batch from the same callback that
+// reports the last one finished.
 type batch struct {
 	stmts []sqlparse.Statement
 	// next is the index of the statement to consider next, so it doubles as
@@ -483,7 +481,7 @@ func (a *App) Run() error {
 
 // SetScreen replaces the terminal the interface draws on. Tests pass a
 // tcell simulation screen so the real interface — layout, key handling,
-// guard dialogs — can be exercised without a terminal.
+// dialogs — can be exercised without a terminal.
 func (a *App) SetScreen(screen tcell.Screen) {
 	a.app.SetScreen(screen)
 }
@@ -494,9 +492,7 @@ func (a *App) Stop() { a.app.Stop() }
 func (a *App) buildWidgets() {
 	ds := a.conn.DataSource()
 
-	// The root is the tree's one heading. It no longer carries the
-	// environment's colour: the spine does that now, and saying it twice is
-	// what made the palette run out of meanings.
+	// The root is the tree's one heading.
 	a.tree = tview.NewTreeView().
 		SetRoot(tview.NewTreeNode(rootLabel(ds, sidebarWidth-4)).
 			SetColor(colourAccent))
@@ -619,7 +615,6 @@ func resultHint(s resultState) string {
 func (a *App) currentTopBar() topBarState {
 	ds := a.conn.DataSource()
 	return topBarState{
-		env:     ds.Env,
 		dsName:  ds.Name,
 		schema:  a.currentSchema(),
 		helpKey: a.helpKeyLabel(),
@@ -651,9 +646,9 @@ func (a *App) buildLayout() {
 		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.statusBar, 1, 0, false)
 
-	// The environment runs down the outside of everything. Held, because
-	// switching datasource has to repaint it in the same step.
-	a.spine = newSpine(a.conn.DataSource().Env)
+	// The spine runs down the outside of everything. Held, because it is a
+	// field a caller can reach to repaint.
+	a.spine = newSpine()
 	root := tview.NewFlex().
 		AddItem(a.spine, 1, 0, false).
 		AddItem(inner, 0, 1, true)
@@ -1019,31 +1014,27 @@ func (a *App) execute() {
 	a.runStatement(stmt)
 }
 
-// runStatement puts one statement through the guard and then the engine.
+// runStatement sends one statement, or opens or ends a transaction when
+// that is what it says.
 func (a *App) runStatement(stmt sqlparse.Statement) {
-	decision := guard.Evaluate(stmt, a.policy())
-
+	if stmt.IsEmpty() {
+		a.notice("nothing to run")
+		return
+	}
 	// Transaction control opens or ends the pinned connection rather than
 	// running on one, so it never becomes a Stream. Typing BEGIN works because
 	// that is what a DBA types; there is a palette entry for the same thing,
 	// not instead of it.
-	if decision.Verdict == guard.Allow && opensOrEndsTransaction(stmt) {
+	if opensOrEndsTransaction(stmt) {
 		a.transactionControl(stmt.Verb())
 		return
 	}
-
-	switch decision.Verdict {
-	case guard.Deny:
-		a.refuse(decision)
-	case guard.Confirm:
-		a.confirm(stmt, decision)
-	default:
-		a.start(stmt, decision)
-	}
+	a.start(stmt, sqlparse.AutoLimit(stmt, a.cfg.Defaults.AutoLimit))
 }
 
 // executeAll runs every statement in the editor, in order, stopping at the
-// first refusal so a rejected statement cannot be skipped over silently.
+// first failure so a statement after it is never run against a database the
+// one before it left in an unknown state.
 func (a *App) executeAll() {
 	if a.running != nil {
 		a.notice("a statement is already running; ^C cancels it")
@@ -1067,11 +1058,8 @@ func (a *App) executeAll() {
 	a.advanceBatch()
 }
 
-// advanceBatch puts the next statement of a Run-everything through the guard.
-//
-// Each verdict either continues the queue or ends it. Nothing is skipped: a
-// refusal in the middle stops the rest, because the statements after it were
-// written to follow the one that did not run.
+// advanceBatch sends the next statement of a Run-everything, or opens or
+// ends a transaction when that is what it says.
 func (a *App) advanceBatch() {
 	b := a.batch
 	if b == nil {
@@ -1085,16 +1073,12 @@ func (a *App) advanceBatch() {
 	stmt := b.stmts[b.next]
 	b.next++
 
-	decision := guard.Evaluate(stmt, a.policy())
-	switch decision.Verdict {
-	case guard.Deny:
-		a.finishBatch(fmt.Sprintf("refused at statement %d", b.next))
-		a.refuse(decision)
-	case guard.Confirm:
-		a.confirm(stmt, decision)
-	default:
-		a.start(stmt, decision)
+	if opensOrEndsTransaction(stmt) {
+		a.transactionControl(stmt.Verb())
+		a.advanceBatch()
+		return
 	}
+	a.start(stmt, sqlparse.AutoLimit(stmt, a.cfg.Defaults.AutoLimit))
 }
 
 // resumeBatch continues the queue after a statement has finished, or ends it
@@ -1118,14 +1102,6 @@ func (a *App) resumeBatch(err error) {
 	default:
 		a.finishBatch(fmt.Sprintf("failed at statement %d", b.next))
 	}
-}
-
-// abandonBatch ends the queue because the user declined a confirmation.
-func (a *App) abandonBatch() {
-	if a.batch == nil {
-		return
-	}
-	a.finishBatch(fmt.Sprintf("cancelled at statement %d", a.batch.next))
 }
 
 // finishBatch ends a Run-everything and reports how far it got.
@@ -1164,20 +1140,11 @@ func (a *App) copyOrCancel() {
 	}
 }
 
-func (a *App) policy() guard.Policy {
-	return guard.Policy{
-		Env:           a.conn.DataSource().Env,
-		AutoLimit:     a.cfg.Defaults.AutoLimit,
-		WritesEnabled: a.status.writesEnabled,
-		InTransaction: a.conn.InTransaction(),
-	}
-}
-
 // start sends the statement and streams the result into the buffer.
-func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
+func (a *App) start(stmt sqlparse.Statement, limit int) {
 	sql := stmt.SQL
-	if decision.InjectLimit > 0 {
-		sql = sqlparse.AppendLimit(stmt, decision.InjectLimit)
+	if limit > 0 {
+		sql = sqlparse.AppendLimit(stmt, limit)
 	}
 
 	a.buf.Reset()
@@ -1191,7 +1158,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	a.status.err = nil
 	a.status.rows = 0
 	a.status.message = ""
-	a.status.limitInjected = decision.InjectLimit
+	a.status.limitInjected = limit
 	a.status.truncated = false
 	a.status.written = nil
 	a.status.warnings = nil

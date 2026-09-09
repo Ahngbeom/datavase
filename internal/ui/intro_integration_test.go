@@ -25,11 +25,6 @@ func newIntroHarness(t *testing.T, path string) *harness {
 	return newHarnessWithIntro(t, config.EnvDev, path)
 }
 
-func newIntroHarnessFor(t *testing.T, path string, env config.Env) *harness {
-	t.Helper()
-	return newHarnessWithIntro(t, env, path)
-}
-
 // Every other test in this package runs without a marker path, and none of
 // them expects a dialog over the interface. A session that has nowhere to
 // record the card must not show it.
@@ -229,27 +224,17 @@ func TestTheIntroductionDropsTheRightClickLineWithTheMouseOff(t *testing.T) {
 	})
 }
 
-// What the guard will do is the one thing about this session that cannot be
-// worked out by pressing keys, and it is different on production.
-func TestTheIntroductionSaysWhatTheGuardWillDo(t *testing.T) {
-	for _, tc := range []struct {
-		env  config.Env
-		want string
-	}{
-		{config.EnvDev, "ask before they run"},
-		{config.EnvProd, "refused"},
-	} {
-		t.Run(string(tc.env), func(t *testing.T) {
-			h := newIntroHarnessFor(t, introPath(t), tc.env)
+// The auto LIMIT is the one thing about a statement's SQL that this session
+// changes without being asked, which cannot be worked out by pressing keys.
+func TestTheIntroductionSaysWhatHappensToAnUnboundSelect(t *testing.T) {
+	h := newIntroHarness(t, introPath(t))
 
-			h.inspect(func(a *App) bool {
-				if card := a.introText(); !strings.Contains(card, tc.want) {
-					t.Errorf("on %s the introduction does not say %q:\n%s", tc.env, tc.want, card)
-				}
-				return true
-			})
-		})
-	}
+	h.inspect(func(a *App) bool {
+		if card := a.introText(); !strings.Contains(card, "LIMIT") {
+			t.Errorf("the introduction does not mention the auto LIMIT:\n%s", card)
+		}
+		return true
+	})
 }
 
 // It has to be reachable again: someone who pressed Enter to make the dialog

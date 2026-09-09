@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/intro"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/gdamore/tcell/v2"
@@ -54,9 +53,10 @@ func (a *App) introText() string {
 			"Right-click anywhere for what you can do there, with its key."))
 	}
 
-	// What the guard will do is the one thing about this session that cannot be
-	// worked out by pressing keys, and it is the reason the rest of this exists.
-	fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, a.introGuardLine()))
+	// The one thing about a statement's SQL that this session changes without
+	// being asked, and so the one thing worth saying before it happens rather
+	// than after.
+	fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, introLimitLine))
 
 	if a.keys.Modal() {
 		b.WriteString("\n" + tag(colourMuted, "The editor is modal: press i before you type, Esc to leave.") + "\n")
@@ -67,18 +67,8 @@ func (a *App) introText() string {
 	return b.String()
 }
 
-// introGuardLine says what will happen to a statement that changes data.
-//
-// It is the guard's own rule rather than a paraphrase: guard.Evaluate keys off
-// EnvProd alone, so stage and dev get the same sentence, and promising a stage
-// database something the guard does not do would be worse than saying nothing.
-func (a *App) introGuardLine() string {
-	if a.conn.DataSource().Env == config.EnvProd {
-		return "This is a production database: statements that change data are refused " +
-			"until you unlock writes for the session."
-	}
-	return "Statements that change data ask before they run."
-}
+// introLimitLine says what happens to a SELECT with no LIMIT of its own.
+const introLimitLine = "An unbound SELECT gets a LIMIT added automatically; everything else runs as written."
 
 func (a *App) showIntro() {
 	text := a.introText()

@@ -185,8 +185,8 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 			if item.group {
 				// Weight rather than the notice colour: a category is not a
 				// state anyone could forget they are in, and spending that cue
-				// on the word "Files" leaves nothing that means "writes are
-				// unlocked" and nothing else.
+				// on the word "Files" leaves nothing that means "the mode
+				// changed" and nothing else.
 				main = headingTag(main)
 			}
 

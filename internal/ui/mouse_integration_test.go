@@ -57,29 +57,6 @@ func TestTurningTheMouseOffLeavesTheHelpHintInert(t *testing.T) {
 	})
 }
 
-// A misclick on the production marker must not be able to look like it
-// changed the environment.
-func TestTheEnvironmentChipAnswersNoClick(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-
-	var before string
-	h.inspect(func(a *App) bool {
-		before, _ = a.pages.GetFrontPage()
-		return true
-	})
-
-	h.click(1, 0)
-
-	var after string
-	h.inspect(func(a *App) bool {
-		after, _ = a.pages.GetFrontPage()
-		return true
-	})
-	if after != before {
-		t.Errorf("clicking the environment chip opened %q", after)
-	}
-}
-
 // The editor's header holds one unnamed tab, so it published no zone at all
 // before the region-name zone existed — a click there did nothing. The spec
 // asks for the whole header to answer a click ("region header, the region's

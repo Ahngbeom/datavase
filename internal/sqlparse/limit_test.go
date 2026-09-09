@@ -139,3 +139,39 @@ func TestAppendLimitProducesAParsableBoundedStatement(t *testing.T) {
 		})
 	}
 }
+
+func TestAutoLimitProposesALimitForAnUnboundedSelect(t *testing.T) {
+	stmt := Parse("SELECT * FROM users")
+	if got := AutoLimit(stmt, 1000); got != 1000 {
+		t.Errorf("AutoLimit = %d, want 1000", got)
+	}
+}
+
+func TestAutoLimitLeavesAnExplicitLimitAlone(t *testing.T) {
+	stmt := Parse("SELECT * FROM users LIMIT 5")
+	if got := AutoLimit(stmt, 1000); got != 0 {
+		t.Errorf("AutoLimit = %d, want 0; an explicit LIMIT must win", got)
+	}
+}
+
+func TestAutoLimitIgnoresALimitInsideASubquery(t *testing.T) {
+	stmt := Parse("SELECT * FROM (SELECT id FROM users LIMIT 5) u")
+	if got := AutoLimit(stmt, 1000); got != 1000 {
+		t.Errorf("AutoLimit = %d, want 1000; the subquery's LIMIT does not bound the outer SELECT", got)
+	}
+}
+
+func TestAutoLimitIsOffWhenTheSettingIsZero(t *testing.T) {
+	stmt := Parse("SELECT * FROM users")
+	if got := AutoLimit(stmt, 0); got != 0 {
+		t.Errorf("AutoLimit = %d, want 0", got)
+	}
+}
+
+func TestAutoLimitOnlyAppliesToSelect(t *testing.T) {
+	for _, sql := range []string{"SHOW TABLES", "DELETE FROM users", "INSERT INTO t VALUES (1)", ""} {
+		if got := AutoLimit(Parse(sql), 1000); got != 0 {
+			t.Errorf("AutoLimit(%q) = %d, want 0", sql, got)
+		}
+	}
+}

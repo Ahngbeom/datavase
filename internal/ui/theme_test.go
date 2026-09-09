@@ -12,10 +12,6 @@ import (
 // one value. That only stays true while every caller goes through the names:
 // a literal "[yellow]" is the same colour by coincidence rather than by
 // intent, and it is what an edit to the role would leave behind.
-//
-// The failure this prevents is the one theme.go's own comment describes — six
-// names for four values, and an environment cue indistinguishable from an
-// error — reappearing one file over.
 func TestNoWidgetNamesAColourInsteadOfARole(t *testing.T) {
 	literal := regexp.MustCompile(`\[(aqua|yellow|red|gray|grey|green|blue|white|darkcyan|teal)[\]:]`)
 
@@ -47,10 +43,10 @@ func TestNoWidgetNamesAColourInsteadOfARole(t *testing.T) {
 }
 
 // A heading in the notice colour spends the one cue reserved for a state the
-// user could forget they are in — an injected LIMIT, unlocked writes — on the
-// word "Editing". Weight says "heading" without spending a hue, and survives
-// a monochrome terminal, which is the same reason the active tab keeps its
-// "▸" as well as its colour.
+// user could forget they are in — an injected LIMIT, a truncated result — on
+// the word "Editing". Weight says "heading" without spending a hue, and
+// survives a monochrome terminal, which is the same reason the active tab
+// keeps its "▸" as well as its colour.
 func TestSectionHeadingsDoNotSpendTheNoticeColour(t *testing.T) {
 	for _, text := range []string{headingTag("Running"), headingTag("Files")} {
 		if strings.Contains(text, colourNotice.String()) {

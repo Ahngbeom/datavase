@@ -647,7 +647,8 @@ func TestInterfaceShowsTheDataSource(t *testing.T) {
 }
 
 // The schema tree is one key away rather than a third of the screen, because
-// this application already answers "where is that table" with a finder.
+// completion already answers "where is that table" the moment its name is
+// typed.
 func TestTheSchemaPaneStartsHiddenAndComesBackOnRequest(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 

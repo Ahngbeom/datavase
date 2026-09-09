@@ -485,9 +485,9 @@ func connectionIsRunning(conn *Conn, connID uint64) (bool, error) {
 	return n > 0, nil
 }
 
-// The guard stops the user, explains what a write will do and makes them
-// agree to it. Then it has to say what it actually did: "1 row" and "4,812
-// rows" are the difference between a routine edit and an incident.
+// "1 row" and "4,812 rows" are the difference between a routine edit and an
+// incident, and the only way to tell them apart after the fact is the count
+// the server reported.
 func TestExecReportsHowManyRowsAStatementChanged(t *testing.T) {
 	conn := openTestConn(t)
 	seedSequence(t, conn)

@@ -29,7 +29,7 @@ const (
 // the same space, with the loser silently gone.
 //
 // It is a plain value with a pure render method, so what the user is told
-// about a production database can be tested without starting a terminal.
+// after a statement runs can be tested without starting a terminal.
 type status struct {
 	// inTransaction says the connection is pinned and the work so far is
 	// undoable, which changes what several other fields mean.
@@ -128,9 +128,7 @@ func (s status) renderWidth(width int) string {
 // A cut line ends in an ellipsis, paid for out of the width rather than hung
 // off the end of a terminal that had no room for it. Without one the bar
 // simply stopped mid-word, which reads as a sentence that ended rather than
-// one that was cut — and this application abbreviates a file name in the
-// region header with an ellipsis two rows above, so the two sat on the same
-// screen disagreeing about what a cut looks like.
+// one that was cut.
 func truncateMarkup(s string, width int) string {
 	const ellipsis = "…"
 

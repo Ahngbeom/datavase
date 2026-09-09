@@ -165,9 +165,9 @@ func baseMap() *Map {
 	m.bind(ActionSearchHistory,
 		append(ctrlAndCmdRune('f', tcell.ModShift),
 			Binding{Key: tcell.KeyF9})...)
-	// ⌘G is what "again" is called on this platform. The modal editor has n
-	// and N, which need no modifier at all; these are for the keyboards where
-	// an unmodified letter is text.
+	// ⌘G is what "again" is called on this platform. It needs a modifier
+	// because typing always types here: an unmodified letter can never be an
+	// action without stealing it from whatever is being typed.
 	m.bind(ActionFindNext, ctrlAndCmdRune('g', 0)...)
 	m.bind(ActionFindPrev, ctrlAndCmdRune('g', tcell.ModShift)...)
 
@@ -187,9 +187,9 @@ func baseMap() *Map {
 		Binding{Key: tcell.KeyRune, Rune: 'i', Mods: tcell.ModCtrl | tcell.ModShift},
 		Binding{Key: tcell.KeyF4})
 
-	// Sorting the results. ⌘S is already saving the file, so the sort takes
-	// the shifted one; the grid answers a plain "s" as well, alongside the
-	// "/" and "n" it already takes.
+	// Sorting the results. ⌘S means "save" too widely to spend on something
+	// else, so the sort takes the shifted chord; the grid answers a plain
+	// "s" as well.
 	m.bind(ActionSortColumn,
 		append(ctrlAndCmdRune('s', tcell.ModShift),
 			Binding{Key: tcell.KeyF12})...)

@@ -61,6 +61,29 @@ func (h *harness) switchToProd(t *testing.T) string {
 	return name
 }
 
+// The whole point: choosing a datasource from the picker actually moves the
+// session there, and leaves nothing of the old one's results behind.
+func TestSwitchingDatasourceMovesTheSession(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SELECT 1")
+	h.do(keymap.ActionRun)
+	h.waitFor("a row from the old datasource", func(a *App) bool { return a.buf.RowCount() > 0 })
+
+	was := h.currentDataSource()
+	name := h.switchToProd(t)
+
+	if name == was {
+		t.Fatalf("addProdDataSource gave back the same name as %q", was)
+	}
+	h.waitFor("the datasource to change", func(a *App) bool {
+		return a.conn.DataSource().Name == name
+	})
+	h.waitFor("the old result to be gone", func(a *App) bool {
+		return a.buf.RowCount() == 0
+	})
+}
+
 // Connecting first and letting go second. A switch that closed what it had and
 // then failed would leave an interface with no connection behind it, which
 // nothing here recovers from without a restart.

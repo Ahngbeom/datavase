@@ -23,8 +23,8 @@ type Binding struct {
 	Mods tcell.ModMask
 }
 
-// Event renders the binding as an event, which is how tests and the round
-// trip from configuration reach Lookup.
+// Event renders the binding as an event, which is how tests reach Lookup
+// without constructing a tcell.EventKey by hand.
 func (b Binding) Event() *tcell.EventKey {
 	return tcell.NewEventKey(b.Key, b.Rune, b.Mods)
 }
@@ -62,19 +62,15 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlB: 'b',
 	tcell.KeyCtrlC: 'c',
 	tcell.KeyCtrlD: 'd',
-	tcell.KeyCtrlE: 'e',
 	tcell.KeyCtrlF: 'f',
 	tcell.KeyCtrlG: 'g',
 	tcell.KeyCtrlN: 'n',
-	tcell.KeyCtrlO: 'o',
-	tcell.KeyCtrlP: 'p',
 	tcell.KeyCtrlQ: 'q',
 	tcell.KeyCtrlR: 'r',
 	tcell.KeyCtrlS: 's',
 	tcell.KeyCtrlV: 'v',
 	tcell.KeyCtrlX: 'x',
 	tcell.KeyCtrlY: 'y',
-	tcell.KeyCtrlZ: 'z',
 
 	// Ctrl+Space arrives as NUL on terminals without the extended protocol.
 	tcell.KeyNUL: ' ',
@@ -82,8 +78,6 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlUnderscore: '/',
 	// Ctrl+Enter degrades to a line feed, which is Ctrl+J.
 	tcell.KeyCtrlJ: enterStandIn,
-	// Ctrl+\ arrives as the file separator, 0x1C.
-	tcell.KeyCtrlBackslash: '\\',
 }
 
 // enterStandIn is the rune Ctrl+J folds to. It is not a character anyone can

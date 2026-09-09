@@ -367,10 +367,8 @@ func TestABatchInsideATransactionSaysTheWorkCanStillBeTakenBack(t *testing.T) {
 	}
 }
 
-// A line the terminal was too narrow for used to simply stop, mid-word, with
-// nothing to say it had been cut. The same application abbreviates a file name
-// in the region header with an ellipsis, so on one screen "for the s" and
-// "run a statement to see rows …" sat two rows apart.
+// A line the terminal is too narrow for must not simply stop mid-word, with
+// nothing on screen to say it was cut rather than finished.
 func TestATruncatedBarSaysItWasTruncated(t *testing.T) {
 	s := baseStatus()
 	s.message = "server 11.4.12-MariaDB · F1 for keys · ^B for the schema tree"

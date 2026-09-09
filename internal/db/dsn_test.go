@@ -83,7 +83,8 @@ func TestDSNSurvivesSpecialCharactersInPassword(t *testing.T) {
 }
 
 // multiStatements would let "SELECT 1; DROP TABLE users" through as a single
-// call, so guard would inspect one statement while the server ran two.
+// call, so sqlparse.Split and AutoLimit would each reason about one
+// statement while the server ran two.
 func TestDSNDisablesMultiStatements(t *testing.T) {
 	raw, err := DSN(testDataSource(), "pw", "")
 	if err != nil {
@@ -98,7 +99,7 @@ func TestDSNDisablesMultiStatements(t *testing.T) {
 		t.Fatalf("ParseDSN() error = %v", err)
 	}
 	if got.MultiStatements {
-		t.Error("MultiStatements = true, want false; guard could be bypassed")
+		t.Error("MultiStatements = true, want false; a round trip could carry a statement Split never saw")
 	}
 }
 

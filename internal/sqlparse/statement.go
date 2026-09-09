@@ -6,7 +6,8 @@ import "strings"
 type StmtKind int
 
 const (
-	// StmtOther is anything not recognised. Guard treats it as unsafe.
+	// StmtOther is anything not recognised. ReturnsRows treats it as a read,
+	// for the reason given there.
 	StmtOther StmtKind = iota
 	// StmtSelect reads rows.
 	StmtSelect
@@ -119,8 +120,8 @@ func (s Statement) firstWord() (Token, bool) {
 }
 
 // kindIfSecondWordIs resolves a verb that starts more than one kind of
-// statement, falling back to StmtOther so the guard's fail-closed default
-// covers whatever else the verb might have begun.
+// statement, falling back to StmtOther for whatever else the verb might
+// have begun.
 func kindIfSecondWordIs(s Statement, want string, kind StmtKind) StmtKind {
 	var seen bool
 	for _, tk := range s.Tokens {
@@ -186,9 +187,10 @@ func (s Statement) Kind() StmtKind {
 // what actually happened, so it is exactly as dangerous as what follows it.
 // "ANALYZE FORMAT=JSON DELETE FROM orders" empties the table.
 //
-// A running wrapper therefore takes the kind of the statement it wraps, and
-// the guard reasons about that: HasTopLevelWhere scans at parenthesis depth
-// zero, so a bounded delete stays bounded through the prefix.
+// A running wrapper therefore takes the kind of the statement it wraps, so
+// ReturnsRows sees what the server will actually do: "ANALYZE FORMAT=JSON
+// DELETE FROM orders" is routed and counted as the delete it runs, not sent
+// as a query that would lose the affected-row count.
 //
 // Anything wrapping a verb this package does not recognise is StmtOther, which
 // is the fail-closed default and the reason kindIfSecondWordIs exists for

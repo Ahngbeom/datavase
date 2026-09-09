@@ -35,15 +35,11 @@ const (
 )
 
 // DataSource returns the test datasource and its password.
-//
-// It is labelled EnvDev so guard's production rules never apply to test
-// fixtures by accident.
 func DataSource(t *testing.T) (*config.DataSource, string) {
 	t.Helper()
 
 	return &config.DataSource{
 		Name:     "integration",
-		Env:      config.EnvDev,
 		Host:     envOr(EnvHost, DefaultHost),
 		Port:     envIntOr(t, EnvPort, DefaultPort),
 		User:     envOr(EnvUser, DefaultUser),

@@ -285,8 +285,9 @@ func TestOnlyDefiniteWritesAreSentForACount(t *testing.T) {
 }
 
 // ANALYZE runs the statement it wraps — MariaDB's spelling of what MySQL calls
-// EXPLAIN ANALYZE — so calling it a read let a delete through the guard
-// untouched. Verified against a real server: three rows in, none out.
+// EXPLAIN ANALYZE — so calling it a read would route a delete through Query
+// instead of Exec, losing the affected-row count Exec reports. Verified
+// against a real server: three rows in, none out.
 func TestAWrapperThatRunsItsStatementIsClassifiedAsThatStatement(t *testing.T) {
 	for _, tt := range []struct {
 		sql  string

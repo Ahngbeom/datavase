@@ -62,9 +62,10 @@ type App struct {
 	// around when it is toggled. sidebarRule is the hairline beside it.
 	//
 	// It starts false. This application already chose overlay finders as its
-	// way around — a table, a schema and a file each have a key that opens a
-	// searchable list — and a permanent tree on top of them is a third of the
-	// screen spent saying what those already answer. It is one key away.
+	// way around — a datasource, a schema and a history entry each have a key
+	// that opens a searchable list — and a permanent tree on top of them is a
+	// third of the screen spent saying what those already answer. It is one
+	// key away.
 	sidebarVisible bool
 	sidebarRule    *rule
 	body           *tview.Flex

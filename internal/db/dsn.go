@@ -56,8 +56,9 @@ func DSN(ds *config.DataSource, password, addr string) (string, error) {
 	c.Timeout = DialTimeout
 	c.TLSConfig = tlsConfig
 
-	// Left off deliberately: with multiple statements per round trip, guard
-	// would vet one statement while the server executed several.
+	// Left off deliberately: sqlparse.Split and AutoLimit each reason about
+	// one statement at a time, so a round trip carrying several would run
+	// statements neither one ever saw.
 	c.MultiStatements = false
 
 	return c.FormatDSN(), nil

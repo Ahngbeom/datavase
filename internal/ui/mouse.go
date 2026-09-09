@@ -62,11 +62,9 @@ func (a *App) gridVisible(x, y int) bool {
 	return a.resultTabs.current() == tabResults && a.grid.InRect(x, y)
 }
 
-// zoneAt is the dialog guard and the hitmap lookup together.
-//
-// Task 5 folded both into mouseLeftClick alone. A second per-action handler
-// needs the same guard, so keeping them separate would only have meant
-// duplicating the pair the moment that handler was added.
+// zoneAt is the dialog guard and the hitmap lookup together, so a caller can
+// never forget the guard and act on zones from the page a dialog has since
+// covered.
 func (a *App) zoneAt(ev *tcell.EventMouse) (zone, bool) {
 	if a.dialogOpen() {
 		return zone{}, false

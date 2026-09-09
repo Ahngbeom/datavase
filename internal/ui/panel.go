@@ -76,9 +76,8 @@ func (t *tabbed) add(name string, p tview.Primitive) {
 // only holds a single primitive under no name at all.
 //
 // A header exists to disambiguate, and a region holding one thing has nothing
-// to disambiguate — so the editor's header carries which file is open and
-// whether it has focus, and never the word "editor". The caret is already
-// there; nobody needs telling.
+// to disambiguate — so the editor's header carries only the focus marker,
+// never the word "editor". The caret is already there; nobody needs telling.
 func (t *tabbed) only(p tview.Primitive) {
 	t.pages.AddPage("", p, true, true)
 	t.renderHeader()
@@ -157,7 +156,7 @@ const focusMarker = "▌"
 // regionHeader assembles the marker, the tab strip and the trailing detail.
 //
 // The detail is the first thing to go when the region is narrow: which tab you
-// are on is structural, while a file name or a hint is a convenience.
+// are on is structural, while a hint is a convenience.
 func regionHeader(names []string, active int, focused bool, detail string, width int) (string, []zone) {
 	if width < 1 {
 		width = 1

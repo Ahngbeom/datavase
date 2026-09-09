@@ -24,6 +24,14 @@ what someone wants out of a grid.
 
 ### Fixed
 
+**The schema pane stays where the wheel put it, and a click lands on the row
+you are looking at.** Scrolling the tree or the tables tab moved the view
+without moving the selection, and the next redraw — anything at all, a status
+message, a finished query — pulled the view back to wherever the selection
+still was. The rows slid out from under the pointer between looking and
+clicking, so some other table was selected. The wheel now carries the
+selection with it, which is what holds the view in place.
+
 **A second quick click in the schema pane selects the row it landed on.**
 Clicking one row and then another — quickly, because the eye has already found
 it — left the selection on the first: the terminal library reads two presses

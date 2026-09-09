@@ -38,6 +38,10 @@ func (a *App) bindMouse() {
 			return a.mouseLeftClick(ev, action)
 		case tview.MouseLeftDoubleClick:
 			return a.mouseLeftDoubleClick(ev, action)
+		case tview.MouseScrollUp:
+			return a.mouseScroll(ev, action, -1)
+		case tview.MouseScrollDown:
+			return a.mouseScroll(ev, action, 1)
 		}
 		return ev, action
 	})
@@ -71,6 +75,44 @@ func (a *App) zoneAt(ev *tcell.EventMouse) (zone, bool) {
 	}
 	x, y := ev.Position()
 	return a.hits.at(x, y)
+}
+
+// mouseScroll moves the schema pane's selection with the wheel, rather than
+// letting the view slide out from under it.
+//
+// tview scrolls those two widgets without moving what is selected, and their
+// next redraw pulls the view back to wherever the selection still is. So a
+// wheel turn shows other rows for as long as nothing else redraws, and then
+// they slide away — leaving a click aimed at what was on screen a moment ago
+// landing on something else. Moving the selection is what keeps the view
+// where it was put, since the view follows the selection by that same rule.
+//
+// Everything else keeps tview's own scrolling: the editor and the grid have
+// no selection the view is pulled towards, so there is nothing to fix.
+func (a *App) mouseScroll(ev *tcell.EventMouse, action tview.MouseAction, step int) (*tcell.EventMouse, tview.MouseAction) {
+	if a.dialogOpen() || !a.sidebarVisible {
+		return ev, action
+	}
+
+	x, y := ev.Position()
+	switch {
+	case a.schemaTabs.current() == tabTree && a.tree.InRect(x, y):
+		a.tree.Move(step)
+		return nil, action
+
+	case a.schemaTabs.current() == tabTables && a.tableList.InRect(x, y):
+		if count := a.tableList.GetItemCount(); count > 0 {
+			next := a.tableList.GetCurrentItem() + step
+			if next >= 0 && next < count {
+				// SetCurrentItem alone, never the list's own selected
+				// callback: a wheel turn is looking, not choosing, and that
+				// callback runs a query.
+				a.tableList.SetCurrentItem(next)
+			}
+		}
+		return nil, action
+	}
+	return ev, action
 }
 
 // mouseLeftClick resolves a left click, and hands it back untouched when

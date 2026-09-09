@@ -265,7 +265,8 @@ A preview never touches the editor — the text in it is yours.
 
 **The schema tree** is there when a session opens, on the left, with a tables
 tab beside it. `⌘B` puts it away when the width is wanted for the result, for
-that session.
+that session. The wheel moves the selection through it, so wherever you stop
+is where a click lands.
 
 **The editor** is an ordinary one: typing types, and there is no mode to leave
 first. **The grid** streams the result as it arrives, sorts on a column and

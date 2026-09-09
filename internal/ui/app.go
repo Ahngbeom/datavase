@@ -67,11 +67,10 @@ type App struct {
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
 	// around when it is toggled. sidebarRule is the hairline beside it.
 	//
-	// It starts false. This application already chose overlay finders as its
-	// way around — a datasource, a schema and a history entry each have a key
-	// that opens a searchable list — and a permanent tree on top of them is a
-	// third of the screen spent saying what those already answer. It is one
-	// key away.
+	// It starts true. Knowing what is in the database is the first thing
+	// anyone wants from a client they have just opened, and a tree that has
+	// to be asked for is a tree most people never learn is there. ⌘B takes it
+	// back for the session when the width is wanted for the result.
 	sidebarVisible bool
 	sidebarRule    *rule
 	body           *tview.Flex
@@ -225,6 +224,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		history:         deps.History,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		selectionAnchor: noAnchor,
+		sidebarVisible:  true,
 		mouseEnabled:    cfg.Defaults.Mouse == nil || *cfg.Defaults.Mouse,
 	}
 	if deps.Cache != nil {
@@ -287,22 +287,21 @@ type opening struct {
 //
 // The order decides what survives, and it is the whole of the ranking: a
 // clause's position in this slice is its shedding priority, most protected
-// first. The schema tree comes first — the sidebar starts hidden, so this is
-// the only place its existence is announced, and losing it is losing the one
-// way a first-time user finds it at all. F1 comes next: it reaches the full
-// reference. The server version brings up the rear: it is a greeting rather
-// than an instruction, and knowing which MariaDB answered has never stood
-// between anyone and their first query.
+// first. F1 comes first: it reaches the full reference, and every other key
+// with it. The schema tree follows — it is on screen, so this says how to
+// get the width back rather than that it exists. The server version brings
+// up the rear: it is a greeting rather than an instruction, and knowing
+// which MariaDB answered has never stood between anyone and their first
+// query.
 func openingClauses(o opening) []string {
 	var out []string
 
-	// The schema tree is not on screen, so this is where anyone learns it
-	// exists at all.
-	if o.sidebarKey != "" {
-		out = append(out, o.sidebarKey+" for the schema tree")
-	}
 	if o.helpKey != "" {
 		out = append(out, o.helpKey+" for keys")
+	}
+	// The tree is on screen; what is worth saying is how to put it away.
+	if o.sidebarKey != "" {
+		out = append(out, o.sidebarKey+" hides the schema tree")
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)

@@ -179,7 +179,7 @@ does not forward `⌘` to the program it hosts.
 | Datasource list | `⌘⇧D` · `F11` | the datasource name in the top bar |
 | Choose the schema | `⌘⇧N` · `F7` | the schema name in the top bar |
 | Reload the schema tree | `⌘R` | |
-| Show or hide the schema tree | `⌘B` | |
+| Hide or show the schema tree | `⌘B` | |
 | Move between panes | `⇥` / `⇧⇥` | a pane's name |
 | Switch tab in the focused pane | `Ctrl+⇥` · `F6` | a tab |
 | Complete the word at the cursor | `^Space` | |
@@ -262,6 +262,10 @@ double-click; `↩` on a column node puts its name in the editor. **tables** is 
 flat, filterable list of the current schema's tables with row estimates, read
 from the local cache so it fills instantly, and `↩` there previews a table too.
 A preview never touches the editor — the text in it is yours.
+
+**The schema tree** is there when a session opens, on the left, with a tables
+tab beside it. `⌘B` puts it away when the width is wanted for the result, for
+that session.
 
 **The editor** is an ordinary one: typing types, and there is no mode to leave
 first. **The grid** streams the result as it arrives, sorts on a column and

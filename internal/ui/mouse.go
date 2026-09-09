@@ -108,14 +108,35 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 
 	x, y := ev.Position()
 
-	// The first click of the pair already made the node current and expanded
-	// it (tview's TreeView selects on a click); the second is the preview.
+	// tview calls a click a double click on elapsed time alone: two presses
+	// inside its interval, wherever each one landed. Neither TreeView nor
+	// List handles a double click, so a second quick press anywhere in the
+	// sidebar would reach nothing and the selection would stay where the
+	// first one put it — the tree refusing, to the person clicking it, to
+	// select the row under their pointer.
+	//
+	// So the row this landed on decides, not whatever is current.
 	if a.sidebarVisible && a.schemaTabs.current() == tabTree && a.tree.InRect(x, y) {
-		if ref, ok := a.tree.GetCurrentNode().GetReference().(*nodeRef); ok && ref.kind == nodeTable {
+		node := a.treeNodeAt(y)
+		if node == nil {
+			return ev, action
+		}
+		a.tree.SetCurrentNode(node)
+
+		if ref, ok := node.GetReference().(*nodeRef); ok && ref.kind == nodeTable {
 			a.previewTable(ref.schema, ref.table)
 			return nil, action
 		}
-		return ev, action
+		// A schema or a column: what a single click there means, since that
+		// is what this press would have been a moment later.
+		a.onTreeSelect(node)
+		return nil, action
+	}
+
+	// The tables tab has the same gap, and one click there already previews,
+	// so the second press is read as the plain click tview took it for.
+	if a.sidebarVisible && a.schemaTabs.current() == tabTables && a.tableList.InRect(x, y) {
+		return ev, tview.MouseLeftClick
 	}
 
 	if !a.gridVisible(x, y) {
@@ -214,4 +235,36 @@ func (a *App) recorderFor(pane *tabbed) func(row int, zones []zone) {
 // paneFor looks up which tabbed region drew the header at a screen row.
 func (a *App) paneFor(row int) *tabbed {
 	return a.paneRows[row]
+}
+
+// treeNodeAt is the node drawn on screen row y, found the way tview's own
+// click handling finds it: the row within the box, plus how far the tree has
+// been scrolled.
+//
+// Walking the tree rather than asking for the list is the only way in — the
+// visible nodes are tview's private slice — and returning IsExpanded from
+// the callback is what makes this walk visit exactly what was drawn, since
+// that is the condition tview's own walk uses to descend.
+func (a *App) treeNodeAt(y int) *tview.TreeNode {
+	root := a.tree.GetRoot()
+	if root == nil {
+		return nil
+	}
+
+	_, rectY, _, _ := a.tree.GetInnerRect()
+	want := y - rectY + a.tree.GetScrollOffset()
+	if want < 0 {
+		return nil
+	}
+
+	var found *tview.TreeNode
+	at := 0
+	root.Walk(func(node, _ *tview.TreeNode) bool {
+		if at == want {
+			found = node
+		}
+		at++
+		return node.IsExpanded()
+	})
+	return found
 }

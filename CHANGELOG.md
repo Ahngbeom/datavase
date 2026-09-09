@@ -11,12 +11,25 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**The schema tree is on screen when a session opens.** It was a key away, on
+the reasoning that the finders already answer "where is that table" — but a
+tree nobody sees is a tree nobody knows to ask for, and what is in the
+database is the first thing anyone wants from a client they have just opened.
+`⌘B` still puts it away for the session.
+
 **The selected row copies on its own,** with `⌘⇧R` or `F8`, tab separated so a
 paste lands in a spreadsheet as columns. v0.8 could do this only through the
 command palette, which v0.9.0 removed; the whole-result copy is not always
 what someone wants out of a grid.
 
 ### Fixed
+
+**A second quick click in the schema pane selects the row it landed on.**
+Clicking one row and then another — quickly, because the eye has already found
+it — left the selection on the first: the terminal library reads two presses
+inside half a second as a double click wherever each one landed, and neither
+its tree nor its list does anything with one. The second press reached
+nothing. It now selects what is under the pointer, and on a table it previews.
 
 **The copy key in the results takes the cell, not whatever the editor still
 had selected.** Selecting a query — with `⌘A`, or by dragging — and running it

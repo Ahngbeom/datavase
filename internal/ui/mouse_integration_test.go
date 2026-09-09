@@ -170,8 +170,7 @@ func TestDoubleClickingARowOpensItInFull(t *testing.T) {
 // ever takes that away.
 func TestClickingATreeNodeDoesWhatEnterDoes(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
-	h.do(keymap.ActionToggleSidebar)
-	h.waitFor("the schema tree", func(a *App) bool { return a.sidebarVisible })
+	h.showSidebar()
 
 	// Nothing has selected a node yet, so GetCurrentNode is nil until the
 	// click below sets it. The root — the node offset 0 will land on — is

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/rivo/tview"
 )
 
@@ -72,6 +73,9 @@ func TestTheHairlinesJoinWhereTheyMeet(t *testing.T) {
 // of a plain rule is the same fault the other way round.
 func TestAPlainRuleHasNoJunctions(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
+
+	h.do(keymap.ActionToggleSidebar)
+	h.waitFor("the sidebar away", func(a *App) bool { return !a.sidebarVisible })
 
 	cells, width, height := h.screen.GetContents()
 	for row := 0; row < height; row++ {

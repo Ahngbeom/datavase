@@ -685,6 +685,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.inspect()
 	case keymap.ActionSortColumn:
 		a.sortColumn()
+	case keymap.ActionCopyRow:
+		a.copyRow()
 	case keymap.ActionCopyResult:
 		a.showCopyFormats()
 	case keymap.ActionSwitchDataSource:

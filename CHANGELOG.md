@@ -9,7 +9,22 @@ edited account — and the place anything that needs action is written down.
 
 **Nothing to do before upgrading.** No configuration changes and no keys moved.
 
+### Added
+
+**The selected row copies on its own,** with `⌘⇧R` or `F8`, tab separated so a
+paste lands in a spreadsheet as columns. v0.8 could do this only through the
+command palette, which v0.9.0 removed; the whole-result copy is not always
+what someone wants out of a grid.
+
 ### Fixed
+
+**The copy key in the results takes the cell, not whatever the editor still
+had selected.** Selecting a query — with `⌘A`, or by dragging — and running it
+leaves that selection in place, and the copy key read it before the grid. From
+then on `⌘C` in the results copied the SQL, and the only way to reach a value
+was to go back to the editor and unselect. Focus decides now: in the results
+the key means the cell, in the editor it means the selection, and while a
+statement runs it still cancels.
 
 **Copying now reaches the clipboard on terminals that refuse to pass it on.**
 `dv` asked the terminal to take the text, which is the only route that works

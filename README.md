@@ -11,8 +11,9 @@ Four things, and no more:
 - **Look at a table.** Double-click one in the tree, or Enter on one in the
   tables tab, for its first hundred rows.
 - **Run a statement** with `⌘↩` (`Ctrl+↩`, or `F5`).
-- **Read the answer** in a grid, and copy the whole of it as Markdown or JSON
-  with `⌘⇧C`.
+- **Read the answer** in a grid, and copy what you need out of it: the cell
+  with `⌘C`, the row with `⌘⇧R`, the whole result as Markdown or JSON with
+  `⌘⇧C`.
 
 Also there, because the four need them: an SSH tunnel to a bastion, table and
 column completion, a searchable history of what you ran, passwords in the OS
@@ -173,6 +174,7 @@ does not forward `⌘` to the program it hosts.
 | Cancel the running statement | `⌘F2`, or `⌘C` while one is running | |
 | Preview a table (`LIMIT 100`) | `↩` in the tables tab | double-click it in the tree, click it in the tables tab |
 | Copy the selection or the cell | `⌘C` | |
+| Copy the selected row, tab separated | `⌘⇧R` · `F8` | |
 | Copy the whole result as Markdown or JSON | `⌘⇧C` · `F3` | `copy` on the result header |
 | Datasource list | `⌘⇧D` · `F11` | the datasource name in the top bar |
 | Choose the schema | `⌘⇧N` · `F7` | the schema name in the top bar |
@@ -270,6 +272,11 @@ does what pressing its key does; a tab or a region name moves focus there; a
 column header sorts by it; `copy` on the result header copies the whole result;
 double-clicking a result row opens it in full, and double-clicking a table in
 the tree previews it.
+
+**Three sizes of copy.** `⌘C` in the results takes the cell under the cursor;
+`⌘⇧R` takes that whole row, tab separated, so it lands in a spreadsheet as
+columns; `⌘⇧C` takes the entire result as Markdown or JSON. `⌘C` in the editor
+takes the selection, as it does anywhere else.
 
 **Copying** goes two ways at once. The terminal is asked to take the text —
 the only route that reaches your own clipboard when `dv` is running over SSH —

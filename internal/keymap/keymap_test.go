@@ -322,3 +322,20 @@ func TestCopyResultIsBoundToCommandShiftC(t *testing.T) {
 		t.Errorf("⌘C = %v, want ActionCopyOrCancel", got)
 	}
 }
+
+func TestCopyRowIsBoundToCommandShiftR(t *testing.T) {
+	m := Default()
+	for _, ev := range []*tcell.EventKey{
+		tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModMeta|tcell.ModShift),
+		tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModCtrl|tcell.ModShift),
+		tcell.NewEventKey(tcell.KeyF8, 0, tcell.ModNone),
+	} {
+		if got := m.Lookup(ev); got != ActionCopyRow {
+			t.Errorf("Lookup(%v) = %v, want ActionCopyRow", ev.Name(), got)
+		}
+	}
+	// Reloading the schema keeps the unshifted key.
+	if got := m.Lookup(tcell.NewEventKey(tcell.KeyRune, 'r', tcell.ModMeta)); got != ActionRefreshSchema {
+		t.Errorf("⌘R = %v, want ActionRefreshSchema", got)
+	}
+}

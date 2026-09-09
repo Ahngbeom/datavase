@@ -109,8 +109,10 @@ var helpGroups = []struct {
 		},
 	},
 	{
-		title:   "Results",
-		actions: []keymap.Action{keymap.ActionSortColumn, keymap.ActionCopyResult},
+		title: "Results",
+		actions: []keymap.Action{
+			keymap.ActionSortColumn, keymap.ActionCopyRow, keymap.ActionCopyResult,
+		},
 	},
 	{
 		title: "Moving around",

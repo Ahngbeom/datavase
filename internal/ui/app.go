@@ -191,9 +191,9 @@ type Deps struct {
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
-	// ConfigPath is where the datasource dialog saves. Empty means the
-	// dialog can connect but not add or edit, and says so instead of
-	// pretending.
+	// ConfigPath is where the datasource dialog saves. Empty means a save
+	// from the dialog is refused, with a message saying why; connecting
+	// still works.
 	ConfigPath string
 	// Secrets stores passwords typed into the dialog. Nil means they cannot
 	// be stored here, which the form says instead of pretending.
@@ -399,7 +399,12 @@ func (a *App) buildWidgets() {
 	a.schemaTabs.record = a.recorderFor(a.schemaTabs)
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
-	a.resultTabs.detailTarget = zoneCopyResult
+	a.resultTabs.detailTarget = func() zoneTarget {
+		if a.buf.ColumnCount() > 0 && a.running == nil {
+			return zoneCopyResult
+		}
+		return zoneNone
+	}
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.record = a.recorderFor(a.resultTabs)
 

@@ -44,9 +44,11 @@ type tabbed struct {
 	// focused widget is one of its children.
 	detail func() string
 
-	// detailTarget makes the trailing detail a control. zoneNone leaves it
-	// as text.
-	detailTarget zoneTarget
+	// detailTarget makes the trailing detail a control, read at draw time
+	// like detail itself: a static target would stay a zone over whatever
+	// text detail moves on to next, rather than only over the control it
+	// was meant for. Nil, like a zoneNone result, leaves the detail as text.
+	detailTarget func() zoneTarget
 
 	// record hands this frame's header zones to the application's hitmap.
 	record func(row int, zones []zone)
@@ -144,7 +146,11 @@ func (t *tabbed) Draw(screen tcell.Screen) {
 }
 
 func (t *tabbed) renderHeader() {
-	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.detailTarget, t.width)
+	target := zoneNone
+	if t.detailTarget != nil {
+		target = t.detailTarget()
+	}
+	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), target, t.width)
 	t.header.SetText(text)
 	if t.record != nil {
 		t.record(t.headerRow, offsetZones(zones, t.headerCol))

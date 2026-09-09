@@ -89,7 +89,7 @@ func TestDeletingADatasourceInSessionSavesTheFile(t *testing.T) {
 	h.press(tcell.KeyDown)
 	h.inject(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone))
 	h.waitFor("the confirm modal", func(a *App) bool {
-		return a.picker != nil && a.picker.pages.HasPage("confirm")
+		return a.picker != nil && a.picker.pages.HasPage(pickerConfirm)
 	})
 
 	// confirmDelete's buttons are "Cancel", "Delete" in that order; Cancel is

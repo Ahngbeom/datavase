@@ -48,8 +48,9 @@ type dsPicker struct {
 }
 
 const (
-	pickerList = "list"
-	pickerForm = "form"
+	pickerList    = "list"
+	pickerForm    = "form"
+	pickerConfirm = "confirm"
 )
 
 func newDSPicker(app *tview.Application, deps pickerDeps) *dsPicker {
@@ -156,14 +157,14 @@ func (p *dsPicker) confirmDelete(ds *config.DataSource) {
 		SetText(fmt.Sprintf("Delete %s?\n\nIts stored password goes with it.", name)).
 		AddButtons([]string{"Cancel", "Delete"}).
 		SetDoneFunc(func(_ int, label string) {
-			p.pages.RemovePage("confirm")
+			p.pages.RemovePage(pickerConfirm)
 			p.app.SetFocus(p.list)
 			if label != "Delete" {
 				return
 			}
 			p.remove(name)
 		})
-	p.pages.AddPage("confirm", modal, true, true)
+	p.pages.AddPage(pickerConfirm, modal, true, true)
 	p.app.SetFocus(modal)
 }
 
@@ -214,7 +215,7 @@ func (p *dsPicker) commit(editing string, candidate config.DataSource, password 
 		return err
 	}
 	if password != "" && p.deps.secrets == nil {
-		return errors.New("no keychain here; set DATAVASE_PASSWORD_<NAME> instead")
+		return fmt.Errorf("no keychain here; set %s instead", secret.EnvVarName(candidate.Name))
 	}
 
 	before := append([]config.DataSource(nil), p.deps.cfg.DataSources...)

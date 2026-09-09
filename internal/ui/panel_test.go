@@ -199,7 +199,7 @@ func TestRegionHeaderPublishesAZoneForTheWholeHeader(t *testing.T) {
 // zone has to come after every tab zone or a tab would never be reachable —
 // every click on it would resolve to "focus the region" instead.
 func TestRegionHeaderTriesTabZonesBeforeTheRegionName(t *testing.T) {
-	_, zones := regionHeader([]string{"results", "ddl"}, 0, true, "", zoneNone, 60)
+	_, zones := regionHeader([]string{"results", "b"}, 0, true, "", zoneNone, 60)
 
 	var sawTab, sawRegionAfterTab bool
 	for _, z := range zones {

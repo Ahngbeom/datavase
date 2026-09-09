@@ -45,3 +45,26 @@ func TestCopyingWithNoResultSaysSo(t *testing.T) {
 	h.do(keymap.ActionCopyResult)
 	h.waitFor("the notice", func(a *App) bool { return a.status.message == "no result to copy" })
 }
+
+// The header hint before anything has run ("run a statement to see rows
+// here") is not the copy label, and a stray zoneCopyResult over it would
+// resolve a click there to "copy the result" instead of whatever the hint
+// actually says.
+func TestNoResultPublishesNoCopyZone(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.settle()
+
+	found := h.inspect(func(a *App) bool {
+		for _, zones := range a.hits.rows {
+			for _, z := range zones {
+				if z.target == zoneCopyResult {
+					return true
+				}
+			}
+		}
+		return false
+	})
+	if found {
+		t.Error("a zoneCopyResult zone exists with no result to copy")
+	}
+}

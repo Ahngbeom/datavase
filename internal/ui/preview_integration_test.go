@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -126,9 +127,22 @@ func TestAPreviewWhileAStatementRunsIsRefused(t *testing.T) {
 	h.do(keymap.ActionRun)
 	h.waitFor("running", func(a *App) bool { return a.running != nil })
 
+	var want string
+	h.inspect(func(a *App) bool {
+		want = fmt.Sprintf("a statement is already running — %s cancels it", a.keyLabel(keymap.ActionCancel))
+		return true
+	})
 	h.app.app.QueueUpdateDraw(func() { h.app.previewTable("x", "y") })
 	h.waitFor("the refusal", func(a *App) bool {
 		return strings.HasPrefix(a.status.message, "a statement is already running")
 	})
+	var got string
+	h.inspect(func(a *App) bool {
+		got = a.status.message
+		return true
+	})
+	if got != want {
+		t.Errorf("status.message = %q, want %q — the same cancel key switchTo names", got, want)
+	}
 	h.do(keymap.ActionCancel)
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
@@ -24,6 +25,21 @@ func (r *refusingStore) Set(string, string) error { return r.err }
 
 func newTestPicker(cfg *config.Config, save func() error) *dsPicker {
 	return newDSPicker(tview.NewApplication(), pickerDeps{cfg: cfg, save: save})
+}
+
+// TestPickerCommitWithNoKeychainNamesTheEnvVarToSetInstead pins the message
+// to secret.EnvVarName, so a hand-written DATAVASE_PASSWORD_<NAME> in the
+// message can never drift from what EnvVarName actually derives.
+func TestPickerCommitWithNoKeychainNamesTheEnvVarToSetInstead(t *testing.T) {
+	cfg := &config.Config{}
+	p := newTestPicker(cfg, func() error { return nil })
+
+	candidate := config.DataSource{Name: "prod-app", Host: "h", User: "u", Port: config.DefaultPort}
+	err := p.commit("", candidate, "hunter2")
+	want := secret.EnvVarName("prod-app")
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("commit() error = %v, want it to name %q", err, want)
+	}
 }
 
 func TestPickerCommitRollsBackTheListWhenSaveFails(t *testing.T) {

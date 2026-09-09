@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 
+	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 )
 
@@ -22,7 +23,7 @@ func previewSQL(schema, table string) string {
 // shown in the status bar instead.
 func (a *App) previewTable(schema, table string) {
 	if a.running != nil {
-		a.notice("a statement is already running; ^C cancels it")
+		a.notice(fmt.Sprintf("a statement is already running — %s cancels it", a.keyLabel(keymap.ActionCancel)))
 		return
 	}
 	sql := previewSQL(schema, table)

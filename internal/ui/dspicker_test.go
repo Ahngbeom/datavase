@@ -60,3 +60,24 @@ func TestPickerCommitRenameKeepsTheConnectedMarkOnTheRenamedEntry(t *testing.T) 
 		t.Errorf("deps.current = %q, want the renamed name", p.deps.current)
 	}
 }
+
+func TestPickerEscapeDuringAConnectDoesNotCloseTheLauncher(t *testing.T) {
+	cfg := &config.Config{}
+	closed := 0
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: cfg, save: func() error { return nil },
+		close: func() { closed++ },
+	})
+
+	p.setBusy(true)
+	p.escape()
+	if closed != 0 {
+		t.Fatalf("close called %d times while busy, want 0 — the in-flight connect's session would leak", closed)
+	}
+
+	p.setBusy(false)
+	p.escape()
+	if closed != 1 {
+		t.Errorf("close called %d times once idle, want 1", closed)
+	}
+}

@@ -97,7 +97,7 @@ func (a *App) usage() {
 	fmt.Fprint(a.Out, `datavase — terminal MySQL client
 
 usage:
-  dv                    open the interface; the datasource list when there is more than one
+  dv                    open the interface; the datasource list unless exactly one is configured
   dv open <name>        open a named datasource
   dv ls                 list configured datasources
   dv auth <name>        store a datasource password in the keychain

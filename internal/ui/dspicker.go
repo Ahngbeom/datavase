@@ -58,11 +58,7 @@ func newDSPicker(app *tview.Application, deps pickerDeps) *dsPicker {
 	p.list = tview.NewList().ShowSecondaryText(true).SetHighlightFullLine(true)
 	p.list.SetBorder(true).SetTitle(" datasources — Enter connect · a add · e edit · d delete · Esc close ")
 	p.list.SetInputCapture(p.listKey)
-	p.list.SetDoneFunc(func() {
-		if p.deps.close != nil {
-			p.deps.close()
-		}
-	})
+	p.list.SetDoneFunc(p.escape)
 
 	p.status = tview.NewTextView().SetDynamicColors(true)
 
@@ -137,6 +133,19 @@ func (p *dsPicker) connectTo(ds *config.DataSource) {
 	}
 	if p.deps.connect != nil {
 		p.deps.connect(ds)
+	}
+}
+
+// escape is Enter's opposite on the list: it must not close over a connect
+// in flight, or the session that connect eventually produces has nowhere to
+// go and is never closed.
+func (p *dsPicker) escape() {
+	if p.busy {
+		p.setStatus("still connecting…")
+		return
+	}
+	if p.deps.close != nil {
+		p.deps.close()
 	}
 }
 

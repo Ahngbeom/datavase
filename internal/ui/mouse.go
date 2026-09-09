@@ -107,6 +107,17 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	}
 
 	x, y := ev.Position()
+
+	// The first click of the pair already made the node current and expanded
+	// it (tview's TreeView selects on a click); the second is the preview.
+	if a.sidebarVisible && a.schemaTabs.current() == tabTree && a.tree.InRect(x, y) {
+		if ref, ok := a.tree.GetCurrentNode().GetReference().(*nodeRef); ok && ref.kind == nodeTable {
+			a.previewTable(ref.schema, ref.table)
+			return nil, action
+		}
+		return ev, action
+	}
+
 	if !a.gridVisible(x, y) {
 		return ev, action
 	}

@@ -143,7 +143,8 @@ func (a *App) helpText() string {
 
 	b.WriteString(helpReference(a.keys))
 
-	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
+	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n" +
+		"  Double-click a table there, or Enter on one in the tables tab, to see its first 100 rows.\n")
 
 	b.WriteString("\n" + tag(colourMuted, "If ⌘↩ or Ctrl+↩ does nothing here, F5 runs: some terminals keep modified keys.") + "\n")
 

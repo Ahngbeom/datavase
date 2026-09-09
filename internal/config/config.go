@@ -6,16 +6,15 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Env labels how dangerous a datasource is. The guard package keys its
-// policy off this value, so an unrecognised label must never silently
-// degrade into a permissive one.
+// Env is kept from earlier configurations for one reason: an absent "tls:"
+// defaults by it, and dropping that would quietly let a production
+// credential cross the wire in clear text. Nothing else reads it.
 type Env string
 
 const (
@@ -52,12 +51,12 @@ func (m TLSMode) verifies() bool {
 
 // DefaultTLSMode is what an absent "tls:" means.
 //
-// It follows env for the same reason the guard does. Production is where a
-// credential crossing the wire in clear text costs the most, and it is also
-// where the managed databases that refuse plain connections outright live, so
-// "required" is both the safer default and usually the working one. Anywhere
-// else the cost of being wrong is a connection that will not open on a
-// developer's laptop, which is why those get "preferred".
+// It follows env because production is where a credential crossing the wire
+// in clear text costs the most, and it is also where the managed databases
+// that refuse plain connections outright live, so "required" is both the
+// safer default and usually the working one. Anywhere else the cost of being
+// wrong is a connection that will not open on a developer's laptop, which is
+// why those get "preferred".
 func DefaultTLSMode(env Env) TLSMode {
 	if env == EnvProd {
 		return TLSRequired
@@ -70,19 +69,19 @@ type Tunnel struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	User     string `yaml:"user"`
-	Identity string `yaml:"identity"`
+	Identity string `yaml:"identity,omitempty"`
 }
 
 // DataSource is a single MySQL/MariaDB target. Passwords are never stored
 // here; they live in the OS keychain keyed by Name.
 type DataSource struct {
 	Name     string  `yaml:"name"`
-	Env      Env     `yaml:"env"`
+	Env      Env     `yaml:"env,omitempty"`
 	Host     string  `yaml:"host"`
 	Port     int     `yaml:"port"`
 	User     string  `yaml:"user"`
-	Database string  `yaml:"database"`
-	Tunnel   *Tunnel `yaml:"tunnel"`
+	Database string  `yaml:"database,omitempty"`
+	Tunnel   *Tunnel `yaml:"tunnel,omitempty"`
 
 	// TLS is how much the connection must prove about the server. Empty means
 	// DefaultTLSMode for this datasource's env.
@@ -91,7 +90,7 @@ type DataSource struct {
 	// store, for an instance behind a private certificate authority. It is
 	// only meaningful under a mode that verifies, and is refused under any
 	// other rather than read and ignored.
-	TLSCA string `yaml:"tls_ca"`
+	TLSCA string `yaml:"tls_ca,omitempty"`
 }
 
 // Defaults holds tunables shared by every datasource.
@@ -103,9 +102,9 @@ type Defaults struct {
 	// Mouse says whether clicks mean anything.
 	//
 	// Mouse reporting disables the terminal's own text selection, which is a
-	// regression for anyone who copies by dragging. Off costs the ways in and
-	// no capability: every click resolves to an action or a palette command.
-	Mouse *bool `yaml:"mouse"`
+	// regression for anyone who copies by dragging. Off costs only the ways
+	// in: every click reaches an action also bound to a key.
+	Mouse *bool `yaml:"mouse,omitempty"`
 }
 
 // Config is the root of the configuration file.
@@ -113,10 +112,17 @@ type Config struct {
 	DataSources []DataSource `yaml:"datasources"`
 	Defaults    Defaults     `yaml:"defaults"`
 
-	// Keymap chooses the keyboard preset and overrides individual bindings.
-	// See the Keymap type for the accepted forms.
-	Keymap Keymap `yaml:"keymap"`
+	// Keymap is read and discarded. Earlier versions wrote it, and refusing
+	// the whole file over a key that no longer does anything would lock out
+	// exactly the people upgrading.
+	Keymap map[string]any `yaml:"keymap,omitempty"`
+
+	ignored []string
 }
+
+// Ignored names the top-level keys that were present and did nothing, so
+// the caller can say so once rather than leave a setting silently dead.
+func (c *Config) Ignored() []string { return c.ignored }
 
 // Default values applied when the corresponding key is absent.
 const (
@@ -137,6 +143,10 @@ func Parse(r io.Reader) (*Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Keymap != nil {
+		cfg.ignored = append(cfg.ignored, "keymap")
+		cfg.Keymap = nil
 	}
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
@@ -170,10 +180,6 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) validate() error {
-	if len(c.DataSources) == 0 {
-		return errors.New("no datasources defined")
-	}
-
 	seen := make(map[string]struct{}, len(c.DataSources))
 	for i := range c.DataSources {
 		ds := &c.DataSources[i]
@@ -193,7 +199,7 @@ func (d *DataSource) validate(index int) error {
 		return fmt.Errorf("datasource #%d: name is required", index)
 	}
 	switch d.Env {
-	case EnvProd, EnvStage, EnvDev:
+	case "", EnvProd, EnvStage, EnvDev:
 	default:
 		return fmt.Errorf("datasource %q: env must be one of %q, %q, %q (got %q)",
 			d.Name, EnvProd, EnvStage, EnvDev, d.Env)

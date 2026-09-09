@@ -14,9 +14,9 @@ import (
 // Pages below it.
 //
 // Dispatch is a switch over the action rather than an early return on
-// anything that is not a left click, because a right-click and a
-// double-click branch both have to run before a left click is decided —
-// each is its own case here, not a guard this one has to be inverted around.
+// anything that is not a left click, because the double-click branch has to
+// run before a left click is decided — it is its own case here, not a guard
+// this one has to be inverted around.
 //
 // Only a click that lands in a zone is claimed. Everything else is handed
 // back untouched, because tview already selects rows and scrolls correctly
@@ -26,27 +26,11 @@ func (a *App) bindMouse() {
 		if ev == nil {
 			return ev, action
 		}
-		// Mouse reporting itself stays on regardless: the client turns it on
-		// for its own terminal (attach.go), and this setting lives on the
-		// server. Off only stops dv claiming the click, so the zones and the
-		// context menu go quiet and tview's own handling — a table's default
-		// row selection, for instance — is whatever is left underneath.
+		// Off only stops dv claiming the click, so the zones go quiet and
+		// tview's own handling — a table's default row selection, for
+		// instance — is whatever is left underneath.
 		if !a.mouseEnabled {
 			return ev, action
-		}
-
-		// tview keeps one "last click" timestamp shared across every button
-		// (Application.fireMouseActions), not one per button. So the right
-		// click that just opened the menu sets it, and a left click on the
-		// menu within DoubleClickInterval afterwards is read as completing a
-		// double click rather than a click of its own — and List's own
-		// MouseHandler only acts on a click, not a double click, so the row
-		// would silently not respond. That is not a slow-user edge case: it
-		// is the exact gesture this feature is for, read the row and click
-		// it, so the first click on a freshly opened menu must not be the
-		// one that gets eaten.
-		if action == tview.MouseLeftDoubleClick && a.menuOpen() {
-			action = tview.MouseLeftClick
 		}
 
 		switch action {
@@ -54,8 +38,6 @@ func (a *App) bindMouse() {
 			return a.mouseLeftClick(ev, action)
 		case tview.MouseLeftDoubleClick:
 			return a.mouseLeftDoubleClick(ev, action)
-		case tview.MouseRightClick:
-			return a.mouseRightClick(ev, action)
 		}
 		return ev, action
 	})
@@ -71,34 +53,18 @@ func (a *App) dialogOpen() bool {
 	return name != pageMain
 }
 
-// menuOpen reports whether the right-click menu is the front page.
+// gridVisible reports whether x, y lands on the grid and the result pane's
+// tab is the one that shows it.
 //
-// Separate from dialogOpen because the double-click rewrite above is only
-// safe where a right click is what put the front page there in the first
-// place — the menu is the only surface that opens on one today.
-func (a *App) menuOpen() bool {
-	name, _ := a.pages.GetFrontPage()
-	return name == pageMenu
-}
-
-// gridVisible reports whether x, y lands on the grid and the grid is the
-// result pane's own current tab, rather than DDL, plan or sessions sharing
-// its rect.
-//
-// tview does not reset a hidden primitive's rect when it stops being drawn
-// (contextAt's own comment, menu.go), so a.grid.InRect keeps matching a
-// screen position long after the DDL tab has replaced it there. Every
-// caller that would otherwise act on the grid from a screen position has to
-// gate on this, or it acts on a result the user cannot see.
+// tview does not reset a hidden primitive's rect when it stops being drawn,
+// so InRect alone would still match a grid the tab switch has since covered.
 func (a *App) gridVisible(x, y int) bool {
 	return a.resultTabs.current() == tabResults && a.grid.InRect(x, y)
 }
 
-// zoneAt is the dialog guard and the hitmap lookup together.
-//
-// Task 5 folded both into mouseLeftClick alone. A second per-action handler
-// needs the same guard, so keeping them separate would only have meant
-// duplicating the pair the moment that handler was added.
+// zoneAt is the dialog guard and the hitmap lookup together, so a caller can
+// never forget the guard and act on zones from the page a dialog has since
+// covered.
 func (a *App) zoneAt(ev *tcell.EventMouse) (zone, bool) {
 	if a.dialogOpen() {
 		return zone{}, false
@@ -141,6 +107,17 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	}
 
 	x, y := ev.Position()
+
+	// The first click of the pair already made the node current and expanded
+	// it (tview's TreeView selects on a click); the second is the preview.
+	if a.sidebarVisible && a.schemaTabs.current() == tabTree && a.tree.InRect(x, y) {
+		if ref, ok := a.tree.GetCurrentNode().GetReference().(*nodeRef); ok && ref.kind == nodeTable {
+			a.previewTable(ref.schema, ref.table)
+			return nil, action
+		}
+		return ev, action
+	}
+
 	if !a.gridVisible(x, y) {
 		return ev, action
 	}
@@ -157,28 +134,7 @@ func (a *App) mouseLeftDoubleClick(ev *tcell.EventMouse, action tview.MouseActio
 	// be if the row had been reached from the keyboard.
 	a.grid.Select(row, col)
 	a.app.SetFocus(a.grid)
-	a.refreshHints()
 	a.dispatch(keymap.ActionInspect)
-	return nil, action
-}
-
-// mouseRightClick opens the palette's own commands, filtered to where the
-// click landed — the answer to "what can I do here" that the left-click
-// zones and the command palette do not give on their own.
-//
-// A position contextAt does not claim is handed back untouched, per its own
-// doc comment on what false means there.
-func (a *App) mouseRightClick(ev *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
-	if a.dialogOpen() {
-		return ev, action
-	}
-
-	x, y := ev.Position()
-	ctx, ok := a.contextAt(x, y)
-	if !ok {
-		return ev, action
-	}
-	a.showMenu(ctx, x, y)
 	return nil, action
 }
 
@@ -209,64 +165,6 @@ func (a *App) clickGridHeader(ev *tcell.EventMouse) bool {
 	return true
 }
 
-// treeNodeAt finds the node drawn at a screen row, resolving a right click's
-// position the same way TreeView's own left-click handling does
-// (MouseHandler in treeview.go: offset plus the row inside the inner rect,
-// indexing into the nodes visible in expanded order).
-//
-// TreeView keeps that visible-node list to itself, built by walking the root
-// and recursing into expanded children (its unexported process()); Walk is
-// the exported way to rebuild the same order from outside the package, which
-// a right click needs — it resolves the node before running a command,
-// rather than while tview is already handling the click itself.
-func (a *App) treeNodeAt(y int) *tview.TreeNode {
-	root := a.tree.GetRoot()
-	if root == nil {
-		return nil
-	}
-
-	_, rectY, _, _ := a.tree.GetInnerRect()
-	target := a.tree.GetScrollOffset() + (y - rectY)
-	if target < 0 {
-		return nil
-	}
-
-	var found *tview.TreeNode
-	index := -1
-	root.Walk(func(node, parent *tview.TreeNode) bool {
-		index++
-		if index == target {
-			found = node
-		}
-		return node.IsExpanded()
-	})
-	return found
-}
-
-// tableItemAt finds the tables-tab item index drawn at a screen row,
-// resolving a right click's position the same way List's own MouseHandler
-// does (indexAtPoint in list.go: the row inside the inner rect, offset by
-// how much has scrolled).
-//
-// indexAtPoint halves that row count when the list shows secondary text —
-// a.tableList never does (buildTablesTab: ShowSecondaryText(false), so that
-// each table draws on exactly one row), so this only reconstructs the half
-// of indexAtPoint that applies to it, using GetOffset in place of the
-// private field indexAtPoint reads directly.
-func (a *App) tableItemAt(y int) int {
-	_, rectY, _, height := a.tableList.GetInnerRect()
-	if y < rectY || y >= rectY+height {
-		return -1
-	}
-
-	offset, _ := a.tableList.GetOffset()
-	index := y - rectY + offset
-	if index < 0 || index >= a.tableList.GetItemCount() {
-		return -1
-	}
-	return index
-}
-
 // mouseAction performs a zone's click and reports whether it consumed it.
 //
 // Every branch reaches the same function the key does. That is what lets the
@@ -280,27 +178,21 @@ func (a *App) mouseAction(z zone, row int) bool {
 		return a.dispatch(keymap.ActionUseSchema)
 	case zoneHelp:
 		return a.dispatch(keymap.ActionHelp)
+	case zoneCopyResult:
+		return a.dispatch(keymap.ActionCopyResult)
 	case zoneTab:
 		// Named, not cycled: the point of a strip is that you can go
 		// straight to the one you can see.
 		if pane := a.paneFor(row); pane != nil && z.index >= 0 && z.index < len(pane.names) {
 			pane.show(pane.names[z.index])
 			a.app.SetFocus(pane)
-			a.refreshHints()
 			return true
 		}
 	case zoneRegionName:
 		if pane := a.paneFor(row); pane != nil {
 			a.app.SetFocus(pane)
-			a.refreshHints()
 			return true
 		}
-	case zoneStatusMode:
-		a.showKeyboardChooser()
-		return true
-	case zoneStatusWrites:
-		a.disableWrites()
-		return true
 	}
 	return false
 }

@@ -24,8 +24,8 @@ make db-shell           # MariaDB shell against the test database
 Running one test, or one package:
 
 ```sh
-go test ./internal/vim/ -run TestNormalModeSequences
-go test -tags integration ./internal/ui/ -run TestVimOperators -v
+go test ./internal/export/ -run TestMarkdownEscapesPipesAndNewlines
+go test -tags integration ./internal/ui/ -run TestDoubleClickingATableInTheTreeShowsItsRows -v
 go test -race -tags integration ./internal/ui/
 ```
 
@@ -59,21 +59,21 @@ terminal or a database, and the UI is the only thing that knows about tview.
 Read the package doc comment before working in a package — each one states
 what it deliberately does *not* know, and those boundaries are load-bearing:
 
-- `sqlparse` — a tokenizer, not a parser. Answers only the questions `guard`
-  and the editor ask: statement boundaries, statement kind, top-level `WHERE`.
-  Also owns `QuoteIdentifier`, which both `catalog` and `db` need (`catalog`
-  imports `db`, so it could not live in either).
-- `guard` — `Evaluate(stmt, policy) Decision` is a pure function. **Fail-closed:**
-  anything the tokenizer cannot classify is refused against production.
+- `sqlparse` — a tokenizer, not a parser. Answers only the questions the
+  editor and the runner ask: statement boundaries, statement kind, whether a
+  `SELECT` already limits itself. `AutoLimit(stmt, n)` sits here for that last
+  reason and knows no policy. Also owns `QuoteIdentifier`, which `db` needs to
+  quote a schema name before a `USE` and the table preview needs to quote the
+  table it is about to read.
 - `keymap` — key events → named `Action`s. The UI switches on actions, never
   on keys.
-- `vim` — the modal state machine. Keys in, `Command`s out; no widgets.
 - `complete`, `result`, `export`, `config` — same pattern.
 
 `ui` is the largest package and is split by concern rather than by widget:
-`editor.go`/`edit.go`/`motion.go` (text), `vimedit.go`/`vimmotion.go`/`vimnav.go`
-(modal), `status.go`, `tree.go`/`tables.go`/`ddl.go` (schema pane),
-`grid.go` (results), `searchbox.go`/`palette.go`/`goto.go`/`useschema.go`
+`editor.go`/`edit.go`/`motion.go` (text), `status.go`/`topbar.go`,
+`tree.go`/`tables.go`/`preview.go` (schema pane),
+`grid.go`/`gridcopy.go`/`copyresult.go` (results),
+`searchbox.go`/`history.go`/`useschema.go`/`dspicker.go`/`dsform.go`/`launch.go`
 (dialogs).
 
 ### Two connections per datasource
@@ -111,45 +111,20 @@ which is far too slow to run on a keystroke. The cache and the history store
 are both **optional** — a read-only home directory should cost completion, not
 the session.
 
-### Keyboard presets
+### One key map
 
-`keymap.FromConfig(preset, overrides)` is the single place configuration
-becomes a key map; both `cmd/dv` and `dv keys` go through it so the reference
-cannot disagree with the interface. Presets share one base map and only rebind
-where the tools genuinely differ.
+`keymap.Default()` is the map; configuration cannot change it. Every action
+must appear exactly once in `helpGroups` (`internal/ui/dialog_test.go`),
+and an action's description must not be a substring of another's, because
+the rendered help is checked by counting them.
 
-**The default preset is `datagrip`,** so typing types. `vim` is one answer to
-`dv init` or one palette command away, and everything below is what makes the
-modal editor survivable *for the people who choose it* — none of it may be
-dropped on the grounds that it is no longer the default:
+### The first run
 
-- the status bar always shows the mode and any half-typed sequence
-- normal mode consumes **every** key — one leaking through gets typed
-- the empty-editor placeholder says how to start typing
-- the help screen opens with the way out, above the vim reference rather than
-  at the foot of it
-- `dv init` asks which keyboard before writing a config, so nobody meets the
-  modal editor without having chosen it
-
-`a.keys` is consulted at event time, so swapping the map switches keyboards
-mid-session with no rebinding.
-
-### The first ten minutes
-
-Three things exist only for someone who has not used this before, and each is
-built so it cannot go stale:
-
-- **`internal/cli.Wizard`** (`dv init`) is the config package's only writer. It
-  probes before it writes, and its env and preset prose is checked against
-  `config`'s and `keymap`'s own values.
-- **`startHere`** (`internal/ui/dialog.go`) is the help screen's opening five,
-  rendered from the live key map. It deliberately repeats entries from
-  `helpGroups`, which keeps its own exactly-once rule.
-- **`internal/intro`** is one bit — whether the first-run card has been shown —
-  stored as a file's existence under `XDG_STATE_HOME`. Optional like the cache
-  and the history: a marker that cannot be written costs the card being shown
-  again, never the session. An empty `Deps.IntroPath` means never show it,
-  which is what every test that is not about the card gets.
+`dv` with no configuration opens the datasource list without a session
+(`ui.Launch`). It is a separate small tview application rather than a
+state of `App`, because `App` assumes a connection in nearly every
+method. `config.Save` is the file's only writer; comments in the file do
+not survive it.
 
 ## Conventions
 
@@ -182,8 +157,6 @@ harness is in `app_integration_test.go`.
   application's, and tview interleaves the two; "settle N times, then read" is
   a guess that fails a few runs in twenty. Reading `App` state from the test
   goroutine is also a data race.
-- The shared harness pins the **datagrip** preset: those tests predate the
-  modal editor. Modal behaviour uses `newVimHarness` (`e3_integration_test.go`).
 - `h.buffer(text, caret)` sets the caret in a separate tick from `SetText`.
   tview's `TextArea` rebuilds its row index lazily, so a `Select` issued in the
   same tick resolves against the text that was just discarded and lands on the
@@ -194,9 +167,6 @@ harness is in `app_integration_test.go`.
 - Every bindable action must appear exactly once in `helpGroups`
   (`internal/ui/dialog_test.go`) — otherwise a key works with no way to
   discover it.
-- Every sequence in `vim.Reference()` is typed into a real state machine
-  (`internal/vim/vim_test.go`) — the help cannot advertise a key that stopped
-  working.
 
 ### Impossible key combinations
 

@@ -11,12 +11,6 @@ import (
 
 // Finding text on screen.
 //
-// The prompt lives here rather than in the vim package, which only reports
-// that a search was asked for. Collecting the pattern there would put every
-// keystroke of it through the modal state machine, where an arrow key resolves
-// as a motion and takes any waiting operator with it — deleting a character in
-// the middle of typing a search term.
-//
 // One prompt serves both the editor and the results. Which of them it searches
 // is decided when it opens, from whatever has focus, and remembered so that n
 // and N keep meaning the same thing afterwards.
@@ -150,19 +144,16 @@ func (a *App) jumpToMatch(pattern string, where searchWhere, origin searchOrigin
 	if !ok {
 		return false
 	}
-	// Extending rather than jumping while a selection is being made, so that
-	// searching in visual mode reaches the match the way every other motion
-	// there does.
-	a.moveCursor(func(string, int) int { return offset }, a.vimSelecting())
+	a.moveCursor(func(string, int) int { return offset }, false)
 	return true
 }
 
 // gridKey gives the results the search keys.
 //
-// Plainly, in every keyboard preset: a grid is not a text field, so there is
-// nothing for an unmodified letter to collide with. tview's own table already
-// answers to hjkl, g and G, so movement is left to it rather than reimplemented
-// here where the two could disagree.
+// Plainly: a grid is not a text field, so there is nothing for an unmodified
+// letter to collide with. tview's own table already answers to hjkl, g and G,
+// so movement is left to it rather than reimplemented here where the two
+// could disagree.
 func (a *App) gridKey(ev *tcell.EventKey) *tcell.EventKey {
 	if ev.Key() != tcell.KeyRune {
 		return ev
@@ -220,7 +211,7 @@ func (a *App) searchAgain(reverse bool) {
 		a.notice(a.noMatch(a.search.pattern))
 		return
 	}
-	a.moveCursor(func(string, int) int { return offset }, a.vimSelecting())
+	a.moveCursor(func(string, int) int { return offset }, false)
 }
 
 // findInText searches forwards or backwards, starting over at the far end

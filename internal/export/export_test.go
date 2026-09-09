@@ -273,3 +273,60 @@ func TestJSONDisambiguatesDuplicateColumns(t *testing.T) {
 		t.Errorf("object = %v, want both columns preserved", got[0])
 	}
 }
+
+func TestMarkdownWritesAHeaderASeparatorAndRows(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Markdown(&buf, sampleColumns(), sampleRows()); err != nil {
+		t.Fatalf("Markdown() error = %v, want nil", err)
+	}
+	want := "| id | email | note |\n" +
+		"| --- | --- | --- |\n" +
+		"| 1 | a@example.com |  |\n" +
+		"| 2 | b@example.com | hello |\n"
+	if got := buf.String(); got != want {
+		t.Errorf("Markdown() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestMarkdownEscapesPipesAndNewlines(t *testing.T) {
+	var buf bytes.Buffer
+	rows := [][]any{{"a|b", "line one\nline two"}}
+	if err := Markdown(&buf, []string{"x", "y"}, rows); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); !strings.Contains(got, `| a\|b | line one<br>line two |`) {
+		t.Errorf("Markdown() = %q; a pipe or a newline inside a cell breaks the table", got)
+	}
+}
+
+func TestMarkdownWithNoRowsStillWritesTheHeader(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Markdown(&buf, []string{"id"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); got != "| id |\n| --- |\n" {
+		t.Errorf("Markdown() = %q, want a header and a separator only", got)
+	}
+}
+
+func TestMarkdownWithNoColumnsWritesNothing(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Markdown(&buf, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("Markdown() = %q, want nothing: a table with no columns is not a table", buf.String())
+	}
+}
+
+func TestMarkdownIsFaithfulToTypedValues(t *testing.T) {
+	var buf bytes.Buffer
+	at := time.Date(2026, 9, 8, 10, 30, 0, 0, time.UTC)
+	rows := [][]any{{int64(42), 3.5, true, at, []byte{0xff, 0x00}}}
+	if err := Markdown(&buf, []string{"n", "f", "b", "t", "bin"}, rows); err != nil {
+		t.Fatal(err)
+	}
+	if got := buf.String(); !strings.Contains(got, "| 42 | 3.5 | 1 | 2026-09-08 10:30:00 | /wA= |") {
+		t.Errorf("Markdown() = %q; values must render the way CSV renders them", got)
+	}
+}

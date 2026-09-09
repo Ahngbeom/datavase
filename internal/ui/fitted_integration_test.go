@@ -8,6 +8,7 @@ import (
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/gdamore/tcell/v2"
 )
 
 // resize changes the simulated terminal and lets the interface redraw.
@@ -94,18 +95,13 @@ func TestDialogFollowsAResize(t *testing.T) {
 // small screen.
 func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 	dialogs := []struct {
-		name   string
-		action keymap.Action
-		setup  func(h *harness)
-		// open replaces the key press for a dialog that has no binding of its
-		// own. The first-run card is one: it appears by itself, and is reached
-		// again only by name.
-		open func(h *harness)
+		name    string
+		action  keymap.Action
+		setup   func(h *harness)
+		dismiss func(h *harness)
 	}{
 		{name: "help", action: keymap.ActionHelp},
-		{name: "command palette", action: keymap.ActionCommandPalette},
 		{name: "history", action: keymap.ActionSearchHistory},
-		{name: "go to table", action: keymap.ActionGoToTable},
 		{
 			name:   "completion",
 			action: keymap.ActionComplete,
@@ -116,12 +112,16 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 		},
 		{
 			name:   "confirmation",
-			action: keymap.ActionRun,
-			setup:  func(h *harness) { h.typeSQL("DELETE FROM dv_seq") },
-		},
-		{
-			name: "getting started",
-			open: func(h *harness) { h.app.app.QueueUpdateDraw(h.app.showIntro) },
+			action: keymap.ActionQuit,
+			setup: func(h *harness) {
+				h.typeSQL("BEGIN")
+				h.do(keymap.ActionRun)
+				h.waitFor("the transaction to open", func(a *App) bool { return a.conn.InTransaction() })
+			},
+			// The default-focused button is "Cancel" — pressing Enter picks
+			// it, closing the dialog without rolling back or quitting, so
+			// the harness's own app.Stop() cleanup still runs on a live app.
+			dismiss: func(h *harness) { h.press(tcell.KeyEnter) },
 		},
 	}
 
@@ -132,15 +132,13 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 				d.setup(h)
 			}
 			h.resize(50, 16)
-
-			if d.open != nil {
-				d.open(h)
-			} else {
-				h.do(d.action)
-			}
+			h.do(d.action)
 
 			if !borderIntact(h.text(), 50) {
 				t.Errorf("the %s dialog is clipped at 50x16:\n%s", d.name, h.text())
+			}
+			if d.dismiss != nil {
+				d.dismiss(h)
 			}
 		})
 	}

@@ -89,10 +89,6 @@ func (a *App) buildTablesTab() tview.Primitive {
 	})
 
 	a.tableList.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		ev = a.vimListKey(ev)
-		if ev == nil {
-			return nil
-		}
 		if ev.Key() == tcell.KeyUp && a.tableList.GetCurrentItem() == 0 {
 			a.app.SetFocus(a.tableFilter)
 			return nil
@@ -148,7 +144,7 @@ func (a *App) renderTables() {
 	for _, t := range matches {
 		table := t
 		a.tableList.AddItem(tableListLabel(table, a.tablesPaneWidth()), "", 0, func() {
-			a.openTable(schema, table.Name)
+			a.previewTable(schema, table.Name)
 		})
 	}
 }

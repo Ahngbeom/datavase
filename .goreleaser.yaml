@@ -162,7 +162,7 @@ release:
 
     **Windows** — the `.zip` above; put `dv.exe` on your PATH.
 
-    Then `dv init` sets up the first connection, and `dv version` says which
+    Then `dv` opens the datasource list on first run, and `dv version` says which
     build you have.
 
     <details><summary>From source, if you have Go</summary>

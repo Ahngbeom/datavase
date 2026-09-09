@@ -4,9 +4,6 @@ package ui
 
 import (
 	"context"
-	"encoding/csv"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -89,158 +86,6 @@ func TestChoosingAHistoryEntryFillsTheEditor(t *testing.T) {
 	}
 }
 
-func TestCommandPaletteOpens(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.do(keymap.ActionCommandPalette)
-
-	got := h.text()
-	for _, want := range []string{"export csv", "history"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("the palette does not offer %q:\n%s", want, got)
-		}
-	}
-}
-
-// The list is longer than a modest terminal — which is why the filter exists,
-// and why checking that a command near the end is on screen unfiltered tests
-// the length of the list rather than the palette. Filtering is the route a
-// user actually takes to those commands.
-func TestThePaletteFilterReachesACommandBelowTheFold(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.do(keymap.ActionCommandPalette)
-	if strings.Contains(h.text(), "leave datavase") {
-		t.Skip("quit is on screen unfiltered; the filter is not what is under test here")
-	}
-
-	h.typeInto("quit")
-
-	if !strings.Contains(h.text(), "leave datavase") {
-		t.Errorf("filtering for \"quit\" does not reach it:\n%s", h.text())
-	}
-}
-
-// The write lock is the guard's escape hatch; unlocking must be visible.
-func TestUnlockingWritesIsAnnouncedAndVisible(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.enableWrites() })
-	h.settle()
-
-	if !strings.Contains(strings.ToLower(h.text()), "writes on") {
-		t.Errorf("the status bar does not show that writes are unlocked:\n%s", h.text())
-	}
-
-	// And an unlocked production write is now a confirmation, not a refusal.
-	h.typeSQL("UPDATE dv_seq SET n = n WHERE n = 1")
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if strings.Contains(got, "Refused") {
-		t.Errorf("the write was still refused after unlocking:\n%s", got)
-	}
-	if !strings.Contains(strings.ToLower(got), "run it?") {
-		t.Errorf("no confirmation appeared:\n%s", got)
-	}
-}
-
-func TestExportWritesACSVFile(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	dir := t.TempDir()
-	previous, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(previous) })
-
-	h.typeSQL("SELECT 1 AS id, 'alice' AS name")
-	h.do(keymap.ActionRun)
-	// Wait on the status bar, not on a value: "alice" is also sitting in the
-	// editor, so matching it would not mean the result had arrived.
-	if !h.waitForScreen("1 row") {
-		t.Fatalf("the statement never finished:\n%s", h.text())
-	}
-
-	h.app.app.QueueUpdateDraw(func() { h.app.exportResult(formatCSV) })
-	h.settle()
-
-	matches, err := filepath.Glob(filepath.Join(dir, "*.csv"))
-	if err != nil || len(matches) != 1 {
-		t.Fatalf("expected exactly one CSV file, got %v (err %v)\nscreen:\n%s", matches, err, h.text())
-	}
-
-	file, err := os.Open(matches[0])
-	if err != nil {
-		t.Fatalf("opening the export: %v", err)
-	}
-	defer file.Close()
-
-	records, err := csv.NewReader(file).ReadAll()
-	if err != nil {
-		t.Fatalf("the export is not valid CSV: %v", err)
-	}
-	if len(records) != 2 {
-		t.Fatalf("export has %d records, want a header and one row", len(records))
-	}
-	if records[0][1] != "name" || records[1][1] != "alice" {
-		t.Errorf("export = %v, want the queried values", records)
-	}
-}
-
-func TestExportWithNoResultSaysSo(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.exportResult(formatCSV) })
-	h.settle()
-
-	if !strings.Contains(h.text(), "no result to export") {
-		t.Errorf("exporting without a result gave no feedback:\n%s", h.text())
-	}
-}
-
-// Go-to-table searches the cache and drops a starter query in the editor.
-func TestGoToTableFillsTheEditor(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-
-	h.do(keymap.ActionGoToTable)
-	if !strings.Contains(h.text(), "customers") {
-		t.Fatalf("go-to-table did not list the cached tables:\n%s", h.text())
-	}
-
-	h.typeInto("invoices")
-	h.press(tcell.KeyDown)
-	h.press(tcell.KeyEnter)
-
-	got := h.editorText()
-	if !strings.Contains(got, "invoices") {
-		t.Errorf("editor holds %q, want a query against the chosen table", got)
-	}
-	if !strings.HasPrefix(got, "SELECT") {
-		t.Errorf("editor holds %q, want a SELECT starter", got)
-	}
-}
-
-// The starter query is placed, not executed: the guard and the user still
-// decide when anything runs.
-func TestGoToTableDoesNotRunTheQuery(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-
-	h.do(keymap.ActionGoToTable)
-	h.press(tcell.KeyDown)
-	h.press(tcell.KeyEnter)
-
-	if strings.Contains(h.text(), "rows ·") {
-		t.Errorf("go-to-table ran the query instead of placing it:\n%s", h.text())
-	}
-}
-
 // typeInto sends characters to whatever currently has focus.
 func (h *harness) typeInto(text string) {
 	h.t.Helper()
@@ -285,26 +130,15 @@ func TestInspectingARowShowsTheValueTheGridCutShort(t *testing.T) {
 	}
 }
 
-// Inspect means "show me this in full", and which thing depends on where the
-// caret is — a second key for the same intent somewhere else is one nobody
-// remembers.
-func TestInspectStillShowsATableDefinitionFromTheSchemaPane(t *testing.T) {
+// Inspect only ever reads the grid now, so pressing it with focus anywhere
+// else must say so rather than doing nothing.
+func TestInspectWithFocusOffTheGridSaysSo(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
-	h.showSidebar()
 
 	h.do(keymap.ActionInspect)
 
-	// Whatever it did, it must not have been the row view: the caret is in
-	// the schema pane, and "inspect" there has always meant the definition.
-	h.settle()
-	if h.inspect(func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pageConfirm
-	}) {
-		t.Errorf("inspect opened the row view from the schema pane:\n%s", h.text())
-	}
-	if strings.Contains(h.text(), "no row selected") {
-		t.Errorf("inspect took the results branch from the schema pane:\n%s", h.text())
+	if !h.waitForScreen("select a result row first") {
+		t.Errorf("inspecting off the grid gave no feedback:\n%s", h.text())
 	}
 }
 

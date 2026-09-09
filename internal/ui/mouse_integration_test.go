@@ -57,44 +57,6 @@ func TestTurningTheMouseOffLeavesTheHelpHintInert(t *testing.T) {
 	})
 }
 
-// A misclick on the production marker must not be able to look like it
-// changed the environment.
-func TestTheEnvironmentChipAnswersNoClick(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-
-	var before string
-	h.inspect(func(a *App) bool {
-		before, _ = a.pages.GetFrontPage()
-		return true
-	})
-
-	h.click(1, 0)
-
-	var after string
-	h.inspect(func(a *App) bool {
-		after, _ = a.pages.GetFrontPage()
-		return true
-	})
-	if after != before {
-		t.Errorf("clicking the environment chip opened %q", after)
-	}
-}
-
-// A tab strip that names its tabs and cannot be clicked is a list of things
-// you must find a key for.
-func TestClickingATabNameShowsThatTab(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("SELECT 1")
-	h.do(keymap.ActionRun)
-	h.waitFor("a result", func(a *App) bool { return a.buf.RowCount() > 0 })
-
-	h.clickZone(zoneTab, 1)
-
-	h.waitFor("the second tab to be shown", func(a *App) bool {
-		return a.resultTabs.active == 1
-	})
-}
-
 // The editor's header holds one unnamed tab, so it published no zone at all
 // before the region-name zone existed — a click there did nothing. The spec
 // asks for the whole header to answer a click ("region header, the region's
@@ -126,52 +88,6 @@ func TestClickingAColumnHeaderSortsByThatColumn(t *testing.T) {
 	h.waitFor("the rows to be sorted by the clicked column", func(a *App) bool {
 		return a.content.sorted() && a.content.sortCol == 0
 	})
-}
-
-// The DDL, plan and sessions tabs share the grid's screen rect once it has
-// drawn there — tview does not reset a hidden primitive's rect when it stops
-// being the one shown (contextAt's own comment, menu.go) — so a click where
-// the grid used to be must not act on a result the user cannot see.
-func TestClickingOverTheDDLTabDoesNotSortTheHiddenGrid(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("SELECT 2 AS n UNION ALL SELECT 1")
-	h.do(keymap.ActionRun)
-	h.waitFor("two rows", func(a *App) bool { return a.buf.RowCount() == 2 })
-	x, y := h.gridHeaderPosition(0)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.resultTabs.show(tabDDL) })
-	h.settle()
-
-	h.click(x, y)
-	h.settle()
-
-	if h.inspect(func(a *App) bool { return a.content.sorted() }) {
-		t.Error("a click where the grid's header used to be sorted the hidden result, with the DDL tab showing")
-	}
-}
-
-// The same stale rect a click must not sort by, a double click must not open
-// a row from — reading a table's DDL must not risk the row inspector opening
-// on a row nobody can see.
-func TestDoubleClickingOverTheDDLTabDoesNotOpenTheHiddenGridsRow(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("SELECT 1 AS id, 'ada@example.com' AS email")
-	h.do(keymap.ActionRun)
-	h.waitFor("a result", func(a *App) bool { return a.buf.RowCount() > 0 })
-	x, y := h.gridHeaderPosition(0)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.resultTabs.show(tabDDL) })
-	h.settle()
-
-	h.doubleClick(x, y+1)
-	h.settle()
-
-	if h.inspect(func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pageConfirm
-	}) {
-		t.Error("a double click where the grid used to be opened the row inspector, with the DDL tab showing")
-	}
 }
 
 // The mouse must not be able to reach an ordering the keyboard cannot, or the

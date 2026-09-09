@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/Ahngbeom/datavase/internal/result"
 )
 
@@ -18,8 +16,6 @@ const (
 	// intentNothing has nothing to offer, and says so.
 	intentNothing copyIntent = iota
 	intentCancel
-	intentDefinition
-	intentPlan
 	intentSelection
 	intentCell
 )
@@ -27,8 +23,6 @@ const (
 // copyContext is everything the key's meaning depends on.
 type copyContext struct {
 	running      bool
-	onDDL        bool
-	onPlan       bool
 	onGrid       bool
 	hasSelection bool
 }
@@ -49,10 +43,6 @@ func (c copyContext) resolve() copyIntent {
 		return intentCancel
 	}
 	switch {
-	case c.onDDL:
-		return intentDefinition
-	case c.onPlan:
-		return intentPlan
 	case c.hasSelection:
 		return intentSelection
 	case c.onGrid:
@@ -69,23 +59,6 @@ func cellValue(buf *result.Buffer, row, col int) (string, bool) {
 	return result.Format(buf.Raw(row, col)), true
 }
 
-// rowValues is one row, tab separated.
-//
-// Tabs rather than anything prettier because a copied row is pasted somewhere
-// that understands columns — a spreadsheet, another terminal — and alignment
-// drawn with spaces stops being alignment the moment it lands there.
-func rowValues(buf *result.Buffer, row int) (string, bool) {
-	if buf == nil || row < 0 || row >= buf.RowCount() {
-		return "", false
-	}
-
-	values := make([]string, buf.ColumnCount())
-	for col := range values {
-		values[col] = result.Format(buf.Raw(row, col))
-	}
-	return strings.Join(values, "\t"), true
-}
-
 // copyCell puts the selected value on the clipboard, reporting whether there
 // was one.
 func (a *App) copyCell() bool {
@@ -99,18 +72,4 @@ func (a *App) copyCell() bool {
 	a.setClipboard(value)
 	a.notice("value copied")
 	return true
-}
-
-// copyRow puts the whole selected row on the clipboard.
-func (a *App) copyRow() {
-	row, _ := a.grid.GetSelection()
-
-	values, ok := rowValues(a.buf, a.content.bufferRow(row))
-	if !ok {
-		a.notice("no row selected")
-		return
-	}
-
-	a.setClipboard(values)
-	a.notice("row copied")
 }

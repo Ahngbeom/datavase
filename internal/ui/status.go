@@ -24,19 +24,13 @@ const (
 
 // status is what just happened.
 //
-// Where the session is — the environment, the datasource, the schema, the
-// branch — lives on the top bar, and the open file on the editor's own header.
+// Where the session is — the datasource, the schema — lives on the top bar.
 // Splitting them is what stopped a schema name and a row count competing for
 // the same space, with the loser silently gone.
 //
 // It is a plain value with a pure render method, so what the user is told
-// about a production database can be tested without starting a terminal.
+// after a statement runs can be tested without starting a terminal.
 type status struct {
-	// vimMode and vimPending describe the modal keyboard, and are empty on
-	// the keyboards that do not have one.
-	vimMode       string
-	vimPending    string
-	writesEnabled bool
 	// inTransaction says the connection is pinned and the work so far is
 	// undoable, which changes what several other fields mean.
 	inTransaction bool
@@ -79,11 +73,6 @@ type field struct {
 	expendable  bool
 	expendRank  int // higher goes first when space runs out
 	visibleCost int
-	// target is what a click on this field answers. zoneNone for most fields
-	// — a zone is only worth publishing for a state someone can forget they
-	// are in and a click can act on, which today is the mode and the
-	// unlocked-writes notice.
-	target zoneTarget
 }
 
 // defaultStatusWidth is used when the real width is not known yet, on the
@@ -92,8 +81,7 @@ const defaultStatusWidth = 100
 
 // render produces the line at the bar's default width.
 func (s status) render() string {
-	line, _ := s.renderWidth(defaultStatusWidth)
-	return line
+	return s.renderWidth(defaultStatusWidth)
 }
 
 // Separators, widest first. Tightening the spacing costs nothing, so it is
@@ -105,12 +93,8 @@ const (
 )
 
 // renderWidth produces the line, tightening and then dropping fields until
-// it fits, and the zones a click on the result can land in.
-//
-// A zone's columns are known only after the join, since dropping and
-// tightening both happen first — the same reason topBarState.renderWidth
-// accumulates them here rather than in fields().
-func (s status) renderWidth(width int) (string, []zone) {
+// it fits.
+func (s status) renderWidth(width int) string {
 	fields := s.fields()
 
 	separator := wideSeparator
@@ -122,32 +106,20 @@ func (s status) renderWidth(width int) (string, []zone) {
 	for statusWidth(fields, sepCost) > width && dropOne(&fields) {
 	}
 
-	var (
-		line  strings.Builder
-		zones []zone
-		at    int
-	)
+	var line strings.Builder
 	for i, f := range fields {
 		if i > 0 {
 			line.WriteString(separator)
-			at += sepCost
-		}
-		if f.target != zoneNone {
-			zones = append(zones, zone{from: at, to: at + f.visibleCost, target: f.target, index: -1})
 		}
 		line.WriteString(f.text)
-		at += f.visibleCost
 	}
 
 	// On a terminal too narrow even for the warnings, something has to give.
-	// Truncating is the last resort and keeps the leftmost fields, which are
-	// the environment badge and whatever warning followed it. Truncating
-	// drops the zones with the columns they described — a partially cut field
-	// has nothing intact left for a click to mean.
+	// Truncating is the last resort and keeps the leftmost fields.
 	if out := line.String(); visibleCost(out) > width {
-		return truncateMarkup(out, width), nil
+		return truncateMarkup(out, width)
 	}
-	return line.String(), zones
+	return line.String()
 }
 
 // truncateMarkup shortens a tagged string to a visible width, leaving colour
@@ -156,9 +128,7 @@ func (s status) renderWidth(width int) (string, []zone) {
 // A cut line ends in an ellipsis, paid for out of the width rather than hung
 // off the end of a terminal that had no room for it. Without one the bar
 // simply stopped mid-word, which reads as a sentence that ended rather than
-// one that was cut — and this application abbreviates a file name in the
-// region header with an ellipsis two rows above, so the two sat on the same
-// screen disagreeing about what a cut looks like.
+// one that was cut.
 func truncateMarkup(s string, width int) string {
 	const ellipsis = "…"
 
@@ -249,27 +219,8 @@ func (s status) fields() []field {
 		})
 	}
 
-	// The mode comes first, before anything that can be dropped: on a modal
-	// keyboard it is what explains why an ordinary letter did nothing, so it
-	// has to survive both the dropping and the truncating.
 	var out []field
-	if s.vimMode != "" {
-		mode := s.vimMode
-		if s.vimPending != "" {
-			mode += " " + s.vimPending
-		}
-		out = add(out, tag(colourNotice, mode), false, 0)
-		// It is where someone reads which keyboard they are on, so it is also
-		// where they reach to change it.
-		out[len(out)-1].target = zoneStatusMode
-	}
 
-	if s.writesEnabled {
-		out = add(out, tag(colourNotice, "writes on"), false, 0)
-		// A state someone can forget they are in; a click is the shortest way
-		// back to locked.
-		out[len(out)-1].target = zoneStatusWrites
-	}
 	// Never dropped. Whether the work so far can be undone is not a detail
 	// that should vanish because the terminal got narrow.
 	if s.inTransaction {
@@ -413,14 +364,12 @@ func formatElapsed(d time.Duration) string {
 //
 // The width has to be read during Draw: asking the widget earlier returns the
 // zero rect it holds before tview lays it out, and rendering against that
-// drops every field but the environment badge. Drawing per frame also means
-// the bar re-flows when the window is resized.
+// drops every field that is allowed to go, leaving only what must never be
+// hidden. Drawing per frame also means the bar re-flows when the window is
+// resized.
 type statusBar struct {
 	*tview.TextView
 	current func() status
-	// record hands the zones of this frame to the application's hitmap,
-	// offset into screen columns. Nil in a bar nobody is clicking.
-	record func(row int, zones []zone)
 }
 
 func newStatusBar(current func() status) *statusBar {
@@ -431,16 +380,12 @@ func newStatusBar(current func() status) *statusBar {
 }
 
 func (b *statusBar) Draw(screen tcell.Screen) {
-	x, y, width, _ := b.GetInnerRect()
+	_, _, width, _ := b.GetInnerRect()
 	if width <= 0 {
 		width = defaultStatusWidth
 	}
 
-	text, zones := b.current().renderWidth(width)
-	b.SetText(text)
-	if b.record != nil {
-		b.record(y, offsetZones(zones, x))
-	}
+	b.SetText(b.current().renderWidth(width))
 	b.TextView.Draw(screen)
 }
 

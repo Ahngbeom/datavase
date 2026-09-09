@@ -2,13 +2,13 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/complete"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/match"
 	"github.com/Ahngbeom/datavase/internal/session"
 )
 
@@ -17,71 +17,46 @@ import (
 // rather than hold it.
 const connectTimeout = 15 * time.Second
 
-// showDataSources offers the configured datasources.
+// showDataSources opens the list: connect to another, or change the file.
 func (a *App) showDataSources() {
 	if a.connect == nil {
 		a.notice("this session cannot switch datasource")
 		return
 	}
-	if len(a.cfg.DataSources) < 2 {
-		a.notice("only one datasource is configured")
-		return
-	}
 
-	box := a.newSearchBox("datasource: ", " datasources ", pageDataSource, a.dataSourceChoices)
-	a.pages.AddPage(pageDataSource, centred(box, 72, 20), true, true)
+	save := func() error {
+		if a.configPath == "" {
+			return errors.New("no configuration file to save to")
+		}
+		return config.Save(a.configPath, a.cfg)
+	}
+	a.picker = newDSPicker(a.app, pickerDeps{
+		cfg:     a.cfg,
+		current: a.conn.DataSource().Name,
+		save:    save,
+		secrets: a.secrets,
+		probe:   a.probe,
+		close:   a.closeDataSources,
+		connect: func(ds *config.DataSource) {
+			a.closeDataSources()
+			a.switchTo(ds)
+		},
+	})
+	a.pages.AddPage(pageDataSource, centred(a.picker.Primitive(), 80, 24), true, true)
+	a.app.SetFocus(a.picker.Primitive())
 }
 
-// dataSourceChoices filters the configured datasources.
-//
-// The environment is the secondary line rather than a decoration: choosing
-// between two datasources is most often choosing between two environments,
-// and the name alone — "orders", "orders-2" — does not say which is which.
-func (a *App) dataSourceChoices(term string) []searchItem {
-	current := a.conn.DataSource().Name
-
-	rows := make([]ranked, 0, len(a.cfg.DataSources))
-	for i := range a.cfg.DataSources {
-		ds := &a.cfg.DataSources[i]
-
-		score, ok := match.Fuzzy(term, ds.Name)
-		if !ok {
-			continue
-		}
-
-		detail := fmt.Sprintf("%s · %s@%s:%d", ds.Env, ds.User, ds.Host, ds.Port)
-		if ds.Name == current {
-			detail += " · current"
-		}
-
-		rows = append(rows, ranked{
-			item: searchItem{
-				primary:   ds.Name,
-				secondary: detail,
-				accept: func() {
-					a.closeSearchBox(pageDataSource)
-					a.switchTo(ds)
-				},
-			},
-			score: score,
-		})
-	}
-
-	items := sortRanked(rows)
-	if len(items) == 0 {
-		if term == "" {
-			return []searchItem{nothingHere("no other datasource is configured",
-				"add one with `dv init`")}
-		}
-		return []searchItem{noMatch("datasource", term)}
-	}
-	return items
+func (a *App) closeDataSources() {
+	a.pages.RemovePage(pageDataSource)
+	a.picker = nil
+	a.app.SetFocus(a.editor)
 }
 
 // switchTo moves the session to another datasource, asking about anything it
 // would throw away first.
 func (a *App) switchTo(ds *config.DataSource) {
 	if ds.Name == a.conn.DataSource().Name {
+		a.notice("already on " + ds.Name)
 		return
 	}
 	if a.running != nil {
@@ -135,31 +110,23 @@ func (a *App) openDataSource(ds *config.DataSource) {
 // adopt makes a newly opened session the one the interface is looking at.
 //
 // Everything that describes where you are moves together, in one step. A
-// half-switched interface — the new connection behind the old environment's
-// colour, or the old datasource's tables in the tree — is worse than either
-// state on its own, because both of them look like they are telling the truth.
+// half-switched interface — the new connection behind the old datasource's
+// tables in the tree — is worse than either state on its own, because both
+// of them look like they are telling the truth.
 func (a *App) adopt(sess *session.Session) {
 	old := a.sess
 
 	a.sess, a.conn = sess, sess.Conn
 	ds := sess.Conn.DataSource()
 
-	// The unlock is per session and per datasource both. Carrying an unlock
-	// granted on stage over to production is the one way this feature could
-	// undo the guard.
-	a.status.writesEnabled = false
-
 	// The rows on screen belong to the datasource that produced them, and
 	// nothing about them is true of this one. The same goes for the schema
-	// that was chosen and the definition last looked at: a name that exists
-	// on both servers is the case where keeping them would mislead rather
-	// than merely confuse.
+	// that was chosen: a name that exists on both servers is the case where
+	// keeping it would mislead rather than merely confuse.
 	a.buf.Reset()
 	a.content.unsort()
 	a.grid.ScrollToBeginning()
 	a.selectedSchema = ""
-	a.ddlText = ""
-	a.ddlView.SetText("")
 
 	// Completion is scoped to the datasource in the cache, so it is rebuilt
 	// rather than kept; a stale one offers tables that are not there.
@@ -169,20 +136,14 @@ func (a *App) adopt(sess *session.Session) {
 
 	// loadSchemas reloads the completion cache behind it, so the tree and
 	// what completion offers move together.
-	a.paintSpine()
 	a.loadSchemas()
 
 	a.status.phase = phaseIdle
 	a.status.err = nil
-	a.notice(fmt.Sprintf("switched to %s · %s", ds.Name, ds.Env))
+	a.notice(fmt.Sprintf("switched to %s", ds.Name))
 
 	// Closed last, and off the interface's goroutine: Close waits on the
 	// connection and then on the tunnel, and neither is something to hold a
 	// redraw behind.
 	go old.Close()
-}
-
-// paintSpine puts the current environment's colour on the frame.
-func (a *App) paintSpine() {
-	a.spine.SetBackgroundColor(envStyleFor(a.conn.DataSource().Env).bg)
 }

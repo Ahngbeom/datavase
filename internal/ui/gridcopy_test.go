@@ -40,21 +40,6 @@ func TestACopiedCellIsNotEscapedForTheScreen(t *testing.T) {
 	}
 }
 
-// A row is copied to be pasted somewhere that understands columns, so the
-// separator is a tab rather than anything prettier.
-func TestCopyingARowSeparatesTheValuesWithTabs(t *testing.T) {
-	buf := bufferWith([]string{"a", "b", "c"},
-		[]any{int64(1), "two", nil})
-
-	got, ok := rowValues(buf, 0)
-	if !ok {
-		t.Fatal("rowValues reported nothing to copy")
-	}
-	if want := "1\ttwo\tNULL"; got != want {
-		t.Errorf("rowValues() = %q, want %q", got, want)
-	}
-}
-
 func TestThereIsNothingToCopyFromARowThatIsNotThere(t *testing.T) {
 	buf := bufferWith([]string{"id"}, []any{int64(1)})
 
@@ -63,9 +48,6 @@ func TestThereIsNothingToCopyFromARowThatIsNotThere(t *testing.T) {
 	}
 	if _, ok := cellValue(buf, 0, 5); ok {
 		t.Error("cellValue found a value in a column that does not exist")
-	}
-	if _, ok := rowValues(buf, 5); ok {
-		t.Error("rowValues found a row that does not exist")
 	}
 }
 
@@ -81,16 +63,15 @@ func TestTheRowViewNamesTheColumnTypeWhenTheServerGaveOne(t *testing.T) {
 	}
 }
 
-// The key's meaning depends on four things at once, and the order between
+// The key's meaning depends on three things at once, and the order between
 // them is a judgement rather than an implementation detail — so it is stated
 // in one place and pinned here.
 func TestCancellingWinsOverEveryKindOfCopyingWhileSomethingRuns(t *testing.T) {
 	for _, c := range []copyContext{
 		{running: true},
 		{running: true, onGrid: true},
-		{running: true, onDDL: true},
 		{running: true, hasSelection: true},
-		{running: true, onGrid: true, onDDL: true, hasSelection: true},
+		{running: true, onGrid: true, hasSelection: true},
 	} {
 		if got := c.resolve(); got != intentCancel {
 			t.Errorf("%+v resolved to %v, want intentCancel — the way to stop a "+
@@ -105,14 +86,9 @@ func TestWithNothingRunningTheKeyCopiesWhateverHasFocus(t *testing.T) {
 		ctx  copyContext
 		want copyIntent
 	}{
-		{"the ddl tab", copyContext{onDDL: true}, intentDefinition},
 		{"a selection in the editor", copyContext{hasSelection: true}, intentSelection},
 		{"a cell in the results", copyContext{onGrid: true}, intentCell},
 		{"nothing at all", copyContext{}, intentNothing},
-		// The definition on screen is the obvious thing to copy there, even
-		// though the editor still holds a selection behind it.
-		{"the ddl tab over an editor selection",
-			copyContext{onDDL: true, hasSelection: true}, intentDefinition},
 	}
 
 	for _, tt := range tests {
@@ -121,21 +97,5 @@ func TestWithNothingRunningTheKeyCopiesWhateverHasFocus(t *testing.T) {
 				t.Errorf("resolve() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-// The plan pane joins the same precedence as the definition, and behind the
-// same rule: while a statement runs the key cancels it.
-func TestTheCopyKeyOnThePlanPane(t *testing.T) {
-	if got := (copyContext{onPlan: true}).resolve(); got != intentPlan {
-		t.Errorf("with the plan focused the key resolved to %v, want the plan", got)
-	}
-	if got := (copyContext{onPlan: true, running: true}).resolve(); got != intentCancel {
-		t.Errorf("the plan pane took the key from a running statement: %v", got)
-	}
-	// An editor selection does not reach past a focused plan, for the reason
-	// the definition does not either: the key copies whatever has focus.
-	if got := (copyContext{onPlan: true, hasSelection: true}).resolve(); got != intentPlan {
-		t.Errorf("a stale editor selection won over the focused plan: %v", got)
 	}
 }

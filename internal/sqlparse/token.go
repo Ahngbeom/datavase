@@ -1,9 +1,10 @@
 // Package sqlparse provides a lightweight MySQL tokenizer.
 //
-// It is not a full parser. Its job is to answer the questions guard and the
-// editor ask — where does a statement start and end, what kind is it, does
-// it have a top-level WHERE — with enough precision that literals, comments
-// and quoted identifiers can never be mistaken for syntax.
+// It is not a full parser. Its job is to answer the questions the editor and
+// the connection ask — where does a statement start and end, what kind is
+// it, does it already limit its own result — with enough precision that
+// literals, comments and quoted identifiers can never be mistaken for
+// syntax.
 package sqlparse
 
 import "strings"
@@ -66,7 +67,8 @@ func (t Token) IsKeyword(name string) bool {
 // Tokenize splits sql into tokens.
 //
 // Version-hint comments (/*! ... */) are unwrapped rather than skipped:
-// MySQL executes their contents, so guard has to see them.
+// MySQL executes their contents, so Kind has to see the verb inside one —
+// "/*! DELETE FROM t */" is a delete, not an opaque comment.
 func Tokenize(sql string) []Token {
 	l := &lexer{src: sql}
 	l.run(0)

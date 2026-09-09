@@ -14,7 +14,7 @@ import (
 //
 // It draws no box. Three boxes cost six rows and six columns of chrome, and
 // each of their titles repeated what the tab strip two rows below already
-// said — " results " above "▸results DDL". The header is now the only place a
+// said — " results " above "▸results". The header is now the only place a
 // region names itself, and a hairline separates it from its neighbour.
 //
 // The schema pane, the result pane and the editor all use it, so there is no
@@ -31,8 +31,8 @@ type tabbed struct {
 	// abbreviated to fit.
 	width int
 
-	// detail is the trailing note this region owns — the open file, a hint
-	// that no statement has run yet.
+	// detail is the trailing note this region owns — a hint that no
+	// statement has run yet, say.
 	//
 	// It is a function read at draw time rather than a string pushed on every
 	// change: with no box to double, the header is the only cue a region has,
@@ -43,6 +43,12 @@ type tabbed struct {
 	// GetFocus takes the same one — and the Flex already knows, because the
 	// focused widget is one of its children.
 	detail func() string
+
+	// detailTarget makes the trailing detail a control, read at draw time
+	// like detail itself: a static target would stay a zone over whatever
+	// text detail moves on to next, rather than only over the control it
+	// was meant for. Nil, like a zoneNone result, leaves the detail as text.
+	detailTarget func() zoneTarget
 
 	// record hands this frame's header zones to the application's hitmap.
 	record func(row int, zones []zone)
@@ -76,9 +82,8 @@ func (t *tabbed) add(name string, p tview.Primitive) {
 // only holds a single primitive under no name at all.
 //
 // A header exists to disambiguate, and a region holding one thing has nothing
-// to disambiguate — so the editor's header carries which file is open and
-// whether it has focus, and never the word "editor". The caret is already
-// there; nobody needs telling.
+// to disambiguate — so the editor's header carries only the focus marker,
+// never the word "editor". The caret is already there; nobody needs telling.
 func (t *tabbed) only(p tview.Primitive) {
 	t.pages.AddPage("", p, true, true)
 	t.renderHeader()
@@ -141,7 +146,11 @@ func (t *tabbed) Draw(screen tcell.Screen) {
 }
 
 func (t *tabbed) renderHeader() {
-	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.width)
+	target := zoneNone
+	if t.detailTarget != nil {
+		target = t.detailTarget()
+	}
+	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), target, t.width)
 	t.header.SetText(text)
 	if t.record != nil {
 		t.record(t.headerRow, offsetZones(zones, t.headerCol))
@@ -157,8 +166,8 @@ const focusMarker = "▌"
 // regionHeader assembles the marker, the tab strip and the trailing detail.
 //
 // The detail is the first thing to go when the region is narrow: which tab you
-// are on is structural, while a file name or a hint is a convenience.
-func regionHeader(names []string, active int, focused bool, detail string, width int) (string, []zone) {
+// are on is structural, while a hint is a convenience.
+func regionHeader(names []string, active int, focused bool, detail string, detailTarget zoneTarget, width int) (string, []zone) {
 	if width < 1 {
 		width = 1
 	}
@@ -184,7 +193,11 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 	// Four cells is the least that can carry a legible fragment; below that the
 	// detail is noise rather than information.
 	if room := remaining - used - len(gap); detail != "" && room >= 4 {
+		before := visibleCost(line)
 		line += gap + tag(colourMuted, result.Truncate(detail, room))
+		if detailTarget != zoneNone {
+			zones = append(zones, zone{from: before + len(gap), to: visibleCost(line), target: detailTarget, index: -1})
+		}
 	}
 
 	// The region-name zone spans the whole header and is appended last, after

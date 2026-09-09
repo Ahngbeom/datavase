@@ -51,7 +51,7 @@ type envStore struct{ inner Store }
 //
 // Only reading is layered. A process cannot export a variable into the shell
 // that started it, so Set and Delete stay with the keychain and report its
-// failure honestly — see the message `dv init` prints when they do.
+// failure honestly — see the message `dv auth` prints when they do.
 func WithEnv(inner Store) Store { return &envStore{inner: inner} }
 
 func (e *envStore) Get(account string) (string, error) {

@@ -23,8 +23,8 @@ type Binding struct {
 	Mods tcell.ModMask
 }
 
-// Event renders the binding as an event, which is how tests and the round
-// trip from configuration reach Lookup.
+// Event renders the binding as an event, which is how tests reach Lookup
+// without constructing a tcell.EventKey by hand.
 func (b Binding) Event() *tcell.EventKey {
 	return tcell.NewEventKey(b.Key, b.Rune, b.Mods)
 }
@@ -62,19 +62,15 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlB: 'b',
 	tcell.KeyCtrlC: 'c',
 	tcell.KeyCtrlD: 'd',
-	tcell.KeyCtrlE: 'e',
 	tcell.KeyCtrlF: 'f',
 	tcell.KeyCtrlG: 'g',
 	tcell.KeyCtrlN: 'n',
-	tcell.KeyCtrlO: 'o',
-	tcell.KeyCtrlP: 'p',
 	tcell.KeyCtrlQ: 'q',
 	tcell.KeyCtrlR: 'r',
 	tcell.KeyCtrlS: 's',
 	tcell.KeyCtrlV: 'v',
 	tcell.KeyCtrlX: 'x',
 	tcell.KeyCtrlY: 'y',
-	tcell.KeyCtrlZ: 'z',
 
 	// Ctrl+Space arrives as NUL on terminals without the extended protocol.
 	tcell.KeyNUL: ' ',
@@ -82,8 +78,6 @@ var controlCodeRune = map[tcell.Key]rune{
 	tcell.KeyCtrlUnderscore: '/',
 	// Ctrl+Enter degrades to a line feed, which is Ctrl+J.
 	tcell.KeyCtrlJ: enterStandIn,
-	// Ctrl+\ arrives as the file separator, 0x1C.
-	tcell.KeyCtrlBackslash: '\\',
 }
 
 // enterStandIn is the rune Ctrl+J folds to. It is not a character anyone can
@@ -94,97 +88,6 @@ const enterStandIn = '\ue000'
 // keyAliases collapses keys tcell reports inconsistently across terminals.
 var keyAliases = map[tcell.Key]tcell.Key{
 	tcell.KeyBackspace: tcell.KeyBackspace2,
-}
-
-// modifierNames are accepted in configuration, in the order they are printed.
-var modifierNames = map[string]tcell.ModMask{
-	"ctrl":    tcell.ModCtrl,
-	"control": tcell.ModCtrl,
-	"cmd":     tcell.ModMeta,
-	"command": tcell.ModMeta,
-	"super":   tcell.ModMeta,
-	"meta":    tcell.ModMeta,
-	"shift":   tcell.ModShift,
-	"alt":     tcell.ModAlt,
-	"option":  tcell.ModAlt,
-}
-
-// namedKeys are the non-character keys configuration can refer to.
-var namedKeys = map[string]tcell.Key{
-	"enter":     tcell.KeyEnter,
-	"return":    tcell.KeyEnter,
-	"tab":       tcell.KeyTab,
-	"backtab":   tcell.KeyBacktab,
-	"escape":    tcell.KeyEscape,
-	"esc":       tcell.KeyEscape,
-	"backspace": tcell.KeyBackspace2,
-	"delete":    tcell.KeyDelete,
-	"insert":    tcell.KeyInsert,
-	"home":      tcell.KeyHome,
-	"end":       tcell.KeyEnd,
-	"pageup":    tcell.KeyPgUp,
-	"pagedown":  tcell.KeyPgDn,
-	"up":        tcell.KeyUp,
-	"down":      tcell.KeyDown,
-	"left":      tcell.KeyLeft,
-	"right":     tcell.KeyRight,
-}
-
-// functionKeys covers f1 through f12.
-var functionKeys = map[string]tcell.Key{
-	"f1": tcell.KeyF1, "f2": tcell.KeyF2, "f3": tcell.KeyF3, "f4": tcell.KeyF4,
-	"f5": tcell.KeyF5, "f6": tcell.KeyF6, "f7": tcell.KeyF7, "f8": tcell.KeyF8,
-	"f9": tcell.KeyF9, "f10": tcell.KeyF10, "f11": tcell.KeyF11, "f12": tcell.KeyF12,
-}
-
-// ParseBinding reads a specification such as "ctrl+shift+enter".
-func ParseBinding(spec string) (Binding, error) {
-	parts := strings.Split(spec, "+")
-
-	var (
-		mods tcell.ModMask
-		key  string
-	)
-	for i, part := range parts {
-		p := strings.ToLower(strings.TrimSpace(part))
-		if p == "" {
-			return Binding{}, fmt.Errorf("key binding %q has an empty part", spec)
-		}
-
-		// Everything but the last part must be a modifier.
-		if i < len(parts)-1 {
-			m, ok := modifierNames[p]
-			if !ok {
-				return Binding{}, fmt.Errorf("key binding %q: unknown modifier %q", spec, p)
-			}
-			mods |= m
-			continue
-		}
-		key = p
-	}
-
-	if key == "" {
-		return Binding{}, fmt.Errorf("key binding %q is empty", spec)
-	}
-	// A lone modifier is not a binding.
-	if _, isMod := modifierNames[key]; isMod {
-		return Binding{}, fmt.Errorf("key binding %q names only a modifier", spec)
-	}
-
-	if k, ok := namedKeys[key]; ok {
-		return Binding{Key: k, Mods: mods}, nil
-	}
-	if k, ok := functionKeys[key]; ok {
-		return Binding{Key: k, Mods: mods}, nil
-	}
-	if key == "space" {
-		return Binding{Key: tcell.KeyRune, Rune: ' ', Mods: mods}, nil
-	}
-	if r := []rune(key); len(r) == 1 {
-		return Binding{Key: tcell.KeyRune, Rune: unicode.ToLower(r[0]), Mods: mods}, nil
-	}
-
-	return Binding{}, fmt.Errorf("key binding %q: unknown key %q", spec, key)
 }
 
 // keyLabels are how named keys print on the help screen.

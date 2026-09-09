@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/recent"
+	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
@@ -26,8 +27,8 @@ import (
 )
 
 // harness drives the real interface against a simulated terminal, so the
-// wiring between key presses, guard and the database is exercised end to
-// end without needing a tty.
+// wiring between key presses and the database is exercised end to end
+// without needing a tty.
 type harness struct {
 	app     *App
 	screen  tcell.SimulationScreen
@@ -84,15 +85,6 @@ func (h *harness) waitForBackgroundRefresh(datasource string) {
 
 func newHarness(t *testing.T, env config.Env) *harness {
 	t.Helper()
-	return newHarnessWithIntro(t, env, "")
-}
-
-// newHarnessWithIntro is newHarness for the tests that need the first-run card.
-//
-// An empty marker path is what every other test gets, and is what keeps the
-// card out of their way: a session with nowhere to record it never shows it.
-func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harness {
-	t.Helper()
 
 	ds, password := testmysql.DataSource(t)
 	ds.Env = env
@@ -104,26 +96,7 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker, false)
-}
-
-// newHarnessAssumingPreset is newHarness for the tests that are about a
-// session whose configuration never named a keyboard — the case the opening
-// line's assumed-keyboard clause exists for.
-func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
-	t.Helper()
-
-	ds, password := testmysql.DataSource(t)
-	ds.Env = env
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := db.Open(ctx, ds, password, "")
-	if err != nil {
-		t.Fatalf("db.Open() error = %v", err)
-	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, "", true)
+	return harnessWith(t, &session.Session{Conn: conn}, ds)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -133,10 +106,10 @@ func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds, "", false)
+	return harnessWith(t, sess, ds)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string, presetAssumed bool) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -165,26 +138,19 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 	}
 	t.Cleanup(func() { hist.Close() })
 
-	// The keyboard is stated rather than taken from the default. These tests
-	// are about behaviour that predates the modal editor — typing into the
-	// editor, undo, completion — and would otherwise start failing the day
-	// the default changed, for reasons that have nothing to do with them.
-	// Modal behaviour has its own harness.
-	keys, err := keymap.ForPreset(keymap.PresetDataGrip)
-	if err != nil {
-		t.Fatalf("ForPreset(datagrip) error = %v", err)
-	}
-
-	// Backed by a temporary file so that attaching a directory in a test never
-	// writes into the developer's own state directory.
-	recents, err := recent.Open(filepath.Join(t.TempDir(), "recent-dirs.json"))
-	if err != nil {
-		t.Fatalf("recent.Open() error = %v", err)
-	}
-
 	app := New(sess, cfg, Deps{
-		Keys: keys, Cache: cache, History: hist, Recent: recents, IntroPath: introMarker,
-		PresetAssumed: presetAssumed,
+		Cache:   cache,
+		History: hist,
+		Secrets: secret.NewMemory(),
+		Probe: func(context.Context, *config.DataSource, string) (string, error) {
+			return "test", nil
+		},
+		// The datasource dialog refuses to open at all with no way to
+		// switch; tests that exercise a real switch replace this via
+		// h.inspect before opening it, same as they always have.
+		Connect: func(context.Context, *config.DataSource) (*session.Session, error) {
+			return nil, errors.New("this harness does not connect by default")
+		},
 	})
 	app.SetScreen(screen)
 
@@ -300,19 +266,6 @@ func (h *harness) click(x, y int) {
 	h.screen.InjectMouse(x, y, tcell.Button1, tcell.ModNone)
 	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
 	h.awaitMouseAction(tview.MouseLeftClick, before+1)
-}
-
-// rightClick presses and releases the secondary button at a screen position,
-// the same shape as click. tview maps tcell.ButtonSecondary to
-// MouseRightClick (application.go's button table), which is the action a
-// context menu opens on.
-func (h *harness) rightClick(x, y int) {
-	h.t.Helper()
-
-	before := h.mouseActionCount(tview.MouseRightClick)
-	h.screen.InjectMouse(x, y, tcell.ButtonSecondary, tcell.ModNone)
-	h.screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
-	h.awaitMouseAction(tview.MouseRightClick, before+1)
 }
 
 // doubleClick presses twice inside tview's own double-click interval.
@@ -463,20 +416,6 @@ func (h *harness) treeNodePosition(offset int) (int, int) {
 	return x, y
 }
 
-// tableItemPosition is a screen position on the tables tab's Nth item.
-func (h *harness) tableItemPosition(index int) (int, int) {
-	h.t.Helper()
-	h.settle()
-
-	var x, y int
-	h.inspect(func(a *App) bool {
-		rx, ry, _, _ := a.tableList.GetInnerRect()
-		x, y = rx+2, ry+index
-		return true
-	})
-	return x, y
-}
-
 // regionHeaderPosition is a screen position on a pane's own header row, at
 // its leftmost column — inside the region-name zone and, for a pane with
 // tabs, outside every one of them.
@@ -594,19 +533,6 @@ func (h *harness) do(action keymap.Action) {
 	h.inject(tcell.NewEventKey(b.Key, b.Rune, b.Mods))
 }
 
-// runCommand runs a named palette command the way a user does: open the
-// palette, type the name, take what Enter picks. Every existing palette test
-// either reads the list or drives the App method directly; this exists for a
-// test that only cares what running a command does, not how the palette
-// itself behaves.
-func (h *harness) runCommand(name string) {
-	h.t.Helper()
-
-	h.do(keymap.ActionCommandPalette)
-	h.typeInto(name)
-	h.press(tcell.KeyEnter)
-}
-
 // editorText reads the editor buffer from the UI goroutine.
 func (h *harness) editorText() string {
 	h.t.Helper()
@@ -637,6 +563,28 @@ func (h *harness) undo() {
 func (h *harness) moveCaret(offset int) {
 	h.t.Helper()
 	h.app.app.QueueUpdateDraw(func() { h.app.editor.Select(offset, offset) })
+	h.settle()
+}
+
+// buffer puts text in the editor with the caret at an offset, focused.
+//
+// The caret is placed in a later tick on purpose. TextArea rebuilds its row
+// index lazily, and a Select issued in the same tick as SetText is resolved
+// against the row index of the text that has just been thrown away — it
+// lands on the wrong line.
+func (h *harness) buffer(text string, caret int) {
+	h.t.Helper()
+
+	h.inspect(func(a *App) bool {
+		a.editor.SetText(text, false)
+		a.app.SetFocus(a.editor)
+		return true
+	})
+	h.inspect(func(a *App) bool {
+		a.editor.Select(caret, caret)
+		a.clearAnchor()
+		return true
+	})
 	h.settle()
 }
 
@@ -694,20 +642,15 @@ func (h *harness) waitForScreen(want string) bool {
 	return false
 }
 
-func TestInterfaceShowsTheEnvironmentAndDataSource(t *testing.T) {
+func TestInterfaceShowsTheDataSource(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
 
 	got := h.text()
-	// The environment is set as a filled chip, in capitals, so that it cannot
-	// be mistaken for the red of an error message.
-	if !strings.Contains(strings.ToLower(got), "prod") {
-		t.Errorf("screen does not show the environment:\n%s", got)
-	}
 	if !strings.Contains(got, "integration") {
 		t.Errorf("screen does not show the datasource name:\n%s", got)
 	}
 	// The schema an unqualified statement reaches is on the top line beside
-	// the environment; nothing else on screen says which it is.
+	// the datasource; nothing else on screen says which it is.
 	if !strings.Contains(got, "@"+testmysql.DefaultDatabase) {
 		t.Errorf("screen does not show the current schema:\n%s", got)
 	}
@@ -718,32 +661,9 @@ func TestInterfaceShowsTheEnvironmentAndDataSource(t *testing.T) {
 	}
 }
 
-// The route that survives a host application taking ⌘B.
-//
-// This is the whole point of the palette carrying every command and of its own
-// plain key: nothing here presses a chord, and the schema tree still appears.
-func TestTheSchemaTreeIsReachableWithoutItsChord(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	// F3, not ⌘⇧A: the escape hatch has to open with a key nothing upstream
-	// is in a position to claim.
-	h.press(tcell.KeyF3)
-	h.waitFor("the palette", func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pagePalette
-	})
-
-	h.typeInto("schema tree")
-	h.press(tcell.KeyEnter)
-
-	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
-	if !h.waitForScreen(tabTables) {
-		t.Errorf("the schema pane did not appear:\n%s", h.text())
-	}
-}
-
 // The schema tree is one key away rather than a third of the screen, because
-// this application already answers "where is that table" with a finder.
+// completion already answers "where is that table" the moment its name is
+// typed.
 func TestTheSchemaPaneStartsHiddenAndComesBackOnRequest(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
@@ -778,8 +698,8 @@ func TestRunningASelectFillsTheGrid(t *testing.T) {
 	}
 }
 
-// A file of migrations is the reason the worktree exists, and a migration
-// file is almost never one statement. Run-everything has to run all of them.
+// A migration file is almost never one statement. Run-everything has to run
+// all of them.
 func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	h.typeSQL("SELECT 1; SELECT 2; SELECT 3")
@@ -792,96 +712,20 @@ func TestRunEverythingRunsEveryStatementInTheBuffer(t *testing.T) {
 	})
 }
 
-// A refusal stops the rest. The statements after it were written to follow
-// the one that did not run, and with no transaction to unwind what already
-// happened, the count of what ran is the only thing that says where to look.
-func TestRunEverythingStopsAtARefusalAndSaysHowFarItGot(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-	h.typeSQL("SELECT 1; DELETE FROM dv_seq; SELECT 3")
-
-	h.do(keymap.ActionRunAll)
-
-	h.waitFor("the batch to report where it stopped", func(a *App) bool {
-		return strings.Contains(a.status.message, "refused at statement 2")
-	})
-	h.waitFor("the third statement to have been left alone", func(a *App) bool {
-		return strings.Contains(a.status.message, "1 ran")
-	})
-
-	if !h.waitForScreen("Refused") {
-		t.Errorf("the refusal itself never reached the screen:\n%s", h.text())
-	}
-}
-
-// Declining the confirmation is a decision about the whole batch, not about
-// one statement: carrying on would run the statements that were written to
-// follow the one just refused.
-func TestDecliningAConfirmationStopsTheRestOfTheBatch(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("SELECT 1; DELETE FROM dv_seq WHERE id = 1; SELECT 3")
-
-	h.do(keymap.ActionRunAll)
-
-	if !h.waitForScreen("Run it?") {
-		t.Fatalf("no confirmation appeared:\n%s", h.text())
-	}
-
-	// Cancel is the button the dialog opens on, so Enter declines.
-	h.press(tcell.KeyEnter)
-
-	h.waitFor("the batch to stop where it was declined", func(a *App) bool {
-		return strings.Contains(a.status.message, "cancelled at statement 2") &&
-			strings.Contains(a.status.message, "1 ran")
-	})
-}
-
-// The guard stops the user and makes them agree to a write. Reporting "0
-// rows" afterwards told them nothing about what they had just agreed to.
+// A write reports how many rows it changed. Reporting "0 rows" would tell
+// the user nothing about what the statement actually did.
 func TestAWriteReportsHowManyRowsItChangedOnTheStatusBar(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 	seedRows(t, h, 5)
 	h.typeSQL("UPDATE dv_ui SET n = n + 100 WHERE n <= 2")
 
 	h.do(keymap.ActionRun)
-	confirmWrite(t, h)
 
 	h.waitFor("the bar to say what the write changed", func(a *App) bool {
 		return a.status.written != nil && a.status.written.RowsAffected == 2
 	})
 	if !h.waitForScreen("2 rows affected") {
 		t.Errorf("the count never reached the screen:\n%s", h.text())
-	}
-}
-
-// The guard's decision has to reach the screen, not just the policy engine.
-func TestProductionDeleteIsRefusedOnScreen(t *testing.T) {
-	h := newHarness(t, config.EnvProd)
-	h.typeSQL("DELETE FROM dv_seq")
-
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if !strings.Contains(got, "Refused") {
-		t.Fatalf("no refusal dialog appeared:\n%s", got)
-	}
-	if !strings.Contains(strings.ToUpper(got), "WHERE") {
-		t.Errorf("the refusal does not explain the missing WHERE:\n%s", got)
-	}
-}
-
-// Outside production the same statement is possible, but only deliberately.
-func TestDevelopmentDeleteAsksForTypedConfirmation(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.typeSQL("DELETE FROM dv_seq")
-
-	h.do(keymap.ActionRun)
-
-	got := h.text()
-	if !strings.Contains(strings.ToLower(got), "confirm") {
-		t.Fatalf("no confirmation dialog appeared:\n%s", got)
-	}
-	if !strings.Contains(got, "DELETE") {
-		t.Errorf("the dialog does not name the phrase to type:\n%s", got)
 	}
 }
 
@@ -921,48 +765,6 @@ func TestHelpOpensAndCloses(t *testing.T) {
 	if strings.Contains(h.text(), "run the statement under the cursor") {
 		t.Errorf("help did not close:\n%s", h.text())
 	}
-}
-
-// Help that names a key the application does not actually respond to is
-// worse than no help, and it misleads exactly the people consulting it.
-func TestHelpShowsTheBindingsThatAreInForce(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	// Rebind to something no default uses, so a hardcoded help text would
-	// fail to mention it.
-	h.app.app.QueueUpdateDraw(func() {
-		if err := h.app.keys.Apply(map[string][]string{"run": {"f8"}}); err != nil {
-			t.Errorf("Apply() error = %v", err)
-		}
-	})
-	h.settle()
-
-	h.do(keymap.ActionHelp)
-
-	got := h.text()
-	line := lineContaining(t, got, keymap.ActionRun.Describe())
-
-	if !strings.Contains(line, "F8") {
-		t.Errorf("the run line does not show the rebound key: %q", line)
-	}
-	// Checked on this line alone: Shift+F5 still belongs to run-all, and a
-	// whole-screen search would match it.
-	if strings.Contains(line, "F5") {
-		t.Errorf("the run line still shows the replaced default: %q", line)
-	}
-}
-
-// lineContaining returns the screen line holding want.
-func lineContaining(t *testing.T, screen, want string) string {
-	t.Helper()
-
-	for _, line := range strings.Split(screen, "\n") {
-		if strings.Contains(line, want) {
-			return line
-		}
-	}
-	t.Fatalf("no line contains %q:\n%s", want, screen)
-	return ""
 }
 
 // Every key the help prints must resolve back to the action it is listed
@@ -1338,16 +1140,6 @@ func seedRows(t *testing.T, h *harness, n int) {
 	t.Cleanup(func() { h.app.conn.Exec(ctx, "DROP TABLE IF EXISTS dv_ui") })
 }
 
-// confirmWrite answers the guard's confirmation dialog with Run.
-func confirmWrite(t *testing.T, h *harness) {
-	t.Helper()
-	if !h.waitForScreen("Run it?") {
-		t.Fatalf("no confirmation appeared:\n%s", h.text())
-	}
-	h.press(tcell.KeyRight)
-	h.press(tcell.KeyEnter)
-}
-
 // The whole point, driven the way a DBA drives it: type BEGIN, change
 // something, look at it, change your mind. Before this the ROLLBACK reported
 // success and the row stayed.
@@ -1366,7 +1158,6 @@ func TestATypedRollbackUndoesTheWork(t *testing.T) {
 
 	h.typeSQL("DELETE FROM dv_ui WHERE n <= 2")
 	h.do(keymap.ActionRun)
-	confirmWrite(t, h)
 	h.waitFor("the delete to report what it removed", func(a *App) bool {
 		return a.status.written != nil && a.status.written.RowsAffected == 2
 	})
@@ -1382,18 +1173,11 @@ func TestATypedRollbackUndoesTheWork(t *testing.T) {
 	}
 }
 
-// Session state was refused because it could not reach the next statement.
-// Inside a transaction the connection is held, so it can, and refusing would
-// now be the wrong answer.
-func TestSetIsRefusedOutsideATransactionAndAcceptedInside(t *testing.T) {
+// Session state runs inside a transaction because the connection is pinned
+// for its length, unlike the pooled connections an ordinary statement runs
+// on — where a SET would be silently discarded the moment it was handed back.
+func TestSetRunsInsideATransaction(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
-
-	h.typeSQL("SET SESSION sql_mode = 'STRICT_ALL_TABLES'")
-	h.do(keymap.ActionRun)
-	if !h.waitForScreen("Refused") {
-		t.Fatalf("SET was not refused outside a transaction:\n%s", h.text())
-	}
-	h.press(tcell.KeyEnter)
 
 	h.typeSQL("BEGIN")
 	h.do(keymap.ActionRun)

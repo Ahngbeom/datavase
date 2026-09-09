@@ -9,7 +9,6 @@ func TestParseMinimalDataSource(t *testing.T) {
 	const src = `
 datasources:
   - name: local
-    env: dev
     host: 127.0.0.1
     port: 3306
     user: root
@@ -29,8 +28,8 @@ datasources:
 	if got.Name != "local" {
 		t.Errorf("Name = %q, want %q", got.Name, "local")
 	}
-	if got.Env != EnvDev {
-		t.Errorf("Env = %q, want %q", got.Env, EnvDev)
+	if got.Env != "" {
+		t.Errorf("Env = %q, want empty", got.Env)
 	}
 	if got.Host != "127.0.0.1" {
 		t.Errorf("Host = %q, want %q", got.Host, "127.0.0.1")
@@ -139,7 +138,7 @@ datasources:
 
 // A config that fails to parse is safe; a config that parses into the wrong
 // env label is not. "production" must never be read as anything other than
-// an error, because guard would otherwise treat it as non-prod.
+// an error, so a typo cannot silently pick the wrong TLS default.
 func TestParseRejectsInvalidConfig(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -152,16 +151,6 @@ func TestParseRejectsInvalidConfig(t *testing.T) {
 datasources:
   - name: db
     env: production
-    host: h
-    user: u
-`,
-			wantErr: "env",
-		},
-		{
-			name: "missing env label",
-			src: `
-datasources:
-  - name: db
     host: h
     user: u
 `,
@@ -213,11 +202,6 @@ datasources:
 			wantErr: "duplicate",
 		},
 		{
-			name:    "no datasources",
-			src:     "datasources: []\n",
-			wantErr: "no datasources",
-		},
-		{
 			name: "tunnel without host",
 			src: `
 datasources:
@@ -246,9 +230,9 @@ datasources:
 }
 
 // A datasource that says nothing about TLS still gets a decision, and the
-// decision follows env for the same reason the guard does: production is
-// where an unencrypted credential on the wire costs the most, and it is the
-// one environment where the operator is most likely able to fix it.
+// decision follows env: production is where an unencrypted credential on the
+// wire costs the most, and it is the one environment where the operator is
+// most likely able to fix it.
 func TestTLSDefaultsFollowTheEnvironment(t *testing.T) {
 	const src = `
 datasources:
@@ -264,6 +248,9 @@ datasources:
     env: dev
     host: 127.0.0.1
     user: root
+  - name: no-env
+    host: 127.0.0.1
+    user: root
 `
 
 	cfg, err := Parse(strings.NewReader(src))
@@ -275,6 +262,7 @@ datasources:
 		"prod-app": TLSRequired,
 		"staging":  TLSPreferred,
 		"local":    TLSPreferred,
+		"no-env":   TLSPreferred,
 	}
 	for _, ds := range cfg.DataSources {
 		if ds.TLS != want[ds.Name] {
@@ -367,5 +355,34 @@ datasources:
 				t.Errorf("TLSCA = %q, want the configured path", got)
 			}
 		})
+	}
+}
+
+func TestAnOlderKeymapBlockIsIgnoredRatherThanRefused(t *testing.T) {
+	cfg, err := Parse(strings.NewReader(`
+datasources:
+  - name: local
+    host: 127.0.0.1
+    user: root
+keymap:
+  preset: vim
+  actions:
+    run: ["f5"]
+`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v; a v0.8 config must still open", err)
+	}
+	if got := cfg.Ignored(); len(got) != 1 || got[0] != "keymap" {
+		t.Errorf("Ignored() = %v, want [keymap]", got)
+	}
+}
+
+func TestAConfigWithNoKeymapIgnoresNothing(t *testing.T) {
+	cfg, err := Parse(strings.NewReader("datasources:\n  - name: local\n    host: h\n    user: u\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Ignored(); len(got) != 0 {
+		t.Errorf("Ignored() = %v, want none", got)
 	}
 }

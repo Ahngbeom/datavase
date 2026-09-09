@@ -6,7 +6,8 @@ import "strings"
 type StmtKind int
 
 const (
-	// StmtOther is anything not recognised. Guard treats it as unsafe.
+	// StmtOther is anything not recognised. ReturnsRows treats it as a read,
+	// for the reason given there.
 	StmtOther StmtKind = iota
 	// StmtSelect reads rows.
 	StmtSelect
@@ -119,8 +120,8 @@ func (s Statement) firstWord() (Token, bool) {
 }
 
 // kindIfSecondWordIs resolves a verb that starts more than one kind of
-// statement, falling back to StmtOther so the guard's fail-closed default
-// covers whatever else the verb might have begun.
+// statement, falling back to StmtOther for whatever else the verb might
+// have begun.
 func kindIfSecondWordIs(s Statement, want string, kind StmtKind) StmtKind {
 	var seen bool
 	for _, tk := range s.Tokens {
@@ -186,9 +187,10 @@ func (s Statement) Kind() StmtKind {
 // what actually happened, so it is exactly as dangerous as what follows it.
 // "ANALYZE FORMAT=JSON DELETE FROM orders" empties the table.
 //
-// A running wrapper therefore takes the kind of the statement it wraps, and
-// the guard reasons about that: HasTopLevelWhere scans at parenthesis depth
-// zero, so a bounded delete stays bounded through the prefix.
+// A running wrapper therefore takes the kind of the statement it wraps, so
+// ReturnsRows sees what the server will actually do: "ANALYZE FORMAT=JSON
+// DELETE FROM orders" is routed and counted as the delete it runs, not sent
+// as a query that would lose the affected-row count.
 //
 // Anything wrapping a verb this package does not recognise is StmtOther, which
 // is the fail-closed default and the reason kindIfSecondWordIs exists for
@@ -265,35 +267,6 @@ var verbKinds = map[string]StmtKind{
 	"CREATE":   StmtDDL, "ALTER": StmtDDL, "RENAME": StmtDDL,
 }
 
-// PlansAsJSON reports whether the statement answers with a JSON plan rather
-// than with rows.
-//
-// EXPLAIN and ANALYZE send a table unless FORMAT=JSON asks otherwise, and a
-// table belongs in the grid like any other result. Only the JSON form is
-// something to draw as a tree, and telling them apart is a question about the
-// statement's words rather than about its result.
-func (s Statement) PlansAsJSON() bool {
-	words := s.words()
-	if len(words) == 0 {
-		return false
-	}
-	switch strings.ToUpper(words[0]) {
-	case "EXPLAIN", "ANALYZE":
-	default:
-		return false
-	}
-
-	// FORMAT, = and JSON are three tokens or two depending on the spacing, so
-	// the words are read in sequence rather than matched as a string.
-	for i, w := range words {
-		if strings.EqualFold(w, "FORMAT") && i+1 < len(words) &&
-			strings.EqualFold(words[i+1], "JSON") {
-			return true
-		}
-	}
-	return false
-}
-
 // Verb is the statement's leading keyword, upper-cased, or "" if it has none.
 // Kind is the right question almost everywhere; this exists for the few
 // places that have to tell two statements of one kind apart.
@@ -303,12 +276,6 @@ func (s Statement) Verb() string {
 		return ""
 	}
 	return strings.ToUpper(first.Text)
-}
-
-// HasTopLevelWhere reports whether the statement is bounded by a WHERE
-// clause of its own, ignoring any that belong to subqueries.
-func (s Statement) HasTopLevelWhere() bool {
-	return s.hasTopLevelKeyword("WHERE")
 }
 
 // HasTopLevelLimit reports whether the statement already limits its result,

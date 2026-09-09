@@ -127,8 +127,8 @@ func TestTokenizeComments(t *testing.T) {
 }
 
 // MySQL executes the contents of /*! ... */ version-hint comments. Treating
-// them as ordinary comments would let a destructive statement past guard
-// while the server ran it.
+// them as ordinary comments would hide the real verb from Kind, which decides
+// whether a statement is sent as a query or a write.
 func TestTokenizeExecutableCommentsExposeTheirContents(t *testing.T) {
 	tests := []struct {
 		name string

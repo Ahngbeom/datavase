@@ -1,4 +1,4 @@
-// Package export writes result sets to CSV and JSON.
+// Package export writes result sets to CSV, JSON and Markdown.
 //
 // Export formatting is deliberately separate from the grid's: the grid
 // abbreviates for the eye — "NULL" for absence, an ellipsis for long values —
@@ -133,7 +133,7 @@ func jsonValue(v any) any {
 	}
 }
 
-// plainText renders a value for CSV: faithful, never abbreviated.
+// plainText renders a value for CSV and Markdown: faithful, never abbreviated.
 func plainText(v any) string {
 	switch value := v.(type) {
 	case nil:
@@ -163,4 +163,54 @@ func plainText(v any) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+// Markdown writes columns and rows as a pipe table.
+//
+// A table with no columns is written as nothing at all: "|  |" is not a
+// table, and a paste that contains it looks like a bug rather than an empty
+// result.
+func Markdown(w io.Writer, columns []string, rows [][]any) error {
+	if len(columns) == 0 {
+		return nil
+	}
+
+	var b strings.Builder
+	writeRow := func(cells []string) {
+		b.WriteString("| ")
+		b.WriteString(strings.Join(cells, " | "))
+		b.WriteString(" |\n")
+	}
+
+	header := make([]string, len(columns))
+	separator := make([]string, len(columns))
+	for i, name := range columns {
+		header[i] = markdownCell(name)
+		separator[i] = "---"
+	}
+	writeRow(header)
+	writeRow(separator)
+
+	cells := make([]string, len(columns))
+	for _, row := range rows {
+		for i := range cells {
+			cells[i] = ""
+			if i < len(row) {
+				cells[i] = markdownCell(plainText(row[i]))
+			}
+		}
+		writeRow(cells)
+	}
+
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// markdownCell keeps a value inside its cell: a pipe would start a new
+// column and a newline a new row, and either silently misaligns everything
+// after it.
+func markdownCell(s string) string {
+	s = strings.ReplaceAll(s, "|", `\|`)
+	s = strings.ReplaceAll(s, "\r\n", "<br>")
+	return strings.ReplaceAll(s, "\n", "<br>")
 }

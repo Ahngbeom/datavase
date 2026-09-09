@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
@@ -42,35 +41,12 @@ type App struct {
 
 	// OpenUI connects and runs the terminal interface. It is a field so the
 	// dispatch logic can be tested without starting a terminal.
-	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config, opt UIOptions) error
+	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error
 
-	// Attach hands the datasource to a session running elsewhere. It is nil
-	// for a monolithic run, which is when OpenUI is used instead.
-	//
-	// It takes no password: the process that opens the connection reads the
-	// keychain itself, the way a mid-session switch already does.
-	Attach func(ctx context.Context, ds *config.DataSource, cfg *config.Config, opt UIOptions) error
-
-	// RunServer runs the headless server in the foreground.
-	RunServer func() error
-	// StopServer ends a running server. force is --force: signal the pid the
-	// observation API reports rather than asking the session to end itself.
-	StopServer func(force bool) error
-	// ServerStatus describes what is running, in one paragraph for a person.
-	ServerStatus func() (string, error)
-	// APISnapshot fetches the observation snapshot as JSON.
-	APISnapshot func() ([]byte, error)
-}
-
-// UIOptions are the choices that belong to one invocation rather than to the
-// configuration file.
-//
-// It is a struct rather than more parameters so that the next such choice does
-// not change the signature every caller and every test has to spell out.
-type UIOptions struct {
-	// WorkDir is the directory of SQL work to attach, from --dir. Empty means
-	// the session starts unattached.
-	WorkDir string
+	// Launch shows the datasource list without a session and opens the
+	// interface on whichever entry the user connects to. It is how a machine
+	// with no configuration gets one.
+	Launch func() error
 }
 
 // HandleVersion answers a request for the version, reporting whether it did.
@@ -95,7 +71,7 @@ func HandleVersion(w io.Writer, args []string) bool {
 // Run dispatches args (excluding the program name) and returns an exit code.
 func (a *App) Run(args []string) int {
 	if len(args) == 0 {
-		return a.open("", UIOptions{})
+		return a.open("")
 	}
 
 	switch args[0] {
@@ -107,14 +83,6 @@ func (a *App) Run(args []string) int {
 		return a.auth(args[1:])
 	case "check":
 		return a.check(args[1:])
-	case "keys":
-		return a.keys(args[1:])
-	case "server":
-		return a.server(args[1:])
-	case "status":
-		return a.serverStatus()
-	case "api":
-		return a.api(args[1:])
 	case "help", "-h", "--help":
 		a.usage()
 		return exitOK
@@ -126,34 +94,17 @@ func (a *App) Run(args []string) int {
 }
 
 func (a *App) usage() {
-	fmt.Fprint(a.Err, `datavase — terminal MySQL client
+	fmt.Fprint(a.Out, `datavase — terminal MySQL client
 
 usage:
-  dv init               set up the first datasource, asking for what it needs
-  dv [open <name>]      open the TUI
-  dv open <name> --dir <path>
-                        open the TUI with a worktree of SQL files attached
+  dv                    open the interface; the datasource list unless exactly one is configured
+  dv open <name>        open a named datasource
   dv ls                 list configured datasources
   dv auth <name>        store a datasource password in the keychain
   dv auth -rm <name>    remove a stored password
   dv check <name>       verify that the datasource is reachable
   dv version            print the version
-  dv keys               show the key map
-  dv keys --ghostty     print Ghostty config so ⌘ bindings reach datavase
-  dv keys --iterm2      explain the equivalent iTerm2 settings
-  dv keys --tmux        print tmux settings for modified keys
-  dv keys --debug       report what this terminal sends for each key
-  dv status             say whether a session is running, and what it is doing
-  dv api snapshot       print what the running session is doing, as JSON
-  dv --no-session       run without a session server
   dv help               show this message
-
-advanced:
-  dv server             run the session server in the foreground
-  dv server stop        end a running session
-  dv server stop --force
-                        the session did not end within the wait above; signal
-                        its process directly instead of asking it again
 `)
 }
 
@@ -164,8 +115,8 @@ func (a *App) list() int {
 		if _, err := a.Secrets.Get(ds.Name); err == nil {
 			stored = "password stored"
 		}
-		fmt.Fprintf(a.Out, "%-16s %-6s %s:%d/%s  (%s)\n",
-			ds.Name, ds.Env, ds.Host, ds.Port, ds.Database, stored)
+		fmt.Fprintf(a.Out, "%-16s %s:%d/%s  (%s)\n",
+			ds.Name, ds.Host, ds.Port, ds.Database, stored)
 	}
 	return exitOK
 }
@@ -173,50 +124,34 @@ func (a *App) list() int {
 // CheckTimeout bounds how long `dv check` waits before giving up.
 const CheckTimeout = 15 * time.Second
 
-// openCmd parses `dv open [--dir <path>] [<datasource>]`.
-//
-// Flags and the name are read alternately rather than in one Parse call: Go's
-// flag package stops at the first positional argument, so `dv open local --dir
-// ~/work` — the order anyone would actually type — would silently drop the
-// directory.
 func (a *App) openCmd(args []string) int {
-	fs := flag.NewFlagSet("open", flag.ContinueOnError)
-	fs.SetOutput(a.Err)
-	dir := fs.String("dir", "", "directory of SQL work to attach")
-
-	var name string
-	rest := args
-	for {
-		if err := fs.Parse(rest); err != nil {
-			return exitUsage
-		}
-		rest = fs.Args()
-		if len(rest) == 0 {
-			break
-		}
-		if name != "" {
-			fmt.Fprint(a.Err, "usage: dv open [--dir <path>] [<datasource>]\n")
-			return exitUsage
-		}
-		name, rest = rest[0], rest[1:]
+	switch len(args) {
+	case 0:
+		return a.open("")
+	case 1:
+		return a.open(args[0])
+	default:
+		fmt.Fprintf(a.Err, "dv open takes one datasource name; got %q and %q\n", args[0], args[1])
+		return exitUsage
 	}
-
-	return a.open(name, UIOptions{WorkDir: *dir})
 }
 
 // open connects and hands control to the TUI.
 //
-// With no name given it picks the single configured datasource; guessing
-// among several would risk opening production when dev was meant.
-func (a *App) open(name string, opt UIOptions) int {
+// With no name given it picks the single configured datasource; with none or
+// several it defers to Launch instead of guessing, which would risk opening
+// production when dev was meant.
+func (a *App) open(name string) int {
 	if name == "" {
-		if len(a.Config.DataSources) != 1 {
-			fmt.Fprintf(a.Err,
-				"more than one datasource is configured; name the one to open:\n  dv open <name>\n\nconfigured: %s\n",
-				strings.Join(a.Config.Names(), ", "))
-			return exitUsage
+		if len(a.Config.DataSources) == 1 {
+			name = a.Config.DataSources[0].Name
+		} else {
+			if err := a.Launch(); err != nil {
+				fmt.Fprintln(a.Err, err)
+				return exitError
+			}
+			return exitOK
 		}
-		name = a.Config.DataSources[0].Name
 	}
 
 	ds, err := a.Config.Find(name)
@@ -228,17 +163,6 @@ func (a *App) open(name string, opt UIOptions) int {
 	ctx, cancel := context.WithTimeout(context.Background(), CheckTimeout)
 	defer cancel()
 
-	// A running session is reached without a password: the process that
-	// opens the connection reads the keychain itself, on the other side of
-	// this call, the same way a mid-session switch already does.
-	if a.Attach != nil {
-		if err := a.Attach(ctx, ds, a.Config, opt); err != nil {
-			fmt.Fprintf(a.Err, "%v\n", err)
-			return exitError
-		}
-		return exitOK
-	}
-
 	password, err := a.Secrets.Get(ds.Name)
 	if errors.Is(err, secret.ErrNotFound) {
 		fmt.Fprintf(a.Err, "no password stored for %q; run: dv auth %s\n", ds.Name, ds.Name)
@@ -249,7 +173,7 @@ func (a *App) open(name string, opt UIOptions) int {
 		return exitError
 	}
 
-	if err := a.OpenUI(ctx, ds, password, a.Config, opt); err != nil {
+	if err := a.OpenUI(ctx, ds, password, a.Config); err != nil {
 		fmt.Fprintf(a.Err, "%v\n", err)
 		return exitError
 	}
@@ -289,76 +213,7 @@ func (a *App) check(args []string) int {
 		return exitError
 	}
 
-	fmt.Fprintf(a.Out, "%s (%s) is reachable — server %s\n", ds.Name, ds.Env, version)
-	return exitOK
-}
-
-// server is `dv server` and `dv server stop [--force]`.
-func (a *App) server(args []string) int {
-	if len(args) > 0 && args[0] == "stop" {
-		fs := flag.NewFlagSet("server stop", flag.ContinueOnError)
-		fs.SetOutput(a.Err)
-		force := fs.Bool("force", false, "end a wedged session by signalling its process directly")
-		if err := fs.Parse(args[1:]); err != nil {
-			return exitUsage
-		}
-
-		if a.StopServer == nil {
-			fmt.Fprintln(a.Err, "this build cannot stop a server")
-			return exitUsage
-		}
-		if err := a.StopServer(*force); err != nil {
-			fmt.Fprintf(a.Err, "%v\n", err)
-			return exitError
-		}
-		return exitOK
-	}
-	if len(args) > 0 {
-		fmt.Fprintf(a.Err, "unknown command %q\n", "server "+args[0])
-		return exitUsage
-	}
-	if a.RunServer == nil {
-		fmt.Fprintln(a.Err, "this build has no server")
-		return exitUsage
-	}
-	if err := a.RunServer(); err != nil {
-		fmt.Fprintf(a.Err, "%v\n", err)
-		return exitError
-	}
-	return exitOK
-}
-
-// serverStatus is `dv status`.
-func (a *App) serverStatus() int {
-	if a.ServerStatus == nil {
-		fmt.Fprintln(a.Out, "this build has no server")
-		return exitOK
-	}
-	report, err := a.ServerStatus()
-	if err != nil {
-		fmt.Fprintf(a.Err, "%v\n", err)
-		return exitError
-	}
-	fmt.Fprintln(a.Out, report)
-	return exitOK
-}
-
-// api is `dv api snapshot`.
-func (a *App) api(args []string) int {
-	if len(args) != 1 || args[0] != "snapshot" {
-		fmt.Fprintln(a.Err, "usage: dv api snapshot")
-		return exitUsage
-	}
-	if a.APISnapshot == nil {
-		fmt.Fprintln(a.Err, "this build has no observation socket")
-		return exitUsage
-	}
-	out, err := a.APISnapshot()
-	if err != nil {
-		fmt.Fprintf(a.Err, "%v\n", err)
-		return exitError
-	}
-	a.Out.Write(out)
+	fmt.Fprintf(a.Out, "%s is reachable — server %s\n", ds.Name, version)
 	return exitOK
 }
 

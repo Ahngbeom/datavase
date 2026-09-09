@@ -11,11 +11,12 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// searchFor opens the prompt with "/" and types a pattern, without confirming.
+// searchFor opens the prompt through ActionFind and types a pattern, without
+// confirming.
 func (h *harness) searchFor(pattern string) {
 	h.t.Helper()
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
+	h.do(keymap.ActionFind)
 	h.waitFor("the search prompt", func(a *App) bool {
 		name, _ := a.pages.GetFrontPage()
 		return name == pageSearch
@@ -27,7 +28,7 @@ const searchBuffer = "SELECT id FROM users;\nSELECT name FROM orders;\n"
 
 // The whole point: the caret ends up at the match.
 func TestSearchingMovesTheCaretToTheMatch(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer(searchBuffer, 0)
 
 	h.searchFor("orders")
@@ -42,7 +43,7 @@ func TestSearchingMovesTheCaretToTheMatch(t *testing.T) {
 // Matching as the pattern grows is what makes the prompt worth typing into
 // rather than a dialog to fill in and submit.
 func TestTheCaretFollowsThePatternAsItIsTyped(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer(searchBuffer, 0)
 
 	h.searchFor("orders")
@@ -57,7 +58,7 @@ func TestTheCaretFollowsThePatternAsItIsTyped(t *testing.T) {
 // match for a prefix of what is on screen, which reads as a match for the
 // whole of it — the caret sits on "br" while the prompt says "brX".
 func TestAPatternThatStopsMatchingReturnsTheCaret(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer("alpha\nbravo\n", 0)
 
 	h.searchFor("br")
@@ -74,7 +75,7 @@ func TestAPatternThatStopsMatchingReturnsTheCaret(t *testing.T) {
 // Abandoning a search has to put back where it started, not where the last
 // keystroke happened to land.
 func TestEscapingASearchRestoresTheCaret(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	const start = 3
 	h.buffer(searchBuffer, start)
 
@@ -92,7 +93,7 @@ func TestEscapingASearchRestoresTheCaret(t *testing.T) {
 // A search that quietly does nothing is indistinguishable from a keyboard that
 // has stopped working.
 func TestASearchWithNoMatchSaysSo(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer(searchBuffer, 0)
 
 	h.searchFor("nowhere")
@@ -104,7 +105,7 @@ func TestASearchWithNoMatchSaysSo(t *testing.T) {
 }
 
 func TestRepeatingStepsForwardsAndBack(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer(searchBuffer, 0)
 
 	first := strings.Index(searchBuffer, "SELECT")
@@ -116,40 +117,15 @@ func TestRepeatingStepsForwardsAndBack(t *testing.T) {
 		return a.caretOffset(a.editor.GetText()) == first
 	})
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, 'n', tcell.ModNone))
+	h.do(keymap.ActionFindNext)
 	h.waitFor("the second match", func(a *App) bool {
 		return a.caretOffset(a.editor.GetText()) == second
 	})
 
-	h.inject(tcell.NewEventKey(tcell.KeyRune, 'N', tcell.ModNone))
+	h.do(keymap.ActionFindPrev)
 	h.waitFor("the first match again", func(a *App) bool {
 		return a.caretOffset(a.editor.GetText()) == first
 	})
-}
-
-// Searching in visual mode extends the selection, as every other motion there
-// does.
-func TestSearchingInVisualModeSelectsUpToTheMatch(t *testing.T) {
-	h := newVimHarness(t)
-	h.buffer(searchBuffer, 0)
-
-	h.inject(tcell.NewEventKey(tcell.KeyRune, 'v', tcell.ModNone))
-	h.waitFor("visual mode", func(a *App) bool { return a.vimSelecting() })
-
-	h.searchFor("FROM")
-	h.press(tcell.KeyEnter)
-
-	h.waitFor("the selection to reach the match", func(a *App) bool {
-		return strings.HasPrefix(h.appSelection(a), "SELECT id ")
-	})
-}
-
-func (h *harness) appSelection(a *App) string {
-	if !a.editor.HasSelection() {
-		return ""
-	}
-	text, _, _ := a.editor.GetSelection()
-	return text
 }
 
 // The results are the other half. A value in row 400 is exactly what a grid
@@ -236,7 +212,7 @@ func TestTheQueryHistoryIsStillReachable(t *testing.T) {
 // The prompt must not blank the screen: the text being searched is the one
 // thing that has to stay visible while the pattern is typed.
 func TestTheSearchPromptLeavesTheTextOnScreen(t *testing.T) {
-	h := newVimHarness(t)
+	h := newHarness(t, config.EnvDev)
 	h.buffer(searchBuffer, 0)
 
 	h.searchFor("orders")

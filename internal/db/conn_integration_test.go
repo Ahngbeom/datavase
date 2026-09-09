@@ -487,9 +487,9 @@ func connectionIsRunning(conn *Conn, connID uint64) (bool, error) {
 	return n > 0, nil
 }
 
-// The guard stops the user, explains what a write will do and makes them
-// agree to it. Then it has to say what it actually did: "1 row" and "4,812
-// rows" are the difference between a routine edit and an incident.
+// "1 row" and "4,812 rows" are the difference between a routine edit and an
+// incident, and the only way to tell them apart after the fact is the count
+// the server reported.
 func TestExecReportsHowManyRowsAStatementChanged(t *testing.T) {
 	conn := openTestConn(t)
 	seedSequence(t, conn)
@@ -765,76 +765,6 @@ func countRows(t *testing.T, conn *Conn, table string) int {
 		t.Fatalf("counting %s: %v", table, err)
 	}
 	return n
-}
-
-// A kill has to be able to refuse to aim at one of our own connections, and
-// the control connection is the one that must never be hit: it carries
-// cancellation and every catalog read, and there is no way back from losing
-// it short of reconnecting.
-func TestConnKnowsWhichConnectionsAreItsOwn(t *testing.T) {
-	conn := openTestConn(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	// The control connection's id, read on the control connection itself.
-	var controlID uint64
-	if err := conn.WithControl(ctx, func(c *sql.Conn) error {
-		return c.QueryRowContext(ctx, "SELECT CONNECTION_ID()").Scan(&controlID)
-	}); err != nil {
-		t.Fatalf("reading the control connection id: %v", err)
-	}
-
-	if !conn.Owns(controlID) {
-		t.Errorf("the control connection %d is not recognised as ours", controlID)
-	}
-	// An id no connection of ours has: server ids are sequential and this one
-	// is far past anything a test container has handed out.
-	if conn.Owns(controlID + 1_000_000) {
-		t.Error("an id we have never held was claimed as ours")
-	}
-}
-
-// A pooled connection is ours while a statement is using it, and stops being
-// ours when it goes back. Server ids are reused, so a stale one would refuse
-// to kill a session that has nothing to do with us.
-func TestAPooledConnectionIsOnlyOursWhileItIsHeld(t *testing.T) {
-	conn := openTestConn(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	stream := conn.Query(ctx, "SELECT SLEEP(5)", Options{})
-
-	// The id is published once the connection that will run the statement has
-	// been taken, which is a moment after Query returns.
-	var id uint64
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-		if id = stream.ConnectionID(); id != 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if id == 0 {
-		t.Fatal("the statement never reported the connection it took")
-	}
-	if !conn.Owns(id) {
-		t.Errorf("the connection running our statement (%d) is not ours", id)
-	}
-
-	stream.Cancel()
-	for range stream.Events {
-	}
-	stream.Close()
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if !conn.Owns(id) {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Errorf("connection %d is still claimed as ours after the statement finished", id)
 }
 
 // A caller waiting for the control connection has to be able to give up.

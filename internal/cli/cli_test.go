@@ -104,7 +104,7 @@ func TestCheckFailsWhenTheServerIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestListShowsEveryDataSourceWithItsEnv(t *testing.T) {
+func TestListShowsEveryDataSource(t *testing.T) {
 	h := newHarness(t)
 
 	if code := h.app.Run([]string{"ls"}); code != 0 {
@@ -112,7 +112,7 @@ func TestListShowsEveryDataSourceWithItsEnv(t *testing.T) {
 	}
 
 	out := h.out.String()
-	for _, want := range []string{"local", "dev", "prod-app", "prod", "db.internal"} {
+	for _, want := range []string{"local", "prod-app", "db.internal"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("ls output = %q, want it to contain %q", out, want)
 		}
@@ -192,126 +192,6 @@ func (s stubSecrets) Get(account string) (string, error) {
 func (s stubSecrets) Set(account, password string) error { s[account] = password; return nil }
 func (s stubSecrets) Delete(account string) error        { delete(s, account); return nil }
 
-// Attaching must not ask for a password. The prompt needs a terminal and the
-// connection is opened in another process, which is why a switch mid-session
-// has never prompted either.
-func TestOpenPrefersAttachAndDoesNotPrompt(t *testing.T) {
-	var attached string
-	app := &App{
-		Config: &config.Config{DataSources: []config.DataSource{{Name: "local", Env: config.EnvDev}}},
-		Out:    io.Discard,
-		Err:    io.Discard,
-		ReadPassword: func(string) (string, error) {
-			t.Error("attaching asked for a password")
-			return "", nil
-		},
-		Attach: func(_ context.Context, ds *config.DataSource, _ *config.Config, _ UIOptions) error {
-			attached = ds.Name
-			return nil
-		},
-		OpenUI: func(context.Context, *config.DataSource, string, *config.Config, UIOptions) error {
-			t.Error("OpenUI was used while a runtime was available")
-			return nil
-		},
-	}
-
-	if code := app.Run(nil); code != exitOK {
-		t.Fatalf("Run = %d, want %d", code, exitOK)
-	}
-	if attached != "local" {
-		t.Errorf("attached to %q, want \"local\"", attached)
-	}
-}
-
-// --no-session is the escape hatch, and it has to keep the behaviour that
-// existed before there was anything to escape from.
-func TestWithoutARuntimeOpenUIStillRuns(t *testing.T) {
-	var opened string
-	app := &App{
-		Config:       &config.Config{DataSources: []config.DataSource{{Name: "local", Env: config.EnvDev}}},
-		Out:          io.Discard,
-		Err:          io.Discard,
-		Secrets:      stubSecrets{"local": "hunter2"},
-		ReadPassword: func(string) (string, error) { return "hunter2", nil },
-		OpenUI: func(_ context.Context, ds *config.DataSource, pw string, _ *config.Config, _ UIOptions) error {
-			opened = ds.Name + ":" + pw
-			return nil
-		},
-	}
-
-	if code := app.Run(nil); code != exitOK {
-		t.Fatalf("Run = %d, want %d", code, exitOK)
-	}
-	if opened != "local:hunter2" {
-		t.Errorf("opened %q, want \"local:hunter2\"", opened)
-	}
-}
-
-// dv status has to answer even when there is no server, because "is one
-// running" is the question it exists for.
-func TestStatusReportsWithNoServer(t *testing.T) {
-	var out bytes.Buffer
-	app := &App{
-		Config:       &config.Config{},
-		Out:          &out,
-		Err:          io.Discard,
-		ServerStatus: func() (string, error) { return "no dv server is running", nil },
-	}
-
-	if code := app.Run([]string{"status"}); code != exitOK {
-		t.Fatalf("Run = %d, want %d", code, exitOK)
-	}
-	if !strings.Contains(out.String(), "no dv server") {
-		t.Errorf("status printed %q", out.String())
-	}
-}
-
-// dv server stop must reach StopServer with force set only when --force was
-// typed, since sending SIGTERM to anything is a choice only --force may make.
-func TestServerStopPassesForceOnlyWhenTyped(t *testing.T) {
-	h := newHarness(t)
-
-	var got []bool
-	h.app.StopServer = func(force bool) error {
-		got = append(got, force)
-		return nil
-	}
-
-	if code := h.app.Run([]string{"server", "stop"}); code != exitOK {
-		t.Fatalf("Run(server stop) = %d, want %d", code, exitOK)
-	}
-	if code := h.app.Run([]string{"server", "stop", "--force"}); code != exitOK {
-		t.Fatalf("Run(server stop --force) = %d, want %d", code, exitOK)
-	}
-
-	if len(got) != 2 || got[0] != false || got[1] != true {
-		t.Fatalf("StopServer called with force=%v, want [false true]", got)
-	}
-}
-
-// Whatever StopServer says about a session that would not end must reach the
-// user — that sentence, naming the pid, is the whole recovery path when a
-// wedged session leaves the stop request unanswered.
-func TestServerStopReportsWhatStopServerSaid(t *testing.T) {
-	h := newHarness(t)
-	h.app.StopServer = func(bool) error {
-		return errors.New(`a dv server is running (pid 82515); it did not stop within 5s.
-
-  dv server stop --force   end it by signalling that pid directly`)
-	}
-
-	code := h.app.Run([]string{"server", "stop"})
-	if code == exitOK {
-		t.Fatal("Run(server stop) = 0, want a non-zero exit code")
-	}
-	if !strings.Contains(h.err.String(), "pid 82515") {
-		t.Errorf("stderr = %q, want it to name the pid", h.err.String())
-	}
-	if !strings.Contains(h.err.String(), "--force") {
-		t.Errorf("stderr = %q, want it to name --force", h.err.String())
-	}
-}
-
 func TestRmDeletesStoredPassword(t *testing.T) {
 	h := newHarness(t)
 	if err := h.app.Secrets.Set("prod-app", "pw"); err != nil {
@@ -324,5 +204,26 @@ func TestRmDeletesStoredPassword(t *testing.T) {
 
 	if _, err := h.app.Secrets.Get("prod-app"); err == nil {
 		t.Error("password still present after auth -rm")
+	}
+}
+
+func TestOpeningWithNoNameAndSeveralDatasourcesLaunchesTheList(t *testing.T) {
+	launched := false
+	app := &App{
+		Config: &config.Config{DataSources: []config.DataSource{{Name: "a"}, {Name: "b"}}},
+		Out:    io.Discard, Err: io.Discard,
+		Launch: func() error { launched = true; return nil },
+	}
+	if code := app.Run(nil); code != exitOK || !launched {
+		t.Errorf("Run() = %d, launched = %v; want the list", code, launched)
+	}
+}
+
+func TestOpeningWithNoDatasourcesLaunchesTheList(t *testing.T) {
+	launched := false
+	app := &App{Config: config.Empty(), Out: io.Discard, Err: io.Discard,
+		Launch: func() error { launched = true; return nil }}
+	if code := app.Run(nil); code != exitOK || !launched {
+		t.Errorf("Run() = %d, launched = %v; a first run must open the list", code, launched)
 	}
 }

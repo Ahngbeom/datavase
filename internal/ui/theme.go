@@ -7,27 +7,19 @@ import (
 
 // Colours: one role, one value.
 //
-// There used to be six names for four values — OK and dev were the same green,
-// an error and production the same red. That is how the environment cue, the
-// one visual thing standing between the user and a production mistake, came to
-// be indistinguishable from an ordinary error message. Each name below is a
-// distinct role, and the environment shares with none of them.
-//
 // These are named colours rather than pinned ones, so they inherit whatever
-// palette the terminal was configured with. The environment spine is the sole
-// exception; see spine.go for why.
+// palette the terminal was configured with. The spine and the top bar's chip
+// are the exception; see spine.go for why.
 const (
 	// colourAccent marks what has focus: the focused region's header, the
 	// active tab, a result's column names.
 	colourAccent = tcell.ColorAqua
 
 	// colourNotice is for a state the user could forget they are in — an
-	// injected LIMIT, a truncated result, unlocked writes.
+	// injected LIMIT, a truncated result.
 	colourNotice = tcell.ColorYellow
 
-	// colourDanger is for failures, and is foreground only. The production
-	// spine uses the same hue as a background, which reads as related rather
-	// than as the same thing.
+	// colourDanger is for failures, and is foreground only.
 	colourDanger = tcell.ColorRed
 
 	// colourMuted is everything structural: the rules between regions,
@@ -35,8 +27,8 @@ const (
 	colourMuted = tcell.ColorGray
 )
 
-// headingTag marks a line that names the lines beneath it — a group in the key
-// reference, a category in the palette.
+// headingTag marks a line that names the lines beneath it — a group in the
+// key reference.
 //
 // Weight rather than colour. A heading is not a state the user could forget
 // they are in, and drawing it in the notice colour spent that cue on the word

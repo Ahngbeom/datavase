@@ -2,13 +2,13 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/complete"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/match"
 	"github.com/Ahngbeom/datavase/internal/session"
 )
 
@@ -17,67 +17,46 @@ import (
 // rather than hold it.
 const connectTimeout = 15 * time.Second
 
-// showDataSources offers the configured datasources.
+// showDataSources opens the list: connect to another, or change the file.
 func (a *App) showDataSources() {
 	if a.connect == nil {
 		a.notice("this session cannot switch datasource")
 		return
 	}
-	if len(a.cfg.DataSources) < 2 {
-		a.notice("only one datasource is configured")
-		return
-	}
 
-	box := a.newSearchBox("datasource: ", " datasources ", pageDataSource, a.dataSourceChoices)
-	a.pages.AddPage(pageDataSource, centred(box, 72, 20), true, true)
+	save := func() error {
+		if a.configPath == "" {
+			return errors.New("no configuration file to save to")
+		}
+		return config.Save(a.configPath, a.cfg)
+	}
+	a.picker = newDSPicker(a.app, pickerDeps{
+		cfg:     a.cfg,
+		current: a.conn.DataSource().Name,
+		save:    save,
+		secrets: a.secrets,
+		probe:   a.probe,
+		close:   a.closeDataSources,
+		connect: func(ds *config.DataSource) {
+			a.closeDataSources()
+			a.switchTo(ds)
+		},
+	})
+	a.pages.AddPage(pageDataSource, centred(a.picker.Primitive(), 80, 24), true, true)
+	a.app.SetFocus(a.picker.Primitive())
 }
 
-// dataSourceChoices filters the configured datasources.
-func (a *App) dataSourceChoices(term string) []searchItem {
-	current := a.conn.DataSource().Name
-
-	rows := make([]ranked, 0, len(a.cfg.DataSources))
-	for i := range a.cfg.DataSources {
-		ds := &a.cfg.DataSources[i]
-
-		score, ok := match.Fuzzy(term, ds.Name)
-		if !ok {
-			continue
-		}
-
-		detail := fmt.Sprintf("%s@%s:%d", ds.User, ds.Host, ds.Port)
-		if ds.Name == current {
-			detail += " · current"
-		}
-
-		rows = append(rows, ranked{
-			item: searchItem{
-				primary:   ds.Name,
-				secondary: detail,
-				accept: func() {
-					a.closeSearchBox(pageDataSource)
-					a.switchTo(ds)
-				},
-			},
-			score: score,
-		})
-	}
-
-	items := sortRanked(rows)
-	if len(items) == 0 {
-		if term == "" {
-			return []searchItem{nothingHere("no other datasource is configured",
-				"add one to the config file")}
-		}
-		return []searchItem{noMatch("datasource", term)}
-	}
-	return items
+func (a *App) closeDataSources() {
+	a.pages.RemovePage(pageDataSource)
+	a.picker = nil
+	a.app.SetFocus(a.editor)
 }
 
 // switchTo moves the session to another datasource, asking about anything it
 // would throw away first.
 func (a *App) switchTo(ds *config.DataSource) {
 	if ds.Name == a.conn.DataSource().Name {
+		a.notice("already on " + ds.Name)
 		return
 	}
 	if a.running != nil {

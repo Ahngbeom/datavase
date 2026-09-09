@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
@@ -14,6 +15,60 @@ import (
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
 )
+
+// The datasource key is the one action with no other way to discover it
+// exists, so it has to open onto something useful even with nothing to
+// switch to: the list itself, with the connected entry marked.
+func TestTheDatasourceKeyOpensTheListWithTheCurrentOneMarked(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.do(keymap.ActionSwitchDataSource)
+	h.waitFor("the list", func(a *App) bool { return a.pages.HasPage(pageDataSource) })
+	if !h.waitForScreen("connected") {
+		t.Errorf("the connected datasource is not marked; screen:\n%s", h.text())
+	}
+	h.press(tcell.KeyEscape)
+	h.waitFor("the list closed", func(a *App) bool { return !a.pages.HasPage(pageDataSource) })
+}
+
+// Adding a datasource mid-session goes through the same config.Save the
+// launcher uses, so the file on disk and the in-memory list never disagree
+// about what was just added.
+func TestAddingADatasourceInSessionSavesTheFile(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	h.inspect(func(a *App) bool {
+		a.configPath = path
+		return true
+	})
+
+	h.do(keymap.ActionSwitchDataSource)
+	h.waitFor("the list", func(a *App) bool { return a.pages.HasPage(pageDataSource) })
+	h.inject(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
+	h.waitFor("the form", func(a *App) bool { return a.picker != nil && a.picker.pages.HasPage(pickerForm) })
+
+	for _, r := range "second" {
+		h.inject(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	h.press(tcell.KeyTab)
+	for _, r := range "db2" {
+		h.inject(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	h.press(tcell.KeyTab) // port
+	h.press(tcell.KeyTab) // user
+	for _, r := range "u" {
+		h.inject(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	for i := 0; i < 10; i++ {
+		h.press(tcell.KeyTab)
+	}
+	h.press(tcell.KeyEnter) // Save
+
+	h.waitFor("the file", func(a *App) bool {
+		saved, err := config.Load(path)
+		return err == nil && len(saved.DataSources) == 2
+	})
+	h.waitFor("the list again", func(a *App) bool { return len(a.cfg.DataSources) == 2 && !a.picker.pages.HasPage(pickerForm) })
+}
 
 // addProdDataSource configures a second datasource against the same test
 // server, differing only in name.
@@ -54,7 +109,8 @@ func (h *harness) switchToProd(t *testing.T) string {
 		return front == pageDataSource
 	})
 
-	h.typeInto("-prod")
+	// addProdDataSource appended the entry, so it is the second row.
+	h.press(tcell.KeyDown)
 	h.press(tcell.KeyEnter)
 
 	h.waitFor("the switch", func(a *App) bool { return a.conn.DataSource().Name == name })

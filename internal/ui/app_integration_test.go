@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
@@ -136,7 +138,20 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 	}
 	t.Cleanup(func() { hist.Close() })
 
-	app := New(sess, cfg, Deps{Cache: cache, History: hist})
+	app := New(sess, cfg, Deps{
+		Cache:   cache,
+		History: hist,
+		Secrets: secret.NewMemory(),
+		Probe: func(context.Context, *config.DataSource, string) (string, error) {
+			return "test", nil
+		},
+		// The datasource dialog refuses to open at all with no way to
+		// switch; tests that exercise a real switch replace this via
+		// h.inspect before opening it, same as they always have.
+		Connect: func(context.Context, *config.DataSource) (*session.Session, error) {
+			return nil, errors.New("this harness does not connect by default")
+		},
+	})
 	app.SetScreen(screen)
 
 	h := &harness{

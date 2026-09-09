@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
@@ -91,38 +90,6 @@ func prevChoice(items []searchItem, from int) int {
 		}
 	}
 	return -1
-}
-
-// ranked pairs a row with what decides where it sorts.
-//
-// Ordering is not presentation here: Enter takes the first row, so a worse
-// match sorting above a better one runs the wrong command.
-type ranked struct {
-	item searchItem
-	// tier separates kinds of match that no score should be able to cross —
-	// a name match always beats a summary match, however well the summary
-	// scored.
-	tier  int
-	score int
-}
-
-// sortRanked orders the rows and drops the scores.
-//
-// The sort is stable so that an empty term, which scores everything the same,
-// leaves the caller's own order alone.
-func sortRanked(rows []ranked) []searchItem {
-	sort.SliceStable(rows, func(i, j int) bool {
-		if rows[i].tier != rows[j].tier {
-			return rows[i].tier > rows[j].tier
-		}
-		return rows[i].score > rows[j].score
-	})
-
-	items := make([]searchItem, len(rows))
-	for i, r := range rows {
-		items[i] = r.item
-	}
-	return items
 }
 
 // newSearchBox builds the "type to filter, arrow down to choose" pairing

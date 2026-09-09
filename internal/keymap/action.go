@@ -66,8 +66,8 @@ const (
 	// ActionCopyResult puts the whole result on the clipboard, in a format
 	// chosen when the key is pressed.
 	ActionCopyResult
-	// ActionSwitchDataSource moves the session to another configured
-	// datasource.
+	// ActionSwitchDataSource opens the datasource list: connect to another
+	// one, or add, edit and delete entries.
 	ActionSwitchDataSource
 
 	// Application.
@@ -154,7 +154,7 @@ var descriptions = map[Action]string{
 	ActionInspect:           "show the selected result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
 	ActionCopyResult:        "copy the whole result as Markdown or JSON",
-	ActionSwitchDataSource:  "switch to another datasource",
+	ActionSwitchDataSource:  "open the datasource list: connect, add, edit, delete",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }

@@ -123,9 +123,12 @@ func openSession(sess *session.Session, cfg *config.Config, path string) error {
 	}
 
 	return ui.New(sess, cfg, ui.Deps{
-		Cache:   cache,
-		History: hist,
-		Connect: connectTo,
+		Cache:      cache,
+		History:    hist,
+		Connect:    connectTo,
+		ConfigPath: path,
+		Secrets:    secrets(),
+		Probe:      probe,
 	}).Run()
 }
 

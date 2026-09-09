@@ -19,6 +19,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/result"
+	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/gdamore/tcell/v2"
@@ -38,7 +39,12 @@ type App struct {
 	// connect opens another datasource. It is a field so that the interface
 	// does not have to know where a password comes from, and so a test can
 	// switch without a keychain.
-	connect func(context.Context, *config.DataSource) (*session.Session, error)
+	connect    func(context.Context, *config.DataSource) (*session.Session, error)
+	configPath string
+	secrets    secret.Store
+	probe      func(ctx context.Context, ds *config.DataSource, password string) (string, error)
+	// picker is the open datasource dialog, or nil between sessions of it.
+	picker *dsPicker
 
 	tree      *tview.TreeView
 	editor    *tview.TextArea
@@ -185,6 +191,15 @@ type Deps struct {
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
+	// ConfigPath is where the datasource dialog saves. Empty means the
+	// dialog can connect but not add or edit, and says so instead of
+	// pretending.
+	ConfigPath string
+	// Secrets stores passwords typed into the dialog. Nil means they cannot
+	// be stored here, which the form says instead of pretending.
+	Secrets secret.Store
+	// Probe answers the dialog's Test button.
+	Probe func(ctx context.Context, ds *config.DataSource, password string) (string, error)
 }
 
 // New builds the interface for an open session.
@@ -201,6 +216,9 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		sess:            sess,
 		conn:            conn,
 		connect:         deps.Connect,
+		configPath:      deps.ConfigPath,
+		secrets:         deps.Secrets,
+		probe:           deps.Probe,
 		cfg:             cfg,
 		keys:            keymap.Default(),
 		cache:           deps.Cache,

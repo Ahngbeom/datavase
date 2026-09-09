@@ -11,6 +11,21 @@ edited account — and the place anything that needs action is written down.
 
 ### Added
 
+**Each pane says what it can do, while the keyboard is in it.** The header
+each region already draws now carries its keys: the editor offers running and
+completion, the tree names the double-click that previews a table, and a
+result with rows offers copy, sort and opening a row. Only the focused region
+speaks, so the screen stays quiet and moving between panes is how the rest is
+found. Nothing on screen had said that completion or the preview existed.
+
+**An empty result invites the statement** rather than describing the gap, and
+a failure that names a missing table points at the tree — after the server's
+own words, and only when the line has room for both.
+
+**The key reference stops wrapping.** Three descriptions were wider than the
+dialog, and the tail of each landed under the key column reading as an entry
+of its own.
+
 **The schema tree is on screen when a session opens.** It was a key away, on
 the reasoning that the finders already answer "where is that table" — but a
 tree nobody sees is a tree nobody knows to ask for, and what is in the

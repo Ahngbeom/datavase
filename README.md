@@ -268,6 +268,11 @@ tab beside it. `⌘B` puts it away when the width is wanted for the result, for
 that session. The wheel moves the selection through it, so wherever you stop
 is where a click lands.
 
+**Each pane names its own keys** in its header, while the keyboard is in it —
+running and completion in the editor, the preview in the tree, copy and sort
+and row in the result. Move between panes with `⇥` to see the rest; `F1` has
+all of it at once.
+
 **The editor** is an ordinary one: typing types, and there is no mode to leave
 first. **The grid** streams the result as it arrives, sorts on a column and
 opens one row down the page rather than across it.

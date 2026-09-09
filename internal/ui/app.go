@@ -329,13 +329,18 @@ func (a *App) keyLabel(action keymap.Action) string {
 	return bindings[0].Label(onMac)
 }
 
-// editorPlaceholder names the run key.
+// editorPlaceholder is what an empty editor offers.
+//
+// It names the other way in rather than the run key: the header a row above
+// already says how to run, and repeating it wastes the one line a reader
+// looks at before they have typed anything. A table in the tree is the
+// fastest thing anyone new can do here, and nothing else on screen says the
+// gesture exists.
 func (a *App) editorPlaceholder() string {
-	bindings := a.keys.DisplayBindings(keymap.ActionRun)
-	if len(bindings) == 0 {
+	if !a.sidebarVisible {
 		return "SELECT …"
 	}
-	return "SELECT … then " + bindings[0].Label(onMac) + " to run"
+	return "SELECT … or double-click a table"
 }
 
 // Run starts the event loop and blocks until the user quits.
@@ -388,7 +393,7 @@ func (a *App) buildWidgets() {
 
 	// Every region shares one component so they cannot drift apart in
 	// behaviour, including the editor, which has no tabs at all.
-	a.editorRegion = newTabbed()
+	a.editorRegion = newTabbed().watch(a.editorDetail)
 	a.editorRegion.only(a.editor)
 	a.editorRegion.record = a.recorderFor(a.editorRegion)
 
@@ -414,7 +419,39 @@ func (a *App) buildWidgets() {
 
 // schemaDetail is the trailing note on the schema pane's header, read at draw
 // time like the other two regions'.
+// affordances are the key labels the header hints name, read from the map in
+// force rather than written out, so a rebinding moves the hint with the key.
+func (a *App) affordances() affordanceKeys {
+	return affordanceKeys{
+		run:      a.keyLabel(keymap.ActionRun),
+		runAll:   a.keyLabel(keymap.ActionRunAll),
+		complete: a.keyLabel(keymap.ActionComplete),
+		history:  a.keyLabel(keymap.ActionSearchHistory),
+		copy:     a.keyLabel(keymap.ActionCopyResult),
+		sort:     a.keyLabel(keymap.ActionSortColumn),
+		inspect:  a.keyLabel(keymap.ActionInspect),
+		row:      a.keyLabel(keymap.ActionCopyRow),
+	}
+}
+
+// editorDetail offers what the editor does beyond taking the typing.
+func (a *App) editorDetail() string {
+	return editorAffordance(a.editor.HasFocus(), a.affordances())
+}
+
+// schemaDetail explains the marker, or offers the preview while the tree has
+// the keyboard.
+//
+// One or the other, never both: the pane is thirty-four columns wide and the
+// tab strip has most of them, so the two together are truncated into saying
+// neither. The legend answers a question the marker raises, and it can wait —
+// the marker is still there when the keyboard moves on, and the hint names a
+// gesture nothing else on screen mentions.
 func (a *App) schemaDetail() string {
+	if hint := treeAffordance(a.schemaTabs.current() == tabTree && a.tree.HasFocus(),
+		a.affordances()); hint != "" {
+		return hint
+	}
 	return schemaPaneDetail(a.schemaTabs.current(), a.currentSchema())
 }
 
@@ -438,14 +475,21 @@ func schemaPaneDetail(tab, currentSchema string) string {
 // resultDetail says what the empty results tab would otherwise not say, or
 // offers the copy key once there is something to copy.
 func (a *App) resultDetail() string {
+	k := a.affordances()
+
 	if a.buf.ColumnCount() > 0 && a.running == nil {
-		return a.keyLabel(keymap.ActionCopyResult) + " copy"
+		// With the keyboard here, all three things a result can do; without
+		// it, the copy label alone, because that one is also a click target.
+		if hint := gridAffordance(a.grid.HasFocus(), true, k); hint != "" {
+			return hint
+		}
+		return k.copy + " copy"
 	}
 	return resultHint(resultState{
 		columns: a.buf.ColumnCount(),
 		running: a.running != nil,
 		wrote:   a.status.written != nil,
-	})
+	}, k)
 }
 
 // resultState is everything the hint depends on.
@@ -466,7 +510,7 @@ type resultState struct {
 // statement was running and the bar two rows below said so. A pane telling
 // the user to do the thing they are watching happen is the same contradiction
 // the finders opened with.
-func resultHint(s resultState) string {
+func resultHint(s resultState, k affordanceKeys) string {
 	if s.columns > 0 {
 		return ""
 	}
@@ -479,7 +523,10 @@ func resultHint(s resultState) string {
 		// which the bar reports and the pane otherwise contradicts.
 		return "no rows: that statement changed data"
 	default:
-		return "run a statement to see rows here"
+		// An invitation rather than a description of the gap: the reader can
+		// see the pane is empty, and what they cannot see is which key fills
+		// it.
+		return k.run + " runs the statement"
 	}
 }
 

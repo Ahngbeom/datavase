@@ -69,3 +69,18 @@ func TestEveryActionIsStillOnTheRenderedHelpScreen(t *testing.T) {
 		}
 	}
 }
+
+// A reference that wraps is a reference that stops being a table: tview's
+// TextView continues an overrun line at column zero, so the tail of a
+// description lands under the key column and reads as an entry of its own.
+//
+// The width here is the dialog at its widest, less the border it draws.
+func TestEveryHelpLineFitsTheDialog(t *testing.T) {
+	const inner = 74
+
+	for _, line := range strings.Split(helpReference(keymap.Default()), "\n") {
+		if got := visibleCost(line); got > inner {
+			t.Errorf("a help line is %d cells wide, want at most %d:\n%q", got, inner, line)
+		}
+	}
+}

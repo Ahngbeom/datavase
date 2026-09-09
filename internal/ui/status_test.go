@@ -534,3 +534,28 @@ func TestHintsGiveWayToAnythingThatActuallyHappened(t *testing.T) {
 		}
 	}
 }
+
+// The server's words are the fact and the direction is a convenience, so a
+// line with room for one carries the fact.
+func TestANarrowFailureKeepsTheServerAndDropsTheDirection(t *testing.T) {
+	s := status{
+		phase: phaseFailed,
+		err:   errors.New("Error 1146 (42S02): Table 'app.orders' doesn't exist"),
+	}
+
+	wide := visibleText(s.renderWidth(120))
+	if !strings.Contains(wide, "the tree lists what is there") {
+		t.Errorf("a wide line dropped the direction: %q", wide)
+	}
+
+	narrow := visibleText(s.renderWidth(70))
+	if !strings.Contains(narrow, "Error 1146") {
+		t.Errorf("a narrow line lost the server's message: %q", narrow)
+	}
+	if strings.Contains(narrow, "the tree lists") {
+		t.Errorf("a narrow line kept the direction at the message's expense: %q", narrow)
+	}
+	if strings.Contains(narrow, "…") {
+		t.Errorf("a narrow line truncated rather than shed: %q", narrow)
+	}
+}

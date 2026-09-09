@@ -5,6 +5,47 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.9.0 — Unreleased
+
+**This release removes most of what v0.8 did.** Anyone who uses the modal
+editor, the command palette, the production guard, explain, the process
+list, a directory of SQL files or a session that survives closing the
+terminal should stay on v0.8.x — it is the last release with them, and
+Homebrew will offer this one as an upgrade.
+
+What is left is a datasource list, a schema tree, an editor, a grid, and
+four things they do: keep several datasources and manage them in place,
+show a table's first hundred rows on a double-click, run a statement with
+⌘↩, and copy the whole result as Markdown or JSON with ⌘⇧C.
+
+**Before upgrading, check two things in your config.**
+
+- `env:` drives nothing but the default for `tls:`. If a production
+  datasource has `env: prod` and no `tls:`, write `tls: required` down now;
+  `env` stops being read in a later release.
+- `keymap:` is ignored. dv says so once on startup. Delete the block.
+
+### Added
+
+**The datasource dialog.** `dv` with no configuration opens it; `⌘⇧D`
+opens it in a session. Add, edit, delete, test and connect. It writes the
+config file, which means comments in the file do not survive a save.
+
+**Copy the whole result.** `⌘⇧C`, `F3` or the `copy` label on the result
+header asks Markdown or JSON and puts the lot on the clipboard. The notice
+states the size, because a terminal's OSC 52 ceiling is exceeded silently.
+
+**Table preview.** Double-click a table in the tree, or Enter on one in
+the tables tab, for `SELECT * … LIMIT 100`. The editor is not touched.
+
+### Removed
+
+The session server and detach, the worktree and `--dir`, explain and
+analyze, the process list and locks, the definition tab, the production
+guard and `unlock writes`, the command palette and `:` command line, the
+right-click menu, the first-run card, the vim keyboard, keymap presets
+and overrides, `dv init`, `dv keys`, `dv server`, `dv status`, `dv api`.
+
 ## v0.8.0 — 2026-09-08
 
 **One thing to check before upgrading: `preset` in your config.** Anyone who

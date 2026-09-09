@@ -162,7 +162,7 @@ say "Installed $dir/$BINARY"
 case ":$PATH:" in
 *":$dir:"*)
 	say ""
-	say "Run: $BINARY init"
+	say "Run: $BINARY"
 	;;
 *)
 	say ""
@@ -170,6 +170,6 @@ case ":$PATH:" in
 	say ""
 	say "    export PATH=\"$dir:\$PATH\""
 	say ""
-	say "Then run: $BINARY init"
+	say "Then run: $BINARY"
 	;;
 esac

@@ -77,9 +77,8 @@ type field struct {
 	expendable  bool
 	expendRank  int // higher goes first when space runs out
 	visibleCost int
-	// target is what a click on this field answers. zoneNone for most fields
-	// — a zone is only worth publishing for a state someone can forget they
-	// are in and a click can act on, which today is the mode.
+	// target is what a click on this field answers. zoneNone for every field
+	// today — nothing on the bar currently answers a click.
 	target zoneTarget
 }
 
@@ -256,9 +255,6 @@ func (s status) fields() []field {
 			mode += " " + s.vimPending
 		}
 		out = add(out, tag(colourNotice, mode), false, 0)
-		// It is where someone reads which keyboard they are on, so it is also
-		// where they reach to change it.
-		out[len(out)-1].target = zoneStatusMode
 	}
 
 	// Never dropped. Whether the work so far can be undone is not a detail

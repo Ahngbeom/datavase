@@ -27,8 +27,8 @@ const (
 	colourMuted = tcell.ColorGray
 )
 
-// headingTag marks a line that names the lines beneath it — a group in the key
-// reference, a category in the palette.
+// headingTag marks a line that names the lines beneath it — a group in the
+// key reference.
 //
 // Weight rather than colour. A heading is not a state the user could forget
 // they are in, and drawing it in the notice colour spent that cue on the word

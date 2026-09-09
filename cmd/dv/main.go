@@ -16,7 +16,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/history"
-	"github.com/Ahngbeom/datavase/internal/intro"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
@@ -128,14 +127,6 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		}
 	}
 
-	// Whether the first-run card has been shown. Optional for the same reason:
-	// a state directory that cannot be written costs the card being shown once
-	// more, not the session.
-	var introPath string
-	if path, err := intro.DefaultPath(); err == nil {
-		introPath = path
-	}
-
 	sess, err := session.Open(ctx, ds, password)
 	if err != nil {
 		return err
@@ -148,7 +139,6 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 		Keys:          keys,
 		Cache:         cache,
 		History:       hist,
-		IntroPath:     introPath,
 		Connect:       connectTo,
 		PresetAssumed: !cfg.Keymap.PresetSet,
 	}).Run()

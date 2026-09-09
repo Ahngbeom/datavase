@@ -19,8 +19,15 @@ func newVimHarness(t *testing.T) *harness {
 	t.Helper()
 
 	h := newHarness(t, config.EnvDev)
+
+	km, err := keymap.ForPreset(keymap.PresetVim)
+	if err != nil {
+		t.Fatalf("ForPreset(vim) error = %v", err)
+	}
 	h.inspect(func(a *App) bool {
-		a.setPreset(keymap.PresetVim)
+		a.keys = km
+		a.vim = vim.New()
+		a.editor.SetPlaceholder(a.editorPlaceholder())
 		return true
 	})
 	h.waitFor("the vim keyboard", func(a *App) bool { return a.keys.Modal() })

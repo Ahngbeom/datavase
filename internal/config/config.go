@@ -103,8 +103,8 @@ type Defaults struct {
 	// Mouse says whether clicks mean anything.
 	//
 	// Mouse reporting disables the terminal's own text selection, which is a
-	// regression for anyone who copies by dragging. Off costs the ways in and
-	// no capability: every click resolves to an action or a palette command.
+	// regression for anyone who copies by dragging. Off costs only the ways
+	// in: every click reaches an action also bound to a key.
 	Mouse *bool `yaml:"mouse"`
 }
 

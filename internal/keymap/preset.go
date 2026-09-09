@@ -30,8 +30,7 @@ const (
 // It is the ordinary one, because the person who has said nothing is by
 // definition the person who has not been asked yet — and an editor where
 // typing does nothing is the wrong thing to hand someone who has not chosen
-// it. `dv init` asks, and the palette switches mid-session, so choosing the
-// modal editor costs one answer or one command.
+// it. `dv init` asks, so choosing the modal editor costs one answer.
 const DefaultPreset = PresetDataGrip
 
 // Presets lists the presets, most preferred first.
@@ -101,14 +100,6 @@ func applyVSCode(m *Map) {
 	// ⇧⌥↓. Ctrl is offered alongside Alt for terminals that cannot report a
 	// modified arrow under Option.
 	rebind(ActionDuplicateLine, altAndCtrl(tcell.KeyDown, tcell.ModShift)...)
-
-	// F3 is carried over deliberately. rebind clears an action's bindings
-	// before setting the new ones, and dropping it here would leave this one
-	// preset with a palette that a host application claiming ⌘⇧P can lock —
-	// and the palette is how every keyless command is reached.
-	rebind(ActionCommandPalette,
-		append(ctrlAndCmdRune('p', tcell.ModShift),
-			Binding{Key: tcell.KeyF3})...)
 }
 
 // Preset reports which preset the map was built from.

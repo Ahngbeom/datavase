@@ -21,10 +21,6 @@ type searchItem struct {
 	// accept runs when the row is chosen. A nil accept makes the row a
 	// message rather than a choice.
 	accept func()
-	// group marks a row that names the rows beneath it, so the list can draw
-	// it as a heading rather than as a command with no description — which is
-	// exactly what one looked like.
-	group bool
 }
 
 // message builds a non-selectable row, for "nothing found" and errors.
@@ -52,20 +48,12 @@ func nothingHere(text, detail string) searchItem {
 	return message(text, detail)
 }
 
-// heading builds a row that names a group of the rows beneath it.
-//
-// It carries no detail, which matters: a secondary line on any row makes the
-// list reserve one on every row, halving how many choices fit.
-func heading(title string) searchItem {
-	return searchItem{primary: title, group: true}
-}
-
 // firstChoice is the index of the first row that does anything, or -1.
 //
-// Enter and Tab used to take row zero outright. That was true while every row
-// was a choice, and stopped being true the moment a list could open with a
-// heading — Enter would then be a key that does nothing, on the one dialog
-// whose whole purpose is to run something.
+// Enter and Tab used to take row zero outright. That stopped being safe once
+// a list could open with nothing but a message — Enter would then be a key
+// that does nothing, on the one dialog whose whole purpose is to run
+// something.
 func firstChoice(items []searchItem) int {
 	for i, it := range items {
 		if it.accept != nil {
@@ -78,9 +66,10 @@ func firstChoice(items []searchItem) int {
 // nextChoice is where Down goes from index: the next row that is a choice,
 // wrapping to the first as this list always has.
 //
-// Headings and "nothing found" are stepped over rather than landed on. A
-// highlighted row that Enter does nothing to is the same dead end Enter itself
-// used to be, and tview draws that highlight whether or not the list has focus.
+// A message row such as "nothing found" is stepped over rather than landed
+// on. A highlighted row that Enter does nothing to is the same dead end Enter
+// itself used to be, and tview draws that highlight whether or not the list
+// has focus.
 func nextChoice(items []searchItem, from int) int {
 	for i := from + 1; i < len(items); i++ {
 		if items[i].accept != nil {
@@ -147,7 +136,7 @@ func truncatedNotice(detail string) searchItem {
 }
 
 // newSearchBox builds the "type to filter, arrow down to choose" pairing
-// every finder dialog shares — history, the command palette, and the rest.
+// every finder dialog shares.
 //
 // tview's InputField reports Enter, Tab and Escape through SetDoneFunc but not
 // the arrow keys, so moving from the search field into the results — which is
@@ -162,8 +151,7 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 		items = search(term)
 
 		// A list where nothing has a second line must not reserve one: every
-		// row would cost two, halving how many choices fit on screen. That is
-		// what pushed the last command of the palette off the bottom.
+		// row would cost two, halving how many choices fit on screen.
 		secondLine := false
 		for _, it := range items {
 			if it.secondary != "" {
@@ -177,18 +165,10 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 		for _, it := range items {
 			item := it
 
-			// tag escapes before it wraps, so a heading is coloured without any
-			// row's text ever being read as markup. Table names and server
-			// messages reach this list, and one containing "[" would otherwise
-			// be swallowed as a colour tag.
+			// tag escapes before it wraps, so table names and server messages
+			// reaching this list are never read as markup — one containing
+			// "[" would otherwise be swallowed as a colour tag.
 			main := result.EscapeTags(item.primary)
-			if item.group {
-				// Weight rather than the notice colour: a category is not a
-				// state anyone could forget they are in, and spending that cue
-				// on the word "Files" leaves nothing that means "the mode
-				// changed" and nothing else.
-				main = headingTag(main)
-			}
 
 			list.AddItem(main, result.EscapeTags(item.secondary), 0, func() {
 				if item.accept != nil {
@@ -197,9 +177,10 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 			})
 		}
 
-		// Clearing puts the highlight back on row zero, which is a heading in a
-		// grouped list. tview draws the highlight whether or not the list has
-		// focus, so leaving it there points at a row that does nothing.
+		// Clearing puts the highlight back on row zero, which is a message
+		// rather than a choice whenever the list opens on one. tview draws
+		// the highlight whether or not the list has focus, so leaving it
+		// there points at a row that does nothing.
 		if i := firstChoice(items); i > 0 {
 			list.SetCurrentItem(i)
 		}
@@ -238,8 +219,8 @@ func (a *App) newSearchBox(label, title, page string, search func(term string) [
 
 		case tcell.KeyEnter:
 			// Enter from the field takes the first result: the list is
-			// ordered by relevance, so that is the obvious choice. Headings
-			// and "nothing found" are skipped rather than pressed.
+			// ordered by relevance, so that is the obvious choice. A message
+			// such as "nothing found" is skipped rather than pressed.
 			if i := firstChoice(items); i >= 0 {
 				items[i].accept()
 			}

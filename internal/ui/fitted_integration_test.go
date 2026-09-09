@@ -97,13 +97,8 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 		name   string
 		action keymap.Action
 		setup  func(h *harness)
-		// open replaces the key press for a dialog that has no binding of its
-		// own. The first-run card is one: it appears by itself, and is reached
-		// again only by name.
-		open func(h *harness)
 	}{
 		{name: "help", action: keymap.ActionHelp},
-		{name: "command palette", action: keymap.ActionCommandPalette},
 		{name: "history", action: keymap.ActionSearchHistory},
 		{
 			name:   "completion",
@@ -118,10 +113,6 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 			action: keymap.ActionRun,
 			setup:  func(h *harness) { h.typeSQL("DELETE FROM dv_seq") },
 		},
-		{
-			name: "getting started",
-			open: func(h *harness) { h.app.app.QueueUpdateDraw(h.app.showIntro) },
-		},
 	}
 
 	for _, d := range dialogs {
@@ -131,12 +122,7 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 				d.setup(h)
 			}
 			h.resize(50, 16)
-
-			if d.open != nil {
-				d.open(h)
-			} else {
-				h.do(d.action)
-			}
+			h.do(d.action)
 
 			if !borderIntact(h.text(), 50) {
 				t.Errorf("the %s dialog is clipped at 50x16:\n%s", d.name, h.text())

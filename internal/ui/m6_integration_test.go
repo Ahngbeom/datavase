@@ -4,9 +4,6 @@ package ui
 
 import (
 	"context"
-	"encoding/csv"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -86,96 +83,6 @@ func TestChoosingAHistoryEntryFillsTheEditor(t *testing.T) {
 
 	if got := h.editorText(); !strings.Contains(got, "777") {
 		t.Errorf("editor holds %q, want the chosen statement", got)
-	}
-}
-
-func TestCommandPaletteOpens(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.do(keymap.ActionCommandPalette)
-
-	got := h.text()
-	for _, want := range []string{"export csv", "history"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("the palette does not offer %q:\n%s", want, got)
-		}
-	}
-}
-
-// The list is longer than a modest terminal — which is why the filter exists,
-// and why checking that a command near the end is on screen unfiltered tests
-// the length of the list rather than the palette. Filtering is the route a
-// user actually takes to those commands.
-func TestThePaletteFilterReachesACommandBelowTheFold(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.do(keymap.ActionCommandPalette)
-	if strings.Contains(h.text(), "leave datavase") {
-		t.Skip("quit is on screen unfiltered; the filter is not what is under test here")
-	}
-
-	h.typeInto("quit")
-
-	if !strings.Contains(h.text(), "leave datavase") {
-		t.Errorf("filtering for \"quit\" does not reach it:\n%s", h.text())
-	}
-}
-
-func TestExportWritesACSVFile(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	dir := t.TempDir()
-	previous, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(previous) })
-
-	h.typeSQL("SELECT 1 AS id, 'alice' AS name")
-	h.do(keymap.ActionRun)
-	// Wait on the status bar, not on a value: "alice" is also sitting in the
-	// editor, so matching it would not mean the result had arrived.
-	if !h.waitForScreen("1 row") {
-		t.Fatalf("the statement never finished:\n%s", h.text())
-	}
-
-	h.app.app.QueueUpdateDraw(func() { h.app.exportResult(formatCSV) })
-	h.settle()
-
-	matches, err := filepath.Glob(filepath.Join(dir, "*.csv"))
-	if err != nil || len(matches) != 1 {
-		t.Fatalf("expected exactly one CSV file, got %v (err %v)\nscreen:\n%s", matches, err, h.text())
-	}
-
-	file, err := os.Open(matches[0])
-	if err != nil {
-		t.Fatalf("opening the export: %v", err)
-	}
-	defer file.Close()
-
-	records, err := csv.NewReader(file).ReadAll()
-	if err != nil {
-		t.Fatalf("the export is not valid CSV: %v", err)
-	}
-	if len(records) != 2 {
-		t.Fatalf("export has %d records, want a header and one row", len(records))
-	}
-	if records[0][1] != "name" || records[1][1] != "alice" {
-		t.Errorf("export = %v, want the queried values", records)
-	}
-}
-
-func TestExportWithNoResultSaysSo(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.exportResult(formatCSV) })
-	h.settle()
-
-	if !strings.Contains(h.text(), "no result to export") {
-		t.Errorf("exporting without a result gave no feedback:\n%s", h.text())
 	}
 }
 

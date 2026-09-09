@@ -83,15 +83,6 @@ func (h *harness) waitForBackgroundRefresh(datasource string) {
 
 func newHarness(t *testing.T, env config.Env) *harness {
 	t.Helper()
-	return newHarnessWithIntro(t, env, "")
-}
-
-// newHarnessWithIntro is newHarness for the tests that need the first-run card.
-//
-// An empty marker path is what every other test gets, and is what keeps the
-// card out of their way: a session with nowhere to record it never shows it.
-func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harness {
-	t.Helper()
 
 	ds, password := testmysql.DataSource(t)
 	ds.Env = env
@@ -103,7 +94,7 @@ func newHarnessWithIntro(t *testing.T, env config.Env, introMarker string) *harn
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, introMarker, false)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, false)
 }
 
 // newHarnessAssumingPreset is newHarness for the tests that are about a
@@ -122,7 +113,7 @@ func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, "", true)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, true)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -132,10 +123,10 @@ func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds, "", false)
+	return harnessWith(t, sess, ds, false)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, introMarker string, presetAssumed bool) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, presetAssumed bool) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -175,7 +166,7 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 	}
 
 	app := New(sess, cfg, Deps{
-		Keys: keys, Cache: cache, History: hist, IntroPath: introMarker,
+		Keys: keys, Cache: cache, History: hist,
 		PresetAssumed: presetAssumed,
 	})
 	app.SetScreen(screen)
@@ -586,19 +577,6 @@ func (h *harness) do(action keymap.Action) {
 	h.inject(tcell.NewEventKey(b.Key, b.Rune, b.Mods))
 }
 
-// runCommand runs a named palette command the way a user does: open the
-// palette, type the name, take what Enter picks. Every existing palette test
-// either reads the list or drives the App method directly; this exists for a
-// test that only cares what running a command does, not how the palette
-// itself behaves.
-func (h *harness) runCommand(name string) {
-	h.t.Helper()
-
-	h.do(keymap.ActionCommandPalette)
-	h.typeInto(name)
-	h.press(tcell.KeyEnter)
-}
-
 // editorText reads the editor buffer from the UI goroutine.
 func (h *harness) editorText() string {
 	h.t.Helper()
@@ -702,30 +680,6 @@ func TestInterfaceShowsTheDataSource(t *testing.T) {
 	// header carries which file is open, and the caret says the rest.
 	if !strings.Contains(got, "results") {
 		t.Errorf("screen does not show the result region:\n%s", got)
-	}
-}
-
-// The route that survives a host application taking ⌘B.
-//
-// This is the whole point of the palette carrying every command and of its own
-// plain key: nothing here presses a chord, and the schema tree still appears.
-func TestTheSchemaTreeIsReachableWithoutItsChord(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	// F3, not ⌘⇧A: the escape hatch has to open with a key nothing upstream
-	// is in a position to claim.
-	h.press(tcell.KeyF3)
-	h.waitFor("the palette", func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pagePalette
-	})
-
-	h.typeInto("schema tree")
-	h.press(tcell.KeyEnter)
-
-	h.waitFor("the schema pane", func(a *App) bool { return a.sidebarVisible })
-	if !h.waitForScreen(tabTables) {
-		t.Errorf("the schema pane did not appear:\n%s", h.text())
 	}
 }
 

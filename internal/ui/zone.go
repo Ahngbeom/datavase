@@ -27,7 +27,6 @@ const (
 	zoneHelp
 	zoneTab
 	zoneRegionName
-	zoneStatusMode
 )
 
 // hitmap is the zones of the last frame, by screen row.

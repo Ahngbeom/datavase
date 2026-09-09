@@ -352,7 +352,7 @@ func writeConfig(path string, ds config.DataSource, preset keymap.Preset) error 
 		fmt.Fprintf(&b, "    database: %s\n", ds.Database)
 	}
 
-	b.WriteString("\n# The keyboard. Change it here, or from the command palette.\n")
+	b.WriteString("\n# The keyboard. Change it here and restart to take effect.\n")
 	for _, p := range keymap.Presets() {
 		fmt.Fprintf(&b, "#   %-9s %s\n", p, presetDescriptions[p])
 	}

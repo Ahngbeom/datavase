@@ -240,14 +240,6 @@ func baseMap() *Map {
 	// an unmodified letter is text.
 	m.bind(ActionFindNext, ctrlAndCmdRune('g', 0)...)
 	m.bind(ActionFindPrev, ctrlAndCmdRune('g', tcell.ModShift)...)
-	// F3 alongside the chord, and not merely as a courtesy. The palette is how
-	// every command without a key of its own is reached, so it is the one
-	// binding that must survive a host application claiming ⌘⇧A — and
-	// Ctrl+Shift+A is no safety net, since a shifted Ctrl letter needs the
-	// extended keyboard protocol to be reported at all.
-	m.bind(ActionCommandPalette,
-		append(ctrlAndCmdRune('a', tcell.ModShift),
-			Binding{Key: tcell.KeyF3})...)
 
 	// Tab switching and inspection.
 	//

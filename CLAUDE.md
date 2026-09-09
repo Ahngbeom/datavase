@@ -73,7 +73,7 @@ what it deliberately does *not* know, and those boundaries are load-bearing:
 `ui` is the largest package and is split by concern rather than by widget:
 `editor.go`/`edit.go`/`motion.go` (text), `vimedit.go`/`vimmotion.go`/`vimnav.go`
 (modal), `status.go`, `tree.go`/`tables.go`/`ddl.go` (schema pane),
-`grid.go` (results), `searchbox.go`/`palette.go`/`goto.go`/`useschema.go`
+`grid.go` (results), `searchbox.go`/`useschema.go`/`history.go`/`datasource.go`
 (dialogs).
 
 ### Two connections per datasource
@@ -118,10 +118,10 @@ becomes a key map; both `cmd/dv` and `dv keys` go through it so the reference
 cannot disagree with the interface. Presets share one base map and only rebind
 where the tools genuinely differ.
 
-**The default preset is `datagrip`,** so typing types. `vim` is one answer to
-`dv init` or one palette command away, and everything below is what makes the
-modal editor survivable *for the people who choose it* — none of it may be
-dropped on the grounds that it is no longer the default:
+**The default preset is `datagrip`,** so typing types. `vim` is one `dv init`
+answer away, and everything below is what makes the modal editor survivable
+*for the people who choose it* — none of it may be dropped on the grounds
+that it is no longer the default:
 
 - the status bar always shows the mode and any half-typed sequence
 - normal mode consumes **every** key — one leaking through gets typed
@@ -136,7 +136,7 @@ mid-session with no rebinding.
 
 ### The first ten minutes
 
-Three things exist only for someone who has not used this before, and each is
+Two things exist only for someone who has not used this before, and each is
 built so it cannot go stale:
 
 - **`internal/cli.Wizard`** (`dv init`) is the config package's only writer. It
@@ -145,11 +145,6 @@ built so it cannot go stale:
 - **`startHere`** (`internal/ui/dialog.go`) is the help screen's opening five,
   rendered from the live key map. It deliberately repeats entries from
   `helpGroups`, which keeps its own exactly-once rule.
-- **`internal/intro`** is one bit — whether the first-run card has been shown —
-  stored as a file's existence under `XDG_STATE_HOME`. Optional like the cache
-  and the history: a marker that cannot be written costs the card being shown
-  again, never the session. An empty `Deps.IntroPath` means never show it,
-  which is what every test that is not about the card gets.
 
 ## Conventions
 

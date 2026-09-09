@@ -85,7 +85,6 @@ func TestVSCodePresetUsesVSCodeKeysWhereTheyDiffer(t *testing.T) {
 		datagrip string
 	}{
 		{ActionDeleteLine, "cmd+shift+k", "cmd+y"},
-		{ActionCommandPalette, "cmd+shift+p", "cmd+shift+a"},
 	}
 
 	for _, tt := range tests {

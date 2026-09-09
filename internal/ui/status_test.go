@@ -495,7 +495,6 @@ func TestTheOpeningLineAtCIsWidth(t *testing.T) {
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 		advice:        "Ctrl+↩ does not work here — use F5",
-		paletteHint:   "F3 lists commands",
 	}
 
 	for _, width := range []int{76, 79, 80} {
@@ -508,10 +507,8 @@ func TestTheOpeningLineAtCIsWidth(t *testing.T) {
 				t.Errorf("width %d: %q is missing %q", width, line, want)
 			}
 		}
-		for _, gone := range []string{"lists commands", "11.4.12-MariaDB-ubu2404"} {
-			if strings.Contains(line, gone) {
-				t.Errorf("width %d: %q still carries %q, which should have shed first", width, line, gone)
-			}
+		if strings.Contains(line, "11.4.12-MariaDB-ubu2404") {
+			t.Errorf("width %d: %q still carries the server version, which should have shed first", width, line)
 		}
 	}
 }
@@ -533,7 +530,6 @@ func TestTheSchemaTreeSurvivesEveryWidthTheAdviceDoes(t *testing.T) {
 		helpKey:       "F1",
 		sidebarKey:    "^B",
 		advice:        "Ctrl+↩ does not work here — use F5",
-		paletteHint:   "F3 lists commands",
 	}
 
 	for width := 60; width <= 130; width++ {
@@ -584,63 +580,6 @@ func TestTheOpeningLineWithoutAdvice(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("the opening line does not mention %q: %q", want, line)
 		}
-	}
-}
-
-// A modal editor where nobody was told about insert mode is one where the
-// first keystroke does nothing, so that clause outranks the server version
-// too.
-func TestTheOpeningLinePutsTheModalHintAheadOfTheServerVersion(t *testing.T) {
-	line := strings.Join(openingClauses(opening{
-		serverVersion: "11.4.12-MariaDB-ubu2404",
-		helpKey:       "F1",
-		sidebarKey:    "^B",
-		modal:         true,
-	}), " · ")
-
-	modal := strings.Index(line, "i to type")
-	server := strings.Index(line, "11.4.12")
-	if modal < 0 || server < 0 {
-		t.Fatalf("the opening line is missing a clause: %q", line)
-	}
-	if modal > server {
-		t.Errorf("the modal hint sits behind the server version: %q", line)
-	}
-}
-
-// The default keyboard moved. Someone whose config never named one would
-// otherwise find out by pressing a key that used to do something else.
-func TestASessionOnAnAssumedKeyboardSaysWhichOne(t *testing.T) {
-	clauses := openingClauses(opening{
-		serverVersion: "11.4.2-MariaDB",
-		helpKey:       "F1",
-		sidebarKey:    "Ctrl+B",
-		presetAssumed: true,
-		presetName:    "datagrip",
-	})
-
-	joined := strings.Join(clauses, " | ")
-	if !strings.Contains(joined, "datagrip") {
-		t.Errorf("the opening does not name the keyboard it assumed:\n%s", joined)
-	}
-	if !strings.Contains(joined, "keymap") {
-		t.Errorf("the opening does not say how to change it:\n%s", joined)
-	}
-}
-
-// Someone who stated a preset chose it, and does not need telling what they
-// chose on every session.
-func TestASessionOnAStatedKeyboardSaysNothingAboutIt(t *testing.T) {
-	clauses := openingClauses(opening{
-		serverVersion: "11.4.2-MariaDB",
-		helpKey:       "F1",
-		sidebarKey:    "Ctrl+B",
-		presetAssumed: false,
-		presetName:    "vim",
-	})
-
-	if joined := strings.Join(clauses, " | "); strings.Contains(joined, "keymap") {
-		t.Errorf("the opening lectures someone who chose their keyboard:\n%s", joined)
 	}
 }
 
@@ -733,32 +672,5 @@ func TestTerminalAdviceOutranksAContextHint(t *testing.T) {
 	line, _ := s.renderWidth(46)
 	if !strings.Contains(line, "cannot reach this terminal") {
 		t.Errorf("the narrow bar dropped the advice and kept the hint:\n%s", line)
-	}
-}
-
-// The mode field is where someone reads which keyboard they are on, so it is
-// where they reach to change it — and it is the field a beginner stares at
-// hardest.
-func TestTheModeFieldIsClickable(t *testing.T) {
-	s := status{vimMode: "NORMAL"}
-
-	line, zones := s.renderWidth(120)
-	plain := []rune(visibleText(line))
-
-	var found bool
-	for _, z := range zones {
-		if z.target != zoneStatusMode {
-			continue
-		}
-		found = true
-		if z.from < 0 || z.to > len(plain) || z.from >= z.to {
-			t.Fatalf("the mode zone %+v is outside %q", z, string(plain))
-		}
-		if covered := string(plain[z.from:z.to]); !strings.Contains(covered, "NORMAL") {
-			t.Errorf("the mode zone covers %q", covered)
-		}
-	}
-	if !found {
-		t.Error("the mode field publishes no zone")
 	}
 }

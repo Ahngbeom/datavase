@@ -56,7 +56,6 @@ const (
 	ActionFindNext
 	ActionFindPrev
 	ActionSearchHistory
-	ActionCommandPalette
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
 	// ActionInspect shows the selected result row read down the page instead
@@ -107,7 +106,6 @@ var actionNames = map[Action]string{
 	ActionFindNext:          "find-next",
 	ActionFindPrev:          "find-previous",
 	ActionSearchHistory:     "search-history",
-	ActionCommandPalette:    "command-palette",
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
@@ -149,7 +147,6 @@ var descriptions = map[Action]string{
 	ActionFindNext:          "go to the next match",
 	ActionFindPrev:          "go to the previous match",
 	ActionSearchHistory:     "search the query history",
-	ActionCommandPalette:    "open the command palette",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
@@ -214,7 +211,6 @@ var familiar = map[Action]bool{
 	ActionFindNext:         false,
 	ActionFindPrev:         false,
 	ActionSearchHistory:    false,
-	ActionCommandPalette:   false,
 	ActionCycleTab:         false,
 	ActionInspect:          false,
 	ActionSortColumn:       false,
@@ -234,7 +230,7 @@ var order = []Action{
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
-	ActionCommandPalette, ActionInspect,
+	ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,

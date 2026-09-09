@@ -66,8 +66,8 @@ func TestShiftIsPartOfTheBinding(t *testing.T) {
 	if got := m.Lookup(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModCtrl)); got != ActionSelectAll {
 		t.Fatalf("Ctrl+A = %v, want ActionSelectAll", got)
 	}
-	if got := m.Lookup(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModCtrl|tcell.ModShift)); got != ActionCommandPalette {
-		t.Errorf("Ctrl+Shift+A = %v, want ActionCommandPalette", got)
+	if got := m.Lookup(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModCtrl|tcell.ModShift)); got != ActionNone {
+		t.Errorf("Ctrl+Shift+A = %v, want ActionNone", got)
 	}
 }
 

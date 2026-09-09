@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/vim"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -62,13 +61,13 @@ func centredText(p tview.Primitive, text string, width, height int) tview.Primit
 // answer "what do I do now". These five do, and each appears again in its own
 // group further down — the repetition is the point, not an oversight.
 //
-// The palette is here because it is the one key that finds everything else,
-// and quit because a beginner's first question about an unfamiliar full-screen
-// program is how to get out of it.
+// Switching datasource is here because it is the one action with no other
+// way to discover it exists, and quit because a beginner's first question
+// about an unfamiliar full-screen program is how to get out of it.
 var startHere = []keymap.Action{
 	keymap.ActionRun,
 	keymap.ActionToggleSidebar,
-	keymap.ActionCommandPalette,
+	keymap.ActionSwitchDataSource,
 	keymap.ActionHelp,
 	keymap.ActionQuit,
 }
@@ -108,7 +107,7 @@ var helpGroups = []struct {
 		actions: []keymap.Action{
 			keymap.ActionFind, keymap.ActionFindNext, keymap.ActionFindPrev,
 			keymap.ActionSearchHistory,
-			keymap.ActionInspect, keymap.ActionCommandPalette,
+			keymap.ActionInspect,
 		},
 	},
 	{
@@ -145,20 +144,13 @@ func (a *App) helpText() string {
 	for _, action := range startHere {
 		b.WriteString(keyReferenceLine(a.keys, action))
 	}
-	b.WriteString(a.modalEscapeHatch())
 
 	b.WriteString(helpReference(a.keys))
 
-	b.WriteString(commandHelpText(a.keyLabel(keymap.ActionCommandPalette)))
-	b.WriteString(a.vimHelp())
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
 	if advice := keymap.TerminalAdvice(os.Getenv("TERM"), a.keys); advice != "" {
 		fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, advice))
-	}
-	if onMac {
-		b.WriteString("\n" + tag(colourMuted, "⌘ bindings need the terminal to forward them:\n"+
-			"run `dv keys --ghostty` or `dv keys --iterm2` outside datavase.") + "\n")
 	}
 
 	b.WriteString("\n" + tag(colourMuted, "Press Escape to close."))
@@ -209,25 +201,6 @@ func helpReference(km *keymap.Map) string {
 	return b.String()
 }
 
-// commandHelpText lists the command palette's entries.
-//
-// These carry no key of their own, so without this the only way to find one
-// is to already know it exists.
-//
-// It is generated from the same list the palette offers, so the two cannot
-// drift apart, and it takes the palette's key label rather than the App so the
-// section can be rendered in a test without a terminal.
-func commandHelpText(paletteKey string) string {
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "\n%s\n", headingTag("Commands — "+result.EscapeTags(paletteKey)+", then type"))
-	for _, c := range paletteCommands() {
-		fmt.Fprintf(&b, "  %s  %s\n",
-			keymap.PadLabel(result.EscapeTags(c.name), helpKeyColumn), result.EscapeTags(c.summary))
-	}
-	return b.String()
-}
-
 // vimHelp renders the modal commands, and the way out of them.
 //
 // The escape hatch is not an afterthought: someone who did not choose a modal
@@ -263,10 +236,9 @@ func (a *App) modalEscapeHatch() string {
 	if !a.keys.Modal() {
 		return ""
 	}
-	return "\n" + tag(colourMuted, fmt.Sprintf(
-		"Typing does nothing? This editor is modal — press i first.\n"+
-			"For an ordinary editor: %s, then \"keymap datagrip\".",
-		a.keyLabel(keymap.ActionCommandPalette))) + "\n"
+	return "\n" + tag(colourMuted, "Typing does nothing? This editor is modal — press i first.\n"+
+		"For an ordinary editor, put `keymap: {preset: datagrip}` in\n"+
+		"~/.config/datavase/config.yaml.") + "\n"
 }
 
 // helpKeyColumn is the width of the key column on the help screen.

@@ -103,9 +103,6 @@ func (a *App) printKeys(km *keymap.Map) {
 		if action.Reserved() {
 			note = "  (not built yet)"
 		}
-		if action == keymap.ActionCommandPalette {
-			note += "  ← this one reaches the rest"
-		}
 		// Padded by display width rather than rune count: ⌘ and ⇥ take more
 		// than one cell, and %-Ns would leave the column ragged.
 		fmt.Fprintf(a.Out, "  %s  %s%s\n",

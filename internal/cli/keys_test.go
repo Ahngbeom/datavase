@@ -50,7 +50,7 @@ func TestKeysDoesNotMarkImplementedActions(t *testing.T) {
 		t.Errorf("an implemented action is marked unbuilt:\n%s", out)
 	}
 	// And the table is complete.
-	for _, want := range []string{"find in the editor", "search the query history", "open the command palette"} {
+	for _, want := range []string{"find in the editor", "search the query history", "show or hide the schema tree"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the table is missing %q:\n%s", want, out)
 		}
@@ -280,20 +280,6 @@ func TestTheFamiliarBlockFitsAConventionalTerminal(t *testing.T) {
 		if w := keymap.LabelWidth(line); w > 80 {
 			t.Errorf("a packed row is %d cells wide and wraps at eighty:\n%s", w, line)
 		}
-	}
-}
-
-// One key reaches every command by name, and a reader counting keys has no
-// reason to believe the count is optional unless the list says so.
-func TestKeysSaysThePaletteReachesTheRest(t *testing.T) {
-	out := runKeys(t)
-
-	i := strings.Index(out, "that are dv's own")
-	if i < 0 {
-		t.Fatalf("no section for what dv teaches:\n%s", out)
-	}
-	if !strings.Contains(out[i:], "reaches the rest") {
-		t.Errorf("the list never says one key reaches the others:\n%s", out)
 	}
 }
 

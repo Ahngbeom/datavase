@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -157,15 +158,20 @@ func (p *dsPicker) confirmDelete(ds *config.DataSource) {
 	p.app.SetFocus(modal)
 }
 
+// remove filters name out of the list and saves. A failed save is rolled
+// back to the snapshot taken before the filter, so the entry is not left
+// looking deleted in memory when the file on disk still has it.
 func (p *dsPicker) remove(name string) {
+	before := append([]config.DataSource(nil), p.deps.cfg.DataSources...)
 	kept := p.deps.cfg.DataSources[:0]
-	for _, ds := range p.deps.cfg.DataSources {
+	for _, ds := range before {
 		if ds.Name != name {
 			kept = append(kept, ds)
 		}
 	}
 	p.deps.cfg.DataSources = kept
 	if err := p.deps.save(); err != nil {
+		p.deps.cfg.DataSources = before
 		p.setStatus(tag(colourDanger, "saving: "+err.Error()))
 		return
 	}
@@ -175,6 +181,52 @@ func (p *dsPicker) remove(name string) {
 	}
 	p.renderList()
 	p.setStatus("deleted " + name)
+}
+
+// commit validates candidate, applies it under editing (empty for a new
+// entry) and saves. A failed save is rolled back to the snapshot taken
+// before the mutation, so the in-memory list matches the file on disk and a
+// retry under the same name is not refused as a duplicate of itself.
+func (p *dsPicker) commit(editing string, candidate config.DataSource, password string) error {
+	if err := validateDataSource(p.deps.cfg, editing, candidate); err != nil {
+		return err
+	}
+	if password != "" && p.deps.secrets == nil {
+		return errors.New("no keychain here; set DATAVASE_PASSWORD_<NAME> instead")
+	}
+
+	before := append([]config.DataSource(nil), p.deps.cfg.DataSources...)
+	if editing == "" {
+		p.deps.cfg.DataSources = append(p.deps.cfg.DataSources, candidate)
+	} else {
+		for i := range p.deps.cfg.DataSources {
+			if p.deps.cfg.DataSources[i].Name == editing {
+				p.deps.cfg.DataSources[i] = candidate
+			}
+		}
+	}
+	if err := p.deps.save(); err != nil {
+		p.deps.cfg.DataSources = before
+		return fmt.Errorf("saving: %w", err)
+	}
+
+	if password != "" {
+		if err := p.deps.secrets.Set(candidate.Name, password); err != nil {
+			return fmt.Errorf("the file is saved, but the keychain refused the password: %w", err)
+		}
+	}
+	if editing != "" && editing != candidate.Name && p.deps.secrets != nil {
+		// A rename moves the password with the entry.
+		if old, err := p.deps.secrets.Get(editing); err == nil && password == "" {
+			_ = p.deps.secrets.Set(candidate.Name, old)
+		}
+		_ = p.deps.secrets.Delete(editing)
+	}
+	if editing != "" && editing == p.deps.current && candidate.Name != editing {
+		// Otherwise the rename makes the list stop marking it as connected.
+		p.deps.current = candidate.Name
+	}
+	return nil
 }
 
 // showForm opens the add form (ds nil) or the edit form.
@@ -257,40 +309,9 @@ func (p *dsPicker) showForm(ds *config.DataSource) {
 			say(tag(colourDanger, err.Error()))
 			return
 		}
-		if err := validateDataSource(p.deps.cfg, editing, candidate); err != nil {
+		if err := p.commit(editing, candidate, password); err != nil {
 			say(tag(colourDanger, err.Error()))
 			return
-		}
-		if password != "" && p.deps.secrets == nil {
-			say(tag(colourDanger, "no keychain here; set DATAVASE_PASSWORD_<NAME> instead"))
-			return
-		}
-
-		if editing == "" {
-			p.deps.cfg.DataSources = append(p.deps.cfg.DataSources, candidate)
-		} else {
-			for i := range p.deps.cfg.DataSources {
-				if p.deps.cfg.DataSources[i].Name == editing {
-					p.deps.cfg.DataSources[i] = candidate
-				}
-			}
-		}
-		if err := p.deps.save(); err != nil {
-			say(tag(colourDanger, "saving: "+err.Error()))
-			return
-		}
-		if password != "" {
-			if err := p.deps.secrets.Set(candidate.Name, password); err != nil {
-				say(tag(colourDanger, "the file is saved, but the keychain refused the password: "+err.Error()))
-				return
-			}
-		}
-		if editing != "" && editing != candidate.Name && p.deps.secrets != nil {
-			// A rename moves the password with the entry.
-			if old, err := p.deps.secrets.Get(editing); err == nil && password == "" {
-				_ = p.deps.secrets.Set(candidate.Name, old)
-			}
-			_ = p.deps.secrets.Delete(editing)
 		}
 		p.renderList()
 		p.setStatus("saved " + candidate.Name)

@@ -202,11 +202,6 @@ datasources:
 			wantErr: "duplicate",
 		},
 		{
-			name:    "no datasources",
-			src:     "datasources: []\n",
-			wantErr: "no datasources",
-		},
-		{
 			name: "tunnel without host",
 			src: `
 datasources:

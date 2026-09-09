@@ -6,7 +6,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -70,7 +69,7 @@ type Tunnel struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	User     string `yaml:"user"`
-	Identity string `yaml:"identity"`
+	Identity string `yaml:"identity,omitempty"`
 }
 
 // DataSource is a single MySQL/MariaDB target. Passwords are never stored
@@ -81,8 +80,8 @@ type DataSource struct {
 	Host     string  `yaml:"host"`
 	Port     int     `yaml:"port"`
 	User     string  `yaml:"user"`
-	Database string  `yaml:"database"`
-	Tunnel   *Tunnel `yaml:"tunnel"`
+	Database string  `yaml:"database,omitempty"`
+	Tunnel   *Tunnel `yaml:"tunnel,omitempty"`
 
 	// TLS is how much the connection must prove about the server. Empty means
 	// DefaultTLSMode for this datasource's env.
@@ -91,7 +90,7 @@ type DataSource struct {
 	// store, for an instance behind a private certificate authority. It is
 	// only meaningful under a mode that verifies, and is refused under any
 	// other rather than read and ignored.
-	TLSCA string `yaml:"tls_ca"`
+	TLSCA string `yaml:"tls_ca,omitempty"`
 }
 
 // Defaults holds tunables shared by every datasource.
@@ -105,7 +104,7 @@ type Defaults struct {
 	// Mouse reporting disables the terminal's own text selection, which is a
 	// regression for anyone who copies by dragging. Off costs only the ways
 	// in: every click reaches an action also bound to a key.
-	Mouse *bool `yaml:"mouse"`
+	Mouse *bool `yaml:"mouse,omitempty"`
 }
 
 // Config is the root of the configuration file.
@@ -181,10 +180,6 @@ func (c *Config) applyDefaults() {
 }
 
 func (c *Config) validate() error {
-	if len(c.DataSources) == 0 {
-		return errors.New("no datasources defined")
-	}
-
 	seen := make(map[string]struct{}, len(c.DataSources))
 	for i := range c.DataSources {
 		ds := &c.DataSources[i]

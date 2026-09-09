@@ -74,13 +74,23 @@ func TestEveryActionIsStillOnTheRenderedHelpScreen(t *testing.T) {
 // TextView continues an overrun line at column zero, so the tail of a
 // description lands under the key column and reads as an entry of its own.
 //
-// The width here is the dialog at its widest, less the border it draws.
+// Both label styles, because they are not close in width: one machine reads
+// "⌘⇧C  ^⇧C  F3" where another reads "Super+Shift+C  Ctrl+Shift+C  F3", and
+// only the second one overflows. The width is the dialog at its widest, less
+// the border it draws.
 func TestEveryHelpLineFitsTheDialog(t *testing.T) {
 	const inner = 74
 
-	for _, line := range strings.Split(helpReference(keymap.Default()), "\n") {
-		if got := visibleCost(line); got > inner {
-			t.Errorf("a help line is %d cells wide, want at most %d:\n%q", got, inner, line)
+	was := onMac
+	defer func() { onMac = was }()
+
+	for _, mac := range []bool{true, false} {
+		onMac = mac
+		for _, line := range strings.Split(helpReference(keymap.Default()), "\n") {
+			if got := visibleCost(line); got > inner {
+				t.Errorf("with onMac=%v a help line is %d cells wide, want at most %d:\n%q",
+					mac, got, inner, line)
+			}
 		}
 	}
 }

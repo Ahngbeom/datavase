@@ -17,9 +17,21 @@ import "strings"
 
 // affordanceKeys are the labels for the keys a hint names, taken from the map
 // in force so a rebinding cannot leave a hint advertising a dead key.
+//
+// Each key carries two labels. The first is the one this application teaches
+// — ⌘↩, the DataGrip key — and the short one is its plainest fallback, which
+// on a machine without the Apple glyphs is the difference between "Super+↩
+// run · Ctrl+Space complete" and a header with room for neither. A hint that
+// had to choose would rather name F5 than be cut off mid-word.
 type affordanceKeys struct {
 	run, runAll, complete, history string
 	copy, sort, inspect, row       string
+
+	// short are the same keys at their briefest, for a narrow header.
+	short struct {
+		run, complete            string
+		copy, sort, inspect, row string
+	}
 }
 
 // joinHints puts a middle dot between the parts, skipping the empty ones.
@@ -42,11 +54,21 @@ func joinHints(parts ...string) string {
 // being typed. Completion is the one no reader guesses — Ctrl+Space announces
 // itself nowhere — while the history and the shifted run key are a keystroke
 // from the reference this line points at.
-func editorAffordance(focused bool, k affordanceKeys) string {
+func editorAffordance(focused bool, room int, k affordanceKeys) string {
 	if !focused {
 		return ""
 	}
-	return joinHints(k.run+" run", k.complete+" complete")
+	return fit(room,
+		joinHints(k.run+" run", k.complete+" complete"),
+		joinHints(k.short.run+" run", k.short.complete+" complete"))
+}
+
+// fit returns the first form that fits, or the shorter one to be cut.
+func fit(room int, long, short string) string {
+	if visibleCost(long) <= room {
+		return long
+	}
+	return short
 }
 
 // treeAffordance names the preview, which is the tree's reason for being
@@ -65,11 +87,13 @@ func treeAffordance(focused bool, k affordanceKeys) string {
 
 // gridAffordance offers the three things a result can do, once there is a
 // result. An empty grid naming them would be three keys that answer nothing.
-func gridAffordance(focused, hasRows bool, k affordanceKeys) string {
+func gridAffordance(focused, hasRows bool, room int, k affordanceKeys) string {
 	if !focused || !hasRows {
 		return ""
 	}
-	return joinHints(k.copy+" copy", k.sort+" sort", k.inspect+" row")
+	return fit(room,
+		joinHints(k.copy+" copy", k.sort+" sort", k.inspect+" row"),
+		joinHints(k.short.copy+" copy", k.short.sort+" sort", k.short.inspect+" row"))
 }
 
 // failureDirection is where to look in this window after a failure the

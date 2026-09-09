@@ -3,13 +3,15 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"github.com/Ahngbeom/datavase/internal/keymap"
 )
 
 // keys stands in for the live key map: the hints name whatever the map says,
 // so a rebinding can never leave the header advertising a key that does
 // nothing.
 func testKeys() affordanceKeys {
-	return affordanceKeys{
+	k := affordanceKeys{
 		run:      "⌘↩",
 		runAll:   "⌘⇧↩",
 		complete: "^Space",
@@ -19,7 +21,14 @@ func testKeys() affordanceKeys {
 		inspect:  "⌘I",
 		row:      "⌘⇧R",
 	}
+	k.short.run, k.short.complete = "F5", "^Space"
+	k.short.copy, k.short.sort, k.short.inspect, k.short.row = "F3", "F12", "F4", "F8"
+	return k
 }
+
+// wide is more room than any hint needs, for the tests that are about what a
+// hint says rather than how it copes with a narrow header.
+const wide = 200
 
 // Only the region the keyboard is in speaks. Three regions offering their
 // keys at once is a screen shouting, and a reader who has stopped seeing any
@@ -27,13 +36,13 @@ func testKeys() affordanceKeys {
 func TestOnlyTheFocusedRegionOffersItsKeys(t *testing.T) {
 	k := testKeys()
 
-	if got := editorAffordance(false, k); got != "" {
+	if got := editorAffordance(false, wide, k); got != "" {
 		t.Errorf("the unfocused editor said %q, want nothing", got)
 	}
 	if got := treeAffordance(false, k); got != "" {
 		t.Errorf("the unfocused tree said %q, want nothing", got)
 	}
-	if got := gridAffordance(false, true, k); got != "" {
+	if got := gridAffordance(false, true, wide, k); got != "" {
 		t.Errorf("the unfocused grid said %q, want nothing", got)
 	}
 }
@@ -41,7 +50,7 @@ func TestOnlyTheFocusedRegionOffersItsKeys(t *testing.T) {
 // What the editor can do that is not obvious from looking at it: everything
 // except typing.
 func TestTheEditorOffersRunningCompletionAndHistory(t *testing.T) {
-	got := editorAffordance(true, testKeys())
+	got := editorAffordance(true, wide, testKeys())
 
 	for _, want := range []string{"⌘↩ run", "^Space complete"} {
 		if !strings.Contains(got, want) {
@@ -65,14 +74,14 @@ func TestTheTreeOffersThePreviewItIsThereFor(t *testing.T) {
 func TestTheGridOffersItsKeysOnlyOnceThereAreRows(t *testing.T) {
 	k := testKeys()
 
-	got := gridAffordance(true, true, k)
+	got := gridAffordance(true, true, wide, k)
 	for _, want := range []string{"⌘⇧C copy", "⌘⇧S sort", "⌘I row"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the grid hint is %q, want it to name %q", got, want)
 		}
 	}
 
-	if got := gridAffordance(true, false, k); got != "" {
+	if got := gridAffordance(true, false, wide, k); got != "" {
 		t.Errorf("an empty grid offered %q, want nothing", got)
 	}
 }
@@ -87,8 +96,8 @@ func TestEveryHintFitsTheRegionThatCarriesIt(t *testing.T) {
 	const room = 80 - sidebarWidth - 1 - 12
 
 	for name, hint := range map[string]string{
-		"editor": editorAffordance(true, k),
-		"grid":   gridAffordance(true, true, k),
+		"editor": editorAffordance(true, room, k),
+		"grid":   gridAffordance(true, true, room, k),
 	} {
 		if got := visibleCost(hint); got > room {
 			t.Errorf("the %s hint is %d cells wide, want at most %d: %q", name, got, room, hint)
@@ -131,4 +140,88 @@ func TestAnOrdinaryFailureGetsNoDirection(t *testing.T) {
 	if got != "" {
 		t.Errorf("failureDirection() = %q, want nothing", got)
 	}
+}
+
+// A header too narrow for the keys this application teaches names the
+// fallbacks instead of being cut off mid-word.
+//
+// The long labels are what a machine without the Apple glyphs draws:
+// "Super+↩ run · Ctrl+Space complete" is thirty-four cells where the editor
+// header often has thirty.
+func TestANarrowHeaderNamesTheShorterKeys(t *testing.T) {
+	k := affordanceKeys{run: "Super+↩", complete: "Ctrl+Space"}
+	k.short.run, k.short.complete = "F5", "Ctrl+Space"
+
+	wide := editorAffordance(true, 40, k)
+	if !strings.Contains(wide, "Super+↩") {
+		t.Errorf("a wide header said %q, want the key this application teaches", wide)
+	}
+
+	narrow := editorAffordance(true, 30, k)
+	if !strings.Contains(narrow, "F5") {
+		t.Errorf("a narrow header said %q, want the fallback key", narrow)
+	}
+	if got := visibleCost(narrow); got > 30 {
+		t.Errorf("the narrow form is %d cells, want at most 30: %q", got, narrow)
+	}
+}
+
+// Whatever the labels look like on this machine, both regions' hints fit the
+// header they are drawn in.
+func TestTheHintsFitOnEitherLabelStyle(t *testing.T) {
+	const room = 80 - sidebarWidth - 1 - 12
+
+	was := onMac
+	defer func() { onMac = was }()
+
+	for _, mac := range []bool{true, false} {
+		onMac = mac
+		k := liveKeys(t)
+
+		for name, hint := range map[string]string{
+			"editor": editorAffordance(true, room, k),
+			"grid":   gridAffordance(true, true, room, k),
+		} {
+			if got := visibleCost(hint); got > room {
+				t.Errorf("with onMac=%v the %s hint is %d cells, want at most %d: %q",
+					mac, name, got, room, hint)
+			}
+		}
+	}
+}
+
+// liveKeys builds the labels from the real map, which is what the interface
+// draws with.
+func liveKeys(t *testing.T) affordanceKeys {
+	t.Helper()
+
+	m := keymap.Default()
+	first := func(a keymap.Action) string {
+		if b := m.DisplayBindings(a); len(b) > 0 {
+			return b[0].Label(onMac)
+		}
+		return ""
+	}
+	shortest := func(a keymap.Action) string {
+		best := ""
+		for _, b := range m.DisplayBindings(a) {
+			if l := b.Label(onMac); best == "" || visibleCost(l) < visibleCost(best) {
+				best = l
+			}
+		}
+		return best
+	}
+
+	k := affordanceKeys{
+		run:      first(keymap.ActionRun),
+		complete: first(keymap.ActionComplete),
+		copy:     first(keymap.ActionCopyResult),
+		sort:     first(keymap.ActionSortColumn),
+		inspect:  first(keymap.ActionInspect),
+	}
+	k.short.run, k.short.complete = shortest(keymap.ActionRun), shortest(keymap.ActionComplete)
+	k.short.copy = shortest(keymap.ActionCopyResult)
+	k.short.sort = shortest(keymap.ActionSortColumn)
+	k.short.inspect = shortest(keymap.ActionInspect)
+	return k
 }

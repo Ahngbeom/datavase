@@ -42,7 +42,7 @@ type tabbed struct {
 	// inside Draw deadlocks — tview holds its mutex for the whole frame and
 	// GetFocus takes the same one — and the Flex already knows, because the
 	// focused widget is one of its children.
-	detail func() string
+	detail func(room int) string
 
 	// detailTarget makes the trailing detail a control, read at draw time
 	// like detail itself: a static target would stay a zone over whatever
@@ -90,16 +90,16 @@ func (t *tabbed) only(p tview.Primitive) {
 }
 
 // watch supplies the trailing note the header reads at draw time.
-func (t *tabbed) watch(detail func() string) *tabbed {
+func (t *tabbed) watch(detail func(room int) string) *tabbed {
 	t.detail = detail
 	return t
 }
 
-func (t *tabbed) detailText() string {
+func (t *tabbed) detailText(room int) string {
 	if t.detail == nil {
 		return ""
 	}
-	return t.detail()
+	return t.detail(room)
 }
 
 // show switches to a named tab. Unknown names are ignored, so a caller can
@@ -150,7 +150,7 @@ func (t *tabbed) renderHeader() {
 	if t.detailTarget != nil {
 		target = t.detailTarget()
 	}
-	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), target, t.width)
+	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText, target, t.width)
 	t.header.SetText(text)
 	if t.record != nil {
 		t.record(t.headerRow, offsetZones(zones, t.headerCol))
@@ -167,7 +167,7 @@ const focusMarker = "▌"
 //
 // The detail is the first thing to go when the region is narrow: which tab you
 // are on is structural, while a hint is a convenience.
-func regionHeader(names []string, active int, focused bool, detail string, detailTarget zoneTarget, width int) (string, []zone) {
+func regionHeader(names []string, active int, focused bool, detail func(room int) string, detailTarget zoneTarget, width int) (string, []zone) {
 	if width < 1 {
 		width = 1
 	}
@@ -190,13 +190,19 @@ func regionHeader(names []string, active int, focused bool, detail string, detai
 	zones = offsetZones(zones, visibleCost(marker))
 
 	const gap = "  "
-	// Four cells is the least that can carry a legible fragment; below that the
-	// detail is noise rather than information.
-	if room := remaining - used - len(gap); detail != "" && room >= 4 {
-		before := visibleCost(line)
-		line += gap + tag(colourMuted, result.Truncate(detail, room))
-		if detailTarget != zoneNone {
-			zones = append(zones, zone{from: before + len(gap), to: visibleCost(line), target: detailTarget, index: -1})
+	// Four cells is the least that can carry a legible fragment; below that
+	// the detail is noise rather than information.
+	//
+	// The detail is asked for the room it has rather than handed over as a
+	// finished string, so a hint can name a shorter key — F5 where ⌘↩ will
+	// not fit — instead of being truncated into naming none.
+	if room := remaining - used - len(gap); room >= 4 && detail != nil {
+		if text := detail(room); text != "" {
+			before := visibleCost(line)
+			line += gap + tag(colourMuted, result.Truncate(text, room))
+			if detailTarget != zoneNone {
+				zones = append(zones, zone{from: before + len(gap), to: visibleCost(line), target: detailTarget, index: -1})
+			}
 		}
 	}
 

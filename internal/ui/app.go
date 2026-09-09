@@ -422,7 +422,7 @@ func (a *App) buildWidgets() {
 // affordances are the key labels the header hints name, read from the map in
 // force rather than written out, so a rebinding moves the hint with the key.
 func (a *App) affordances() affordanceKeys {
-	return affordanceKeys{
+	k := affordanceKeys{
 		run:      a.keyLabel(keymap.ActionRun),
 		runAll:   a.keyLabel(keymap.ActionRunAll),
 		complete: a.keyLabel(keymap.ActionComplete),
@@ -432,11 +432,34 @@ func (a *App) affordances() affordanceKeys {
 		inspect:  a.keyLabel(keymap.ActionInspect),
 		row:      a.keyLabel(keymap.ActionCopyRow),
 	}
+	k.short.run = a.shortKeyLabel(keymap.ActionRun)
+	k.short.complete = a.shortKeyLabel(keymap.ActionComplete)
+	k.short.copy = a.shortKeyLabel(keymap.ActionCopyResult)
+	k.short.sort = a.shortKeyLabel(keymap.ActionSortColumn)
+	k.short.inspect = a.shortKeyLabel(keymap.ActionInspect)
+	k.short.row = a.shortKeyLabel(keymap.ActionCopyRow)
+	return k
+}
+
+// shortKeyLabel is an action's briefest label, for a header too narrow for
+// the one this application teaches.
+//
+// Briefest is usually the function key, which is also the one that reaches
+// every terminal — so where the space runs out, what is left is the binding
+// most likely to work.
+func (a *App) shortKeyLabel(action keymap.Action) string {
+	best := ""
+	for _, b := range a.keys.DisplayBindings(action) {
+		if label := b.Label(onMac); best == "" || visibleCost(label) < visibleCost(best) {
+			best = label
+		}
+	}
+	return best
 }
 
 // editorDetail offers what the editor does beyond taking the typing.
-func (a *App) editorDetail() string {
-	return editorAffordance(a.editor.HasFocus(), a.affordances())
+func (a *App) editorDetail(room int) string {
+	return editorAffordance(a.editor.HasFocus(), room, a.affordances())
 }
 
 // schemaDetail explains the marker, or offers the preview while the tree has
@@ -447,7 +470,7 @@ func (a *App) editorDetail() string {
 // neither. The legend answers a question the marker raises, and it can wait —
 // the marker is still there when the keyboard moves on, and the hint names a
 // gesture nothing else on screen mentions.
-func (a *App) schemaDetail() string {
+func (a *App) schemaDetail(int) string {
 	if hint := treeAffordance(a.schemaTabs.current() == tabTree && a.tree.HasFocus(),
 		a.affordances()); hint != "" {
 		return hint
@@ -474,13 +497,13 @@ func schemaPaneDetail(tab, currentSchema string) string {
 
 // resultDetail says what the empty results tab would otherwise not say, or
 // offers the copy key once there is something to copy.
-func (a *App) resultDetail() string {
+func (a *App) resultDetail(room int) string {
 	k := a.affordances()
 
 	if a.buf.ColumnCount() > 0 && a.running == nil {
 		// With the keyboard here, all three things a result can do; without
 		// it, the copy label alone, because that one is also a click target.
-		if hint := gridAffordance(a.grid.HasFocus(), true, k); hint != "" {
+		if hint := gridAffordance(a.grid.HasFocus(), true, room, k); hint != "" {
 			return hint
 		}
 		return k.copy + " copy"

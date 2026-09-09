@@ -192,6 +192,19 @@ func (p *dsPicker) remove(name string) {
 	p.setStatus("deleted " + name)
 }
 
+// savedWithoutPassword reports that the configuration file was written but
+// the keychain refused the password that goes with it, so the form must
+// close on the strength of the save rather than stay open — retrying would
+// re-run a commit that already succeeded and read to the user as a
+// duplicate entry.
+type savedWithoutPassword struct{ err error }
+
+func (e *savedWithoutPassword) Error() string {
+	return "saved, but the keychain refused the password: " + e.err.Error()
+}
+
+func (e *savedWithoutPassword) Unwrap() error { return e.err }
+
 // commit validates candidate, applies it under editing (empty for a new
 // entry) and saves. A failed save is rolled back to the snapshot taken
 // before the mutation, so the in-memory list matches the file on disk and a
@@ -221,13 +234,20 @@ func (p *dsPicker) commit(editing string, candidate config.DataSource, password 
 
 	if password != "" {
 		if err := p.deps.secrets.Set(candidate.Name, password); err != nil {
-			return fmt.Errorf("the file is saved, but the keychain refused the password: %w", err)
+			return &savedWithoutPassword{err: err}
 		}
 	}
 	if editing != "" && editing != candidate.Name && p.deps.secrets != nil {
-		// A rename moves the password with the entry.
-		if old, err := p.deps.secrets.Get(editing); err == nil && password == "" {
-			_ = p.deps.secrets.Set(candidate.Name, old)
+		if password == "" {
+			// A rename moves the password with the entry, if there is one.
+			// The old entry is deleted only once the copy under the new name
+			// has actually landed, so a keychain failure here leaves the
+			// password retrievable under the name it is still filed as.
+			if old, err := p.deps.secrets.Get(editing); err == nil {
+				if err := p.deps.secrets.Set(candidate.Name, old); err != nil {
+					return &savedWithoutPassword{err: fmt.Errorf("renamed, but the password could not be moved: %w", err)}
+				}
+			}
 		}
 		_ = p.deps.secrets.Delete(editing)
 	}
@@ -319,6 +339,13 @@ func (p *dsPicker) showForm(ds *config.DataSource) {
 			return
 		}
 		if err := p.commit(editing, candidate, password); err != nil {
+			var partial *savedWithoutPassword
+			if errors.As(err, &partial) {
+				p.renderList()
+				p.setStatus(tag(colourDanger, err.Error()))
+				closeForm()
+				return
+			}
 			say(tag(colourDanger, err.Error()))
 			return
 		}

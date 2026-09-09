@@ -70,6 +70,40 @@ func TestAddingADatasourceInSessionSavesTheFile(t *testing.T) {
 	h.waitFor("the list again", func(a *App) bool { return len(a.cfg.DataSources) == 2 && !a.picker.pages.HasPage(pickerForm) })
 }
 
+// Deleting mid-session goes through the same picker flow a user takes: move
+// to the entry, press d, confirm. It has to reach the same config.Save the
+// launcher uses, so the file and the in-memory list agree about what is gone.
+func TestDeletingADatasourceInSessionSavesTheFile(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	h.inspect(func(a *App) bool {
+		a.configPath = path
+		return true
+	})
+	h.addProdDataSource(t)
+
+	h.do(keymap.ActionSwitchDataSource)
+	h.waitFor("the list", func(a *App) bool { return a.pages.HasPage(pageDataSource) })
+
+	// addProdDataSource appended the entry, so it is the second row.
+	h.press(tcell.KeyDown)
+	h.inject(tcell.NewEventKey(tcell.KeyRune, 'd', tcell.ModNone))
+	h.waitFor("the confirm modal", func(a *App) bool {
+		return a.picker != nil && a.picker.pages.HasPage("confirm")
+	})
+
+	// confirmDelete's buttons are "Cancel", "Delete" in that order; Cancel is
+	// focused first, so Tab moves to Delete before Enter chooses it.
+	h.press(tcell.KeyTab)
+	h.press(tcell.KeyEnter)
+
+	h.waitFor("the file", func(a *App) bool {
+		saved, err := config.Load(path)
+		return err == nil && len(saved.DataSources) == 1
+	})
+	h.waitFor("the list again", func(a *App) bool { return len(a.cfg.DataSources) == 1 })
+}
+
 // addProdDataSource configures a second datasource against the same test
 // server, differing only in name.
 //

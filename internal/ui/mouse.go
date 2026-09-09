@@ -167,6 +167,8 @@ func (a *App) mouseAction(z zone, row int) bool {
 		return a.dispatch(keymap.ActionUseSchema)
 	case zoneHelp:
 		return a.dispatch(keymap.ActionHelp)
+	case zoneCopyResult:
+		return a.dispatch(keymap.ActionCopyResult)
 	case zoneTab:
 		// Named, not cycled: the point of a strip is that you can go
 		// straight to the one you can see.

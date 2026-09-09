@@ -63,6 +63,9 @@ const (
 	// ActionSortColumn orders the results by the selected column, and back
 	// again — the third press restores the order the server sent.
 	ActionSortColumn
+	// ActionCopyResult puts the whole result on the clipboard, in a format
+	// chosen when the key is pressed.
+	ActionCopyResult
 	// ActionSwitchDataSource moves the session to another configured
 	// datasource.
 	ActionSwitchDataSource
@@ -108,6 +111,7 @@ var actionNames = map[Action]string{
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
+	ActionCopyResult:        "copy-result",
 	ActionSwitchDataSource:  "switch-datasource",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
@@ -149,6 +153,7 @@ var descriptions = map[Action]string{
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
+	ActionCopyResult:        "copy the whole result as Markdown or JSON",
 	ActionSwitchDataSource:  "switch to another datasource",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
@@ -172,7 +177,7 @@ var order = []Action{
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
 	ActionInspect,
-	ActionSortColumn,
+	ActionSortColumn, ActionCopyResult,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,
 	ActionHelp, ActionQuit,

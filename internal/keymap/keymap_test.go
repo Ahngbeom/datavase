@@ -305,3 +305,20 @@ func TestReservedIsFalseForImplementedActions(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyResultIsBoundToCommandShiftC(t *testing.T) {
+	m := Default()
+	for _, ev := range []*tcell.EventKey{
+		tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModMeta|tcell.ModShift),
+		tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModCtrl|tcell.ModShift),
+		tcell.NewEventKey(tcell.KeyF3, 0, tcell.ModNone),
+	} {
+		if got := m.Lookup(ev); got != ActionCopyResult {
+			t.Errorf("Lookup(%v) = %v, want ActionCopyResult", ev.Name(), got)
+		}
+	}
+	// Plain ⌘C must still be the copy-or-cancel key.
+	if got := m.Lookup(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModMeta)); got != ActionCopyOrCancel {
+		t.Errorf("⌘C = %v, want ActionCopyOrCancel", got)
+	}
+}

@@ -44,6 +44,10 @@ type tabbed struct {
 	// focused widget is one of its children.
 	detail func() string
 
+	// detailTarget makes the trailing detail a control. zoneNone leaves it
+	// as text.
+	detailTarget zoneTarget
+
 	// record hands this frame's header zones to the application's hitmap.
 	record func(row int, zones []zone)
 	// headerRow and headerCol are where the header was last drawn, in screen
@@ -140,7 +144,7 @@ func (t *tabbed) Draw(screen tcell.Screen) {
 }
 
 func (t *tabbed) renderHeader() {
-	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.width)
+	text, zones := regionHeader(t.names, t.active, t.HasFocus(), t.detailText(), t.detailTarget, t.width)
 	t.header.SetText(text)
 	if t.record != nil {
 		t.record(t.headerRow, offsetZones(zones, t.headerCol))
@@ -157,7 +161,7 @@ const focusMarker = "▌"
 //
 // The detail is the first thing to go when the region is narrow: which tab you
 // are on is structural, while a hint is a convenience.
-func regionHeader(names []string, active int, focused bool, detail string, width int) (string, []zone) {
+func regionHeader(names []string, active int, focused bool, detail string, detailTarget zoneTarget, width int) (string, []zone) {
 	if width < 1 {
 		width = 1
 	}
@@ -183,7 +187,11 @@ func regionHeader(names []string, active int, focused bool, detail string, width
 	// Four cells is the least that can carry a legible fragment; below that the
 	// detail is noise rather than information.
 	if room := remaining - used - len(gap); detail != "" && room >= 4 {
+		before := visibleCost(line)
 		line += gap + tag(colourMuted, result.Truncate(detail, room))
+		if detailTarget != zoneNone {
+			zones = append(zones, zone{from: before + len(gap), to: visibleCost(line), target: detailTarget, index: -1})
+		}
 	}
 
 	// The region-name zone spans the whole header and is appended last, after

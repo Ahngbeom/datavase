@@ -381,6 +381,7 @@ func (a *App) buildWidgets() {
 	a.schemaTabs.record = a.recorderFor(a.schemaTabs)
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
+	a.resultTabs.detailTarget = zoneCopyResult
 	a.resultTabs.add(tabResults, a.grid)
 	a.resultTabs.record = a.recorderFor(a.resultTabs)
 
@@ -412,8 +413,12 @@ func schemaPaneDetail(tab, currentSchema string) string {
 	return currentSchemaMarker + " current schema"
 }
 
-// resultDetail says what the empty results tab would otherwise not say.
+// resultDetail says what the empty results tab would otherwise not say, or
+// offers the copy key once there is something to copy.
 func (a *App) resultDetail() string {
+	if a.buf.ColumnCount() > 0 && a.running == nil {
+		return a.keyLabel(keymap.ActionCopyResult) + " copy"
+	}
 	return resultHint(resultState{
 		columns: a.buf.ColumnCount(),
 		running: a.running != nil,
@@ -657,6 +662,8 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.inspect()
 	case keymap.ActionSortColumn:
 		a.sortColumn()
+	case keymap.ActionCopyResult:
+		a.showCopyFormats()
 	case keymap.ActionSwitchDataSource:
 		a.showDataSources()
 	case keymap.ActionFind:

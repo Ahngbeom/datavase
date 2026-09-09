@@ -44,7 +44,9 @@ The session server and detach, the worktree and `--dir`, explain and
 analyze, the process list and locks, the definition tab, the production
 guard and `unlock writes`, the command palette and `:` command line, the
 right-click menu, the first-run card, the vim keyboard, keymap presets
-and overrides, `dv init`, `dv keys`, `dv server`, `dv status`, `dv api`.
+and overrides, `dv init`, `dv keys`, `dv server`, `dv status`, `dv api`,
+and `copy row`: `⌘C` on the grid copies the cell, and `⌘⇧C` copies the
+whole result.
 
 ## v0.8.0 — 2026-09-08
 

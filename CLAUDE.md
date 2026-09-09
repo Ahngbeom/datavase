@@ -24,7 +24,7 @@ make db-shell           # MariaDB shell against the test database
 Running one test, or one package:
 
 ```sh
-go test ./internal/export/ -run TestMarkdown
+go test ./internal/export/ -run TestMarkdownEscapesPipesAndNewlines
 go test -tags integration ./internal/ui/ -run TestDoubleClickingATableInTheTreeShowsItsRows -v
 go test -race -tags integration ./internal/ui/
 ```

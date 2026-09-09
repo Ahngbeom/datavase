@@ -48,6 +48,28 @@ and overrides, `dv init`, `dv keys`, `dv server`, `dv status`, `dv api`,
 and `copy row`: `⌘C` on the grid copies the cell, and `⌘⇧C` copies the
 whole result.
 
+## v0.8.1 — 2026-09-08
+
+**Nothing to do before upgrading.** No configuration file changes, no keys
+moved, and every datasource behaves as it did — this fixes one way a session
+could stop responding.
+
+### Fixed
+
+**A server that stops answering no longer holds the interface indefinitely.**
+Reading a table's definition, listing what else is running on the server, and
+cancelling a statement all share one connection kept aside for them. When the
+server behind that connection went away quietly — a router reaping it for
+being idle, a network that dropped — the caller holding it stayed in its write
+for as long as the operating system took to notice, which is minutes. Every
+other caller waited that out too, whatever time limit it had set for itself,
+because the limit only began once the connection was in hand. They now give up
+on time and say what went wrong.
+
+That connection is the one most exposed to this: it is reserved for
+cancellation and schema reads, so it sits idle almost all of the time, which
+is exactly what an idle-connection reaper looks for.
+
 ## v0.8.0 — 2026-09-08
 
 **One thing to check before upgrading: `preset` in your config.** Anyone who

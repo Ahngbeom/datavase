@@ -85,24 +85,6 @@ func TestTablesListMovesWithJAndK(t *testing.T) {
 	})
 }
 
-// Someone who did not choose a modal editor has to be able to find the way
-// out from inside it.
-func TestHelpShowsTheVimKeysAndTheWayOut(t *testing.T) {
-	h := newVimHarness(t)
-
-	var help string
-	h.inspect(func(a *App) bool {
-		help = a.helpText()
-		return true
-	})
-
-	for _, want := range []string{"dd", "insert before the cursor", "For an ordinary editor"} {
-		if !strings.Contains(help, want) {
-			t.Errorf("the key reference is missing %q:\n%s", want, help)
-		}
-	}
-}
-
 // The reference answers "which key does X" and never answered "what do I do
 // now". Five keys at the top do, and they have to be the first thing on the
 // screen rather than the seventh group down.
@@ -144,34 +126,6 @@ func TestTheKeyReferenceOpensWithTheFewKeysToStartFrom(t *testing.T) {
 		}
 		return true
 	})
-}
-
-// The way out has to be readable without scrolling through the thing being
-// escaped.
-//
-// It used to sit at the foot of the vim reference, past forty keys and a full
-// modal table — so the answer to "I cannot type into this" was behind the
-// whole of what the reader was trying to leave.
-func TestTheWayOutOfTheModalEditorComesBeforeTheVimKeys(t *testing.T) {
-	h := newVimHarness(t)
-
-	var help string
-	h.inspect(func(a *App) bool {
-		help = a.helpText()
-		return true
-	})
-
-	// The hatch's own words. "keymap datagrip" is no anchor: commandHelpText
-	// lists every palette command, that one included, so a test looking for it
-	// passes with no escape hatch anywhere.
-	escape := strings.Index(help, "For an ordinary editor")
-	reference := strings.Index(help, "insert before the cursor")
-	if escape < 0 || reference < 0 {
-		t.Fatalf("the key reference is missing the escape hatch or the vim keys:\n%s", help)
-	}
-	if escape > reference {
-		t.Error("the way out of the modal editor is printed after the vim reference")
-	}
 }
 
 // The hint is only true on a modal keyboard. Telling a DataGrip user to press

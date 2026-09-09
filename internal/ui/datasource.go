@@ -157,7 +157,6 @@ func (a *App) adopt(sess *session.Session) {
 
 	// loadSchemas reloads the completion cache behind it, so the tree and
 	// what completion offers move together.
-	a.paintSpine()
 	a.loadSchemas()
 
 	a.status.phase = phaseIdle
@@ -168,9 +167,4 @@ func (a *App) adopt(sess *session.Session) {
 	// connection and then on the tunnel, and neither is something to hold a
 	// redraw behind.
 	go old.Close()
-}
-
-// paintSpine puts the spine's colour on the frame.
-func (a *App) paintSpine() {
-	a.spine.SetBackgroundColor(spineColour)
 }

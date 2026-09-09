@@ -13,6 +13,11 @@ import (
 // short, so a row is the scarcer thing to spend. And a field can be dropped:
 // the bar sheds fields to fit, so a cue living among them can vanish on a
 // narrow terminal. A column of the frame cannot be squeezed out.
+//
+// Its colours are pinned rather than named because the top bar's chip
+// (topbar.go, chip()) renders in the same two colours to read as the frame's
+// continuation; a named terminal colour would let the two drift apart the
+// moment the terminal's palette changed.
 var (
 	spineColour = tcell.NewRGBColor(0x2E, 0x33, 0x3A)
 	spineText   = tcell.NewRGBColor(0x9A, 0xA3, 0xAD)

@@ -401,20 +401,6 @@ func (h *harness) treeNodePosition(offset int) (int, int) {
 	return x, y
 }
 
-// tableItemPosition is a screen position on the tables tab's Nth item.
-func (h *harness) tableItemPosition(index int) (int, int) {
-	h.t.Helper()
-	h.settle()
-
-	var x, y int
-	h.inspect(func(a *App) bool {
-		rx, ry, _, _ := a.tableList.GetInnerRect()
-		x, y = rx+2, ry+index
-		return true
-	})
-	return x, y
-}
-
 // regionHeaderPosition is a screen position on a pane's own header row, at
 // its leftmost column — inside the region-name zone and, for a pane with
 // tabs, outside every one of them.

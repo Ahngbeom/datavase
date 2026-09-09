@@ -8,8 +8,8 @@ import (
 // Colours: one role, one value.
 //
 // These are named colours rather than pinned ones, so they inherit whatever
-// palette the terminal was configured with. The spine is the sole exception;
-// see spine.go for why.
+// palette the terminal was configured with. The spine and the top bar's chip
+// are the exception; see spine.go for why.
 const (
 	// colourAccent marks what has focus: the focused region's header, the
 	// active tab, a result's column names.

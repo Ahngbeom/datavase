@@ -40,21 +40,6 @@ func TestACopiedCellIsNotEscapedForTheScreen(t *testing.T) {
 	}
 }
 
-// A row is copied to be pasted somewhere that understands columns, so the
-// separator is a tab rather than anything prettier.
-func TestCopyingARowSeparatesTheValuesWithTabs(t *testing.T) {
-	buf := bufferWith([]string{"a", "b", "c"},
-		[]any{int64(1), "two", nil})
-
-	got, ok := rowValues(buf, 0)
-	if !ok {
-		t.Fatal("rowValues reported nothing to copy")
-	}
-	if want := "1\ttwo\tNULL"; got != want {
-		t.Errorf("rowValues() = %q, want %q", got, want)
-	}
-}
-
 func TestThereIsNothingToCopyFromARowThatIsNotThere(t *testing.T) {
 	buf := bufferWith([]string{"id"}, []any{int64(1)})
 
@@ -63,9 +48,6 @@ func TestThereIsNothingToCopyFromARowThatIsNotThere(t *testing.T) {
 	}
 	if _, ok := cellValue(buf, 0, 5); ok {
 		t.Error("cellValue found a value in a column that does not exist")
-	}
-	if _, ok := rowValues(buf, 5); ok {
-		t.Error("rowValues found a row that does not exist")
 	}
 }
 

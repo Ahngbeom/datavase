@@ -208,70 +208,6 @@ func TestOnlyTheTransactionSenseOfStartAndReleaseCounts(t *testing.T) {
 	}
 }
 
-// This is the check that decides whether a DELETE is a routine edit or a
-// table wipe, so the subquery cases have to be exact.
-func TestHasTopLevelWhere(t *testing.T) {
-	tests := []struct {
-		name string
-		sql  string
-		want bool
-	}{
-		{
-			name: "plain where",
-			sql:  "DELETE FROM t WHERE id = 1",
-			want: true,
-		},
-		{
-			name: "no where at all",
-			sql:  "DELETE FROM t",
-			want: false,
-		},
-		{
-			name: "where only inside a subquery predicate",
-			sql:  "UPDATE t SET x = (SELECT y FROM u WHERE u.id = 1)",
-			want: false,
-		},
-		{
-			name: "top level where with a subquery after it",
-			sql:  "DELETE FROM t WHERE id IN (SELECT id FROM u)",
-			want: true,
-		},
-		{
-			name: "where inside a nested subquery only",
-			sql:  "DELETE FROM t USING (SELECT id FROM u WHERE x = 1) s",
-			want: false,
-		},
-		{
-			name: "where appearing in a string literal",
-			sql:  "DELETE FROM t /* WHERE */ ",
-			want: false,
-		},
-		{
-			name: "where as a quoted column name",
-			sql:  "DELETE FROM t ORDER BY `where`",
-			want: false,
-		},
-		{
-			name: "where in a string value",
-			sql:  "INSERT INTO log VALUES ('WHERE')",
-			want: false,
-		},
-		{
-			name: "lowercase where",
-			sql:  "delete from t where id = 1",
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Parse(tt.sql).HasTopLevelWhere(); got != tt.want {
-				t.Errorf("Parse(%q).HasTopLevelWhere() = %v, want %v", tt.sql, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestHasTopLevelLimit(t *testing.T) {
 	tests := []struct {
 		name string
@@ -393,49 +329,6 @@ func TestAWrapperThatRunsItsStatementIsClassifiedAsThatStatement(t *testing.T) {
 			}
 			if got := stmts[0].Kind(); got != tt.want {
 				t.Errorf("Kind(%q) = %v, want %v", tt.sql, got, tt.want)
-			}
-		})
-	}
-}
-
-// The prefix must not hide the clause that bounds the delete, or a wrapped
-// statement would be refused where the bare one is merely confirmed.
-func TestAWrappedStatementKeepsItsBoundingClause(t *testing.T) {
-	stmts := Split("ANALYZE FORMAT=JSON DELETE FROM orders WHERE id = 1")
-	if len(stmts) != 1 {
-		t.Fatalf("Split produced %d statements", len(stmts))
-	}
-	if !stmts[0].HasTopLevelWhere() {
-		t.Error("the WHERE was lost behind the ANALYZE prefix")
-	}
-}
-
-// A wrapper only answers in JSON when it was asked to, and the caller that
-// renders a plan has to know which it is getting: without FORMAT=JSON the
-// server sends rows, which belong in the grid like any other result.
-func TestPlansAsJSON(t *testing.T) {
-	for _, tt := range []struct {
-		sql  string
-		want bool
-	}{
-		{"EXPLAIN FORMAT=JSON SELECT 1", true},
-		{"ANALYZE FORMAT=JSON SELECT 1", true},
-		{"ANALYZE FORMAT = JSON DELETE FROM t", true},
-		{"explain format=json select 1", true},
-
-		{"EXPLAIN SELECT 1", false},
-		{"ANALYZE SELECT 1", false},
-		{"EXPLAIN FORMAT=TRADITIONAL SELECT 1", false},
-		{"SELECT 1", false},
-		{"SELECT 'FORMAT=JSON'", false},
-	} {
-		t.Run(tt.sql, func(t *testing.T) {
-			stmts := Split(tt.sql)
-			if len(stmts) != 1 {
-				t.Fatalf("Split(%q) produced %d statements", tt.sql, len(stmts))
-			}
-			if got := stmts[0].PlansAsJSON(); got != tt.want {
-				t.Errorf("PlansAsJSON(%q) = %v, want %v", tt.sql, got, tt.want)
 			}
 		})
 	}

@@ -125,16 +125,6 @@ func sortRanked(rows []ranked) []searchItem {
 	return items
 }
 
-// truncatedNotice admits that a listing stopped early.
-//
-// A list that was cut looks exactly like a short one, and the difference
-// matters when the thing being looked for is what got cut. Shared so that
-// every dialog with a limit says so — the directory list used to cut silently
-// at forty.
-func truncatedNotice(detail string) searchItem {
-	return message("…the listing was cut short", detail)
-}
-
 // newSearchBox builds the "type to filter, arrow down to choose" pairing
 // every finder dialog shares.
 //

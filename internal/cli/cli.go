@@ -110,8 +110,8 @@ func (a *App) list() int {
 		if _, err := a.Secrets.Get(ds.Name); err == nil {
 			stored = "password stored"
 		}
-		fmt.Fprintf(a.Out, "%-16s %-6s %s:%d/%s  (%s)\n",
-			ds.Name, ds.Env, ds.Host, ds.Port, ds.Database, stored)
+		fmt.Fprintf(a.Out, "%-16s %s:%d/%s  (%s)\n",
+			ds.Name, ds.Host, ds.Port, ds.Database, stored)
 	}
 	return exitOK
 }
@@ -210,7 +210,7 @@ func (a *App) check(args []string) int {
 		return exitError
 	}
 
-	fmt.Fprintf(a.Out, "%s (%s) is reachable — server %s\n", ds.Name, ds.Env, version)
+	fmt.Fprintf(a.Out, "%s is reachable — server %s\n", ds.Name, version)
 	return exitOK
 }
 

@@ -103,7 +103,7 @@ func TestCheckFailsWhenTheServerIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestListShowsEveryDataSourceWithItsEnv(t *testing.T) {
+func TestListShowsEveryDataSource(t *testing.T) {
 	h := newHarness(t)
 
 	if code := h.app.Run([]string{"ls"}); code != 0 {
@@ -111,7 +111,7 @@ func TestListShowsEveryDataSourceWithItsEnv(t *testing.T) {
 	}
 
 	out := h.out.String()
-	for _, want := range []string{"local", "dev", "prod-app", "prod", "db.internal"} {
+	for _, want := range []string{"local", "prod-app", "db.internal"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("ls output = %q, want it to contain %q", out, want)
 		}

@@ -40,10 +40,6 @@ type App struct {
 	// switch without a keychain.
 	connect func(context.Context, *config.DataSource) (*session.Session, error)
 
-	// spine is the column of colour down the left. Held so paintSpine can
-	// reach it after a datasource switch.
-	spine *tview.Box
-
 	tree      *tview.TreeView
 	editor    *tview.TextArea
 	grid      *tview.Table
@@ -495,11 +491,9 @@ func (a *App) buildLayout() {
 		AddItem(newRule(false), 1, 0, false).
 		AddItem(a.statusBar, 1, 0, false)
 
-	// The spine runs down the outside of everything. Held, because it is a
-	// field a caller can reach to repaint.
-	a.spine = newSpine()
+	// The spine runs down the outside of everything.
 	root := tview.NewFlex().
-		AddItem(a.spine, 1, 0, false).
+		AddItem(newSpine(), 1, 0, false).
 		AddItem(inner, 0, 1, true)
 
 	a.pages = tview.NewPages().AddPage(pageMain, root, true, true)
@@ -616,38 +610,11 @@ func (a *App) bindKeys() {
 			return ev
 		}
 
-		if a.returnToResults(ev) {
-			return nil
-		}
 		if a.dispatch(a.keys.Lookup(ev)) {
 			return nil
 		}
 		return ev
 	})
-}
-
-// returnToResults sends Esc back to the results tab, picking up the keyboard
-// along with it, from wherever a dialog or another pane left it.
-//
-// Esc is deliberately not a keymap.Action: making it one would let it be
-// rebound away from every dialog that already relies on it as the one
-// universal way out, so it is intercepted here, ahead of dispatch. It steps
-// aside whenever the editor holds focus, or Escape while typing would
-// silently steal focus to the results tab.
-func (a *App) returnToResults(ev *tcell.EventKey) bool {
-	if ev.Key() != tcell.KeyEscape {
-		return false
-	}
-	if a.app.GetFocus() == a.editor {
-		return false
-	}
-	if a.resultTabs.current() == tabResults {
-		return false
-	}
-
-	a.resultTabs.show(tabResults)
-	a.app.SetFocus(a.resultPrimitive())
-	return true
 }
 
 // dispatch performs an action and reports whether it consumed the key.
@@ -1023,13 +990,6 @@ func (a *App) notice(msg string) {
 	a.status.hints = nil
 }
 
-func (a *App) refreshStatus() {
-}
-
-// renderStatus asks for a redraw; the bar reads the status itself at Draw
-// time, when it knows how much room it has.
-func (a *App) renderStatus() {}
-
 // currentStatus is what the status bar renders.
 func (a *App) currentStatus() status {
 	s := a.status
@@ -1046,7 +1006,7 @@ func (a *App) currentStatus() status {
 // the only exact answer — how many columns fit on the right depends on widths
 // tview works out while it draws.
 func (a *App) columnsOffView() int {
-	if a.resultTabs == nil || a.resultTabs.current() != tabResults {
+	if a.resultTabs == nil {
 		return 0
 	}
 	if a.buf.ColumnCount() == 0 {

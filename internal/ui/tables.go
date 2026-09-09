@@ -148,7 +148,7 @@ func (a *App) renderTables() {
 	for _, t := range matches {
 		table := t
 		a.tableList.AddItem(tableListLabel(table, a.tablesPaneWidth()), "", 0, func() {
-			a.openTable(schema, table.Name)
+			a.notice("table preview is not built yet")
 		})
 	}
 }

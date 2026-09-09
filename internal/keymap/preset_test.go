@@ -86,7 +86,6 @@ func TestVSCodePresetUsesVSCodeKeysWhereTheyDiffer(t *testing.T) {
 	}{
 		{ActionDeleteLine, "cmd+shift+k", "cmd+y"},
 		{ActionCommandPalette, "cmd+shift+p", "cmd+shift+a"},
-		{ActionGoToTable, "cmd+p", "cmd+n"},
 	}
 
 	for _, tt := range tests {
@@ -134,7 +133,7 @@ func TestVimPresetKeepsTheApplicationKeys(t *testing.T) {
 		t.Fatalf("ForPreset(vim) error = %v", err)
 	}
 
-	for _, action := range []Action{ActionRun, ActionCancel, ActionHelp, ActionQuit, ActionGoToTable} {
+	for _, action := range []Action{ActionRun, ActionCancel, ActionHelp, ActionQuit} {
 		if len(vim.Bindings(action)) == 0 {
 			t.Errorf("%s has no binding in the vim preset", action.String())
 		}

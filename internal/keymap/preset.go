@@ -109,7 +109,6 @@ func applyVSCode(m *Map) {
 	rebind(ActionCommandPalette,
 		append(ctrlAndCmdRune('p', tcell.ModShift),
 			Binding{Key: tcell.KeyF3})...)
-	rebind(ActionGoToTable, ctrlAndCmdRune('p', 0)...)
 }
 
 // Preset reports which preset the map was built from.

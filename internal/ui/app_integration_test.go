@@ -18,7 +18,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
@@ -175,15 +174,8 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, int
 		t.Fatalf("ForPreset(datagrip) error = %v", err)
 	}
 
-	// Backed by a temporary file so that attaching a directory in a test never
-	// writes into the developer's own state directory.
-	recents, err := recent.Open(filepath.Join(t.TempDir(), "recent-dirs.json"))
-	if err != nil {
-		t.Fatalf("recent.Open() error = %v", err)
-	}
-
 	app := New(sess, cfg, Deps{
-		Keys: keys, Cache: cache, History: hist, Recent: recents, IntroPath: introMarker,
+		Keys: keys, Cache: cache, History: hist, IntroPath: introMarker,
 		PresetAssumed: presetAssumed,
 	})
 	app.SetScreen(screen)

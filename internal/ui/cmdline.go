@@ -19,11 +19,8 @@ const (
 	// cmdUnknown named nothing at all; cmdAmbiguous named more than one.
 	cmdUnknown
 	cmdAmbiguous
-	cmdSave
 	cmdQuit
 	cmdForceQuit
-	cmdSaveQuit
-	cmdEdit
 	cmdPalette
 )
 
@@ -36,7 +33,7 @@ const (
 // as a table, without a terminal and without anything having run.
 type cmdResolution struct {
 	intent cmdIntent
-	// arg is what followed the verb, for ":e path".
+	// arg is what followed the verb, if anything.
 	arg string
 	// name is the palette command to run, for cmdPalette.
 	name string
@@ -45,17 +42,14 @@ type cmdResolution struct {
 	among []string
 }
 
-// vimFileCommands are the ones a vim user types without deciding to.
+// vimQuitCommands are the ones a vim user types without deciding to.
 //
 // They are matched whole and ahead of the palette, and they are spelled out
 // rather than abbreviated at resolution time: a reflex must not depend on
 // what else happens to be in the command list.
-var vimFileCommands = map[string]cmdIntent{
-	"w": cmdSave, "write": cmdSave,
+var vimQuitCommands = map[string]cmdIntent{
 	"q": cmdQuit, "quit": cmdQuit,
 	"q!": cmdForceQuit, "quit!": cmdForceQuit,
-	"wq": cmdSaveQuit, "wq!": cmdSaveQuit, "x": cmdSaveQuit, "xit": cmdSaveQuit,
-	"e": cmdEdit, "edit": cmdEdit,
 }
 
 // resolveCommandLine works out what was typed at the ":" prompt.
@@ -73,7 +67,7 @@ func resolveCommandLine(line string, cmds []command) cmdResolution {
 	}
 
 	verb, rest, _ := strings.Cut(line, " ")
-	if intent, ok := vimFileCommands[verb]; ok {
+	if intent, ok := vimQuitCommands[verb]; ok {
 		return cmdResolution{intent: intent, arg: strings.TrimSpace(rest)}
 	}
 
@@ -179,24 +173,11 @@ func (a *App) runCommandLine(line string) {
 	switch r.intent {
 	case cmdNothing:
 
-	case cmdSave:
-		a.saveFile()
-
 	case cmdQuit:
 		a.quit()
 
 	case cmdForceQuit:
 		a.forceQuit()
-
-	case cmdSaveQuit:
-		// Saving can put a dialog up — a file changed underneath, or nothing
-		// open to save to — and quitting through it would answer that dialog
-		// for the user. So the quit only happens once the buffer is genuinely
-		// on disk.
-		a.saveThenQuit()
-
-	case cmdEdit:
-		a.editCommand(r.arg)
 
 	case cmdPalette:
 		for _, c := range paletteCommands() {
@@ -214,45 +195,4 @@ func (a *App) runCommandLine(line string) {
 		a.notice(fmt.Sprintf("no command %q — %s lists them",
 			strings.TrimSpace(line), a.keyLabel(keymap.ActionCommandPalette)))
 	}
-}
-
-// saveThenQuit is ":wq".
-//
-// The quit is decided after the save rather than queued behind it, because
-// saving can stop to ask: the file may have changed underneath, or there may
-// be nowhere to save to at all. Quitting through that question would answer
-// it on the user's behalf and take the work with it, so anything still
-// unsaved keeps the session open and leaves the dialog to be answered.
-func (a *App) saveThenQuit() {
-	a.saveFile()
-	if !a.openFile.isOpen() || a.fileDirty() {
-		return
-	}
-	a.quit()
-}
-
-// editCommand is ":e". Bare, it opens the finder; with a path, that file.
-//
-// The path has to name a file in the worktree exactly. Loading a near miss
-// would replace the buffer, and the buffer is the only copy of whatever has
-// been typed into it — the finder is right there for anyone who wants to
-// choose from a list.
-func (a *App) editCommand(rel string) {
-	if rel == "" {
-		a.showFindFile()
-		return
-	}
-	if a.wt == nil {
-		a.notice(fmt.Sprintf("no worktree attached — nothing to open %s from", rel))
-		return
-	}
-
-	a.rescan()
-	for _, f := range a.wtSnap.Files {
-		if f.Rel == rel {
-			a.openWorktreeFile(f)
-			return
-		}
-	}
-	a.notice(fmt.Sprintf("no %s in %s", rel, a.worktreeLabel()))
 }

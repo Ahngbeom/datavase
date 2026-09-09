@@ -23,7 +23,6 @@ func TestTopBarNamesTheEnvironmentAtEveryWidth(t *testing.T) {
 	for _, env := range []config.Env{config.EnvProd, config.EnvStage, config.EnvDev} {
 		s := baseTopBar()
 		s.env = env
-		s.branch = "feature/a-rather-long-branch-name"
 
 		for _, width := range []int{120, 80, 60, 40, 24, 12} {
 			got, _ := s.renderWidth(width)
@@ -60,7 +59,6 @@ func TestTheEnvironmentChipIsFilledWithTheEnvironmentColour(t *testing.T) {
 // closed.
 func TestTopBarKeepsTheSchemaWhereverItFits(t *testing.T) {
 	s := baseTopBar()
-	s.branch = "feature/a-rather-long-branch-name"
 
 	for _, width := range []int{120, 80, 60, 40, 24} {
 		if got, _ := s.renderWidth(width); !strings.Contains(got, "app_db") {
@@ -91,80 +89,37 @@ func TestTopBarWithoutASchema(t *testing.T) {
 }
 
 // The order things go in is a judgement, and this is where it is stated: the
-// help hint is a convenience, the datasource is usually obvious from the
-// context you opened it in, and the branch says which piece of work these
-// files belong to.
+// help hint is a convenience, and the datasource is usually obvious from the
+// context you opened it in.
 func TestTopBarShedsTheHelpHintFirst(t *testing.T) {
 	s := baseTopBar()
-	s.branch = "feature/add-index"
 
 	wide, _ := s.renderWidth(120)
 	if !strings.Contains(wide, "F1") {
 		t.Fatalf("the help hint is missing at full width: %q", wide)
 	}
 
-	narrow, _ := s.renderWidth(46)
+	narrow, _ := s.renderWidth(30)
 	if strings.Contains(narrow, "F1") {
-		t.Errorf("width 46: the help hint survived: %q", narrow)
+		t.Errorf("width 30: the help hint survived: %q", narrow)
 	}
-	if !strings.Contains(narrow, "prod-app") || !strings.Contains(narrow, "feature/add-index") {
-		t.Errorf("width 46: something other than the hint went first: %q", narrow)
-	}
-}
-
-func TestTopBarShedsTheDataSourceBeforeTheBranch(t *testing.T) {
-	s := baseTopBar()
-	s.branch = "feature/add-index"
-
-	// Wide enough for the branch once the datasource is gone, and not wide
-	// enough for both.
-	const width = 38
-
-	got, _ := s.renderWidth(width)
-	if strings.Contains(got, "prod-app") {
-		t.Errorf("width %d: the datasource survived: %q", width, got)
-	}
-	if !strings.Contains(got, "feature/add-index") {
-		t.Errorf("width %d: the branch went before the datasource: %q", width, got)
-	}
-	if !strings.Contains(got, "@app_db") {
-		t.Errorf("width %d: the schema was dropped: %q", width, got)
+	if !strings.Contains(narrow, "prod-app") {
+		t.Errorf("width 30: something other than the hint went first: %q", narrow)
 	}
 }
 
-// Names come from configuration and from git, and either can contain "[",
-// which tview would read as the start of a colour tag and swallow.
+// Names come from configuration, and can contain "[", which tview would read
+// as the start of a colour tag and swallow.
 func TestTopBarEscapesTagsInNames(t *testing.T) {
 	s := baseTopBar()
 	s.dsName = "db[1]"
 	s.schema = "s[2]"
-	s.branch = "b[3]"
 
 	got, _ := s.renderWidth(120)
-	for _, want := range []string{"db[[1]", "s[[2]", "b[[3]"} {
+	for _, want := range []string{"db[[1]", "s[[2]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("%q does not escape %q", got, want)
 		}
-	}
-}
-
-// The bar is one line by contract; the layout gives it exactly one row.
-func TestTopBarRendersOnASingleLine(t *testing.T) {
-	s := baseTopBar()
-	s.branch = "feature/one\nfeature/two"
-
-	if got, _ := s.renderWidth(120); strings.Contains(got, "\n") {
-		t.Errorf("%q is not a single line", got)
-	}
-}
-
-// With no worktree attached there is no branch, and an empty field would leave
-// a separator with nothing after it.
-func TestTopBarWithoutABranch(t *testing.T) {
-	got, _ := baseTopBar().renderWidth(120)
-
-	if strings.Contains(got, "·") {
-		t.Errorf("%q leaves a separator with nothing after it", got)
 	}
 }
 
@@ -176,7 +131,6 @@ func TestTopBarZonesAgreeWithEveryFormOfTheLine(t *testing.T) {
 		env:     config.EnvProd,
 		dsName:  "prod-app",
 		schema:  "app_db",
-		branch:  "feature/add-index",
 		helpKey: "F1",
 	}
 

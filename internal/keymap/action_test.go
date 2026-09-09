@@ -25,8 +25,8 @@ func TestTheKeyReferenceDoesNotSilentlyStartTeachingTheWrongList(t *testing.T) {
 		ours++
 	}
 
-	if known != 16 || ours != 29 {
-		t.Errorf("classified %d familiar and %d dv's own, want 16 and 29", known, ours)
+	if known != 15 || ours != 27 {
+		t.Errorf("classified %d familiar and %d dv's own, want 15 and 27", known, ours)
 	}
 }
 
@@ -45,7 +45,6 @@ func TestTheJudgementCallsHold(t *testing.T) {
 		{ActionNextPane, false, "universal in GUI dialogs, not in terminal applications"},
 		{ActionPrevPane, false, "universal in GUI dialogs, not in terminal applications"},
 		{ActionCopyOrCancel, false, "with nothing selected ⌘C cancels the running statement"},
-		{ActionSaveFile, true, "saving is saving"},
 		{ActionFind, true, "finding is finding; that it also searches results is a description, not a class"},
 		{ActionSearchHistory, false, "searching history is not what that chord means elsewhere"},
 	} {

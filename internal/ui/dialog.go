@@ -222,7 +222,6 @@ var helpGroups = []struct {
 			keymap.ActionSelectAll, keymap.ActionToggleComment,
 			keymap.ActionDuplicateLine, keymap.ActionDeleteLine,
 			keymap.ActionDeleteWordLeft, keymap.ActionDeleteToLineStart,
-			keymap.ActionSaveFile,
 		},
 	},
 	{
@@ -230,7 +229,6 @@ var helpGroups = []struct {
 		actions: []keymap.Action{
 			keymap.ActionFind, keymap.ActionFindNext, keymap.ActionFindPrev,
 			keymap.ActionSearchHistory,
-			keymap.ActionGoToTable, keymap.ActionFindFile,
 			keymap.ActionInspect, keymap.ActionCommandPalette,
 		},
 	},
@@ -334,10 +332,8 @@ func helpReference(km *keymap.Map) string {
 
 // commandHelpText lists the command palette's entries.
 //
-// These carry no key of their own, so without this the only way to find one is
-// to already know it exists — which is how attaching a worktree, the entry
-// point to a whole feature, became undiscoverable while the keys that need it
-// were listed above.
+// These carry no key of their own, so without this the only way to find one
+// is to already know it exists.
 //
 // It is generated from the same list the palette offers, so the two cannot
 // drift apart, and it takes the palette's key label rather than the App so the

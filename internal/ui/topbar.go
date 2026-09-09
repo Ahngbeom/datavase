@@ -20,7 +20,6 @@ type topBarState struct {
 	env    config.Env
 	dsName string
 	schema string
-	branch string
 	// helpKey names the key that opens the reference, looked up rather than
 	// hardcoded so a rebound one is not advertised as F1.
 	helpKey string
@@ -32,21 +31,18 @@ type topBarState struct {
 // The forms are enumerated rather than the fields ranked and shed one at a
 // time, which is what the status bar does. That machinery earns its keep
 // there — a dozen fields whose importance depends on what just happened — but
-// this line holds four things and a fixed opinion about the order they go in,
-// and a list says that opinion out loud.
-type topBarForm struct{ helpKey, dsName, branch bool }
+// this line holds three things and a fixed opinion about the order they go
+// in, and a list says that opinion out loud.
+type topBarForm struct{ helpKey, dsName bool }
 
 // topBarForms, most complete first. The environment and the schema appear in
 // none of them: those two are what a production mistake is made of, so they
 // are not on the table.
 var topBarForms = []topBarForm{
-	{helpKey: true, dsName: true, branch: true},
-	{dsName: true, branch: true},
-	{branch: true},
+	{helpKey: true, dsName: true},
+	{dsName: true},
 	{},
 }
-
-const topBarSeparator = "  ·  "
 
 // renderWidth produces the line, degrading until it fits, alongside the
 // zones for what it drew.
@@ -103,14 +99,10 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 		}
 	}
 
-	if form.branch && t.branch != "" {
-		line += topBarSeparator + result.EscapeTags(oneLine(t.branch))
-	}
-
 	if form.helpKey && t.helpKey != "" {
 		help := tag(colourMuted, t.helpKey+" keys")
-		// Two cells of gap at minimum, or the hint reads as part of the branch
-		// name rather than as a thing of its own.
+		// Two cells of gap at minimum, or the hint reads as part of the
+		// schema name rather than as a thing of its own.
 		if pad := width - visibleCost(line) - visibleCost(help); pad >= 2 {
 			line += strings.Repeat(" ", pad)
 			before := line

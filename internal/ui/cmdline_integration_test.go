@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -112,64 +111,4 @@ func TestTheCommandLineWillNotUnlockWritesFromAnAbbreviation(t *testing.T) {
 	h.waitFor("writes to be unlocked by the full name", func(a *App) bool {
 		return a.status.writesEnabled
 	})
-}
-
-// ":w" is the reflex #12 exists for, and it has to be the save the key already
-// performs rather than a second route to disk with its own idea of when to ask.
-func TestWriteCommandSavesTheOpenFile(t *testing.T) {
-	h := newVimHarness(t)
-	root := newWorktree(t)
-	h.attachWorktree(root)
-	h.openMigration(t)
-
-	h.buffer(initialSQL+"-- from the command line\n", 0)
-	h.runLine("w")
-
-	h.waitFor("the buffer to match the file", func(a *App) bool { return !a.fileDirty() })
-
-	if got := readFile(t, filepath.Join(root, "migrations", "001_init.sql")); !strings.Contains(got, "from the command line") {
-		t.Errorf("the edit never reached the file:\n%s", got)
-	}
-}
-
-// Quitting a modal editor is as reflexive as saving, and the buffer is the only
-// copy of what has been typed into it.
-func TestQuitCommandAsksAboutAnUnsavedFile(t *testing.T) {
-	h := newVimHarness(t)
-	h.attachWorktree(newWorktree(t))
-	h.openMigration(t)
-
-	h.buffer(initialSQL+"-- unsaved\n", 0)
-	h.runLine("q")
-
-	h.waitFor("the unsaved-changes question", func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pageConfirm
-	})
-}
-
-func TestEditCommandOpensAFileByPath(t *testing.T) {
-	h := newVimHarness(t)
-	h.attachWorktree(newWorktree(t))
-
-	h.runLine("e scratch.sql")
-
-	h.waitFor("scratch.sql to load", func(a *App) bool { return a.openFile.rel == "scratch.sql" })
-}
-
-// A path that names nothing is refused rather than resolved to whatever is
-// closest: loading the wrong file replaces the buffer, and there is no undo
-// across that.
-func TestEditCommandRefusesAPathThatIsNotThere(t *testing.T) {
-	h := newVimHarness(t)
-	h.attachWorktree(newWorktree(t))
-
-	h.runLine("e migrations/nope.sql")
-
-	if !h.waitForScreen("no migrations/nope.sql in") {
-		t.Fatalf("the missing path was not reported; screen:\n%s", h.text())
-	}
-	if h.inspect(func(a *App) bool { return a.openFile.isOpen() }) {
-		t.Error("a file was opened for a path that does not exist")
-	}
 }

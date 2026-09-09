@@ -436,7 +436,7 @@ func TestNoBoundActionIsMarkedReserved(t *testing.T) {
 
 // The mechanism stays available for keys bound ahead of their feature.
 func TestReservedIsFalseForImplementedActions(t *testing.T) {
-	for _, a := range []Action{ActionRun, ActionFind, ActionCommandPalette, ActionGoToTable, ActionComplete} {
+	for _, a := range []Action{ActionRun, ActionFind, ActionCommandPalette, ActionComplete} {
 		if a.Reserved() {
 			t.Errorf("%v.Reserved() = true, want false", a)
 		}

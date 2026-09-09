@@ -51,7 +51,6 @@ var paletteCategories = []string{
 	catResults,
 	catFinding,
 	catSchema,
-	catFiles,
 	catEditing,
 	catWrites,
 	catServer,
@@ -64,7 +63,6 @@ const (
 	catResults  = "The result"
 	catFinding  = "Finding things"
 	catSchema   = "Schema and datasource"
-	catFiles    = "Files"
 	catEditing  = "Editing"
 	catWrites   = "Changing data"
 	catServer   = "The server"
@@ -306,14 +304,6 @@ func paletteCommands() []command {
 			run:      (*App).inspect,
 		},
 		{
-			name:     "go to table",
-			category: catFinding,
-			summary:  "find a table anywhere on the server by name",
-			covers:   keymap.ActionGoToTable,
-			contexts: []menuContext{ctxEditor, ctxTree},
-			run:      (*App).showGoToTable,
-		},
-		{
 			name:     "schema tree",
 			category: catSchema,
 			summary:  "show or hide the schema pane",
@@ -327,36 +317,6 @@ func paletteCommands() []command {
 			covers:   keymap.ActionComplete,
 			contexts: []menuContext{ctxEditor},
 			run:      (*App).showCompletion,
-		},
-		{
-			name:     "attach directory",
-			category: catFiles,
-			summary:  "point this session at a worktree of SQL files",
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).showAttachDirectory,
-		},
-		{
-			name:     "detach directory",
-			category: catFiles,
-			summary:  "forget the attached worktree",
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).detachWorktree,
-		},
-		{
-			name:     "open file",
-			category: catFiles,
-			summary:  "open a SQL file from the attached worktree",
-			covers:   keymap.ActionFindFile,
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).showFindFile,
-		},
-		{
-			name:     "save file",
-			category: catFiles,
-			summary:  "write the editor back to the file it came from",
-			covers:   keymap.ActionSaveFile,
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).saveFile,
 		},
 		{
 			name:     "switch datasource",

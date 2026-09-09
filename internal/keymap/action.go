@@ -57,11 +57,6 @@ const (
 	ActionFindPrev
 	ActionSearchHistory
 	ActionCommandPalette
-	ActionGoToTable
-	// ActionFindFile opens the attached worktree's SQL files.
-	ActionFindFile
-	// ActionSaveFile writes the editor back to the file it was loaded from.
-	ActionSaveFile
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
 	// ActionInspect shows whatever is selected in full: a table's definition,
@@ -125,9 +120,6 @@ var actionNames = map[Action]string{
 	ActionFindPrev:          "find-previous",
 	ActionSearchHistory:     "search-history",
 	ActionCommandPalette:    "command-palette",
-	ActionGoToTable:         "go-to-table",
-	ActionFindFile:          "find-file",
-	ActionSaveFile:          "save-file",
 	ActionCycleTab:          "cycle-tab",
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
@@ -175,9 +167,6 @@ var descriptions = map[Action]string{
 	ActionFindPrev:          "go to the previous match",
 	ActionSearchHistory:     "search the query history",
 	ActionCommandPalette:    "open the command palette",
-	ActionGoToTable:         "jump to a table",
-	ActionFindFile:          "open a SQL file from the attached worktree",
-	ActionSaveFile:          "save the open file",
 	ActionCycleTab:          "switch tab in the focused pane",
 	ActionInspect:           "show the selected table or result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
@@ -228,7 +217,6 @@ var familiar = map[Action]bool{
 	ActionCut:       true,
 	ActionPaste:     true,
 	ActionSelectAll: true,
-	ActionSaveFile:  true,
 	ActionFind:      true,
 	ActionQuit:      true,
 
@@ -249,8 +237,6 @@ var familiar = map[Action]bool{
 	ActionFindPrev:         false,
 	ActionSearchHistory:    false,
 	ActionCommandPalette:   false,
-	ActionGoToTable:        false,
-	ActionFindFile:         false,
 	ActionCycleTab:         false,
 	ActionInspect:          false,
 	ActionSortColumn:       false,
@@ -274,9 +260,8 @@ var order = []Action{
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
-	ActionSaveFile,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
-	ActionCommandPalette, ActionGoToTable, ActionFindFile, ActionInspect,
+	ActionCommandPalette, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
 	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession, ActionLocks,

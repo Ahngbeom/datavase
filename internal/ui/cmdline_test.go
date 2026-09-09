@@ -14,7 +14,7 @@ func testCommands() []command {
 		{name: "commit"},
 		{name: "comment"},
 		{name: "history"},
-		{name: "go to table"},
+		{name: "second command"},
 		{name: "use schema"},
 		{name: "unlock writes", exact: true},
 	}
@@ -26,25 +26,19 @@ func TestTheCommandLineResolvesWhatWasTyped(t *testing.T) {
 		line string
 		want cmdResolution
 	}{
-		// vim's own file commands come first, and are matched whole. A user
+		// vim's own quit commands come first, and are matched whole. A user
 		// who types these is not choosing from a list; they are reaching.
-		{"w saves", "w", cmdResolution{intent: cmdSave}},
-		{"write saves too", "write", cmdResolution{intent: cmdSave}},
 		{"q quits", "q", cmdResolution{intent: cmdQuit}},
 		{"q! quits without asking", "q!", cmdResolution{intent: cmdForceQuit}},
-		{"wq saves then quits", "wq", cmdResolution{intent: cmdSaveQuit}},
-		{"x is wq", "x", cmdResolution{intent: cmdSaveQuit}},
-		{"e with no file opens the finder", "e", cmdResolution{intent: cmdEdit}},
-		{"e takes a path", "e sql/001.sql", cmdResolution{intent: cmdEdit, arg: "sql/001.sql"}},
 
 		// Surrounding space is what a command line collects, not something the
 		// user meant.
-		{"space around the verb is ignored", "  wq  ", cmdResolution{intent: cmdSaveQuit}},
+		{"space around the verb is ignored", "  q!  ", cmdResolution{intent: cmdForceQuit}},
 		{"an empty line does nothing", "   ", cmdResolution{intent: cmdNothing}},
 
 		// A palette name, spelled out.
 		{"a full palette name runs it", "history", cmdResolution{intent: cmdPalette, name: "history"}},
-		{"names with spaces work", "go to table", cmdResolution{intent: cmdPalette, name: "go to table"}},
+		{"names with spaces work", "second command", cmdResolution{intent: cmdPalette, name: "second command"}},
 
 		// An abbreviation is allowed only while it names one command.
 		{"an unambiguous prefix runs it", "hist", cmdResolution{intent: cmdPalette, name: "history"}},
@@ -98,11 +92,8 @@ func TestTheRealPaletteAnswersTheReflexes(t *testing.T) {
 	cmds := paletteCommands()
 
 	for line, want := range map[string]cmdIntent{
-		"w":             cmdSave,
-		"write":         cmdSave,
 		"q":             cmdQuit,
 		"q!":            cmdForceQuit,
-		"wq":            cmdSaveQuit,
 		"unlock writes": cmdPalette,
 	} {
 		if got := resolveCommandLine(line, cmds); got.intent != want {

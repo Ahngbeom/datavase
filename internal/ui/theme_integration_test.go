@@ -64,10 +64,11 @@ func TestTheEmptyEditorDrawsNoColourThisApplicationDidNotChoose(t *testing.T) {
 func TestAFinderDrawsNoColourThisApplicationDidNotChoose(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
 
-	h.do(keymap.ActionGoToTable)
-	if !h.waitForScreen("go to table") {
-		t.Fatalf("the finder never opened:\n%s", h.text())
-	}
+	h.do(keymap.ActionSearchHistory)
+	h.waitFor("the history finder", func(a *App) bool {
+		name, _ := a.pages.GetFrontPage()
+		return name == pageHistory
+	})
 
 	for colour, where := range h.unclaimedForegrounds() {
 		t.Errorf("%v is on screen at %s and is not one of this interface's roles:\n%s",

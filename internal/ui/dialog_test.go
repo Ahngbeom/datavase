@@ -61,7 +61,7 @@ func TestStartHereStaysShort(t *testing.T) {
 
 // A palette command carries no key of its own, so the key reference is the
 // only place it can be discovered. One left off is one that only its author
-// knows exists — which is what happened to attaching a worktree.
+// knows exists.
 func TestEveryPaletteCommandAppearsOnTheHelpScreen(t *testing.T) {
 	help := commandHelpText("⌘⇧A")
 

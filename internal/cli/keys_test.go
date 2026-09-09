@@ -50,7 +50,7 @@ func TestKeysDoesNotMarkImplementedActions(t *testing.T) {
 		t.Errorf("an implemented action is marked unbuilt:\n%s", out)
 	}
 	// And the table is complete.
-	for _, want := range []string{"find in the editor", "jump to a table", "open the command palette"} {
+	for _, want := range []string{"find in the editor", "search the query history", "open the command palette"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the table is missing %q:\n%s", want, out)
 		}

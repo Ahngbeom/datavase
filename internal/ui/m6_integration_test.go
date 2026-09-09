@@ -203,44 +203,6 @@ func TestExportWithNoResultSaysSo(t *testing.T) {
 	}
 }
 
-// Go-to-table searches the cache and drops a starter query in the editor.
-func TestGoToTableFillsTheEditor(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-
-	h.do(keymap.ActionGoToTable)
-	if !strings.Contains(h.text(), "customers") {
-		t.Fatalf("go-to-table did not list the cached tables:\n%s", h.text())
-	}
-
-	h.typeInto("invoices")
-	h.press(tcell.KeyDown)
-	h.press(tcell.KeyEnter)
-
-	got := h.editorText()
-	if !strings.Contains(got, "invoices") {
-		t.Errorf("editor holds %q, want a query against the chosen table", got)
-	}
-	if !strings.HasPrefix(got, "SELECT") {
-		t.Errorf("editor holds %q, want a SELECT starter", got)
-	}
-}
-
-// The starter query is placed, not executed: the guard and the user still
-// decide when anything runs.
-func TestGoToTableDoesNotRunTheQuery(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-
-	h.do(keymap.ActionGoToTable)
-	h.press(tcell.KeyDown)
-	h.press(tcell.KeyEnter)
-
-	if strings.Contains(h.text(), "rows ·") {
-		t.Errorf("go-to-table ran the query instead of placing it:\n%s", h.text())
-	}
-}
-
 // typeInto sends characters to whatever currently has focus.
 func (h *harness) typeInto(text string) {
 	h.t.Helper()

@@ -21,12 +21,10 @@ import (
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/procs"
-	"github.com/Ahngbeom/datavase/internal/recent"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/vim"
-	"github.com/Ahngbeom/datavase/internal/worktree"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -177,17 +175,6 @@ type App struct {
 	cache      *catalog.Cache
 	history    *history.Store
 
-	// wt is the attached directory of SQL work, nil until one is attached.
-	// wtSnap is the last listing taken from it, held so the finder can filter
-	// without asking git on every keystroke.
-	wt     *worktree.Worktree
-	wtSnap worktree.Snapshot
-	// openFile is the file the editor was loaded from, if any.
-	openFile openFile
-	// recentDirs are the directories attached before, offered by the attach
-	// dialog before anything has been typed. Nil when the state directory
-	// could not be read.
-	recentDirs *recent.List
 	// introPath is where the first-run card records that it has been shown.
 	// Empty means there is nowhere to record it, which is also the session
 	// that never shows it.
@@ -255,12 +242,6 @@ type Deps struct {
 	Keys    *keymap.Map
 	Cache   *catalog.Cache
 	History *history.Store
-	// Worktree is the directory named by --dir, if any. Nil means the session
-	// starts unattached, which is the ordinary case.
-	Worktree *worktree.Worktree
-	// Recent is the list of directories attached before. Nil costs the
-	// shortcut and nothing else.
-	Recent *recent.List
 	// Connect opens another datasource, for switching mid-session. Nil leaves
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
@@ -299,8 +280,6 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 		presetAssumed:   deps.PresetAssumed,
 		cache:           deps.Cache,
 		history:         deps.History,
-		wt:              deps.Worktree,
-		recentDirs:      deps.Recent,
 		introPath:       deps.IntroPath,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
 		vim:             vim.New(),
@@ -327,9 +306,6 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.bindEditor()
 	a.captureScreen()
 	a.loadSchemas()
-	// A worktree given on the command line is listed before the first draw, so
-	// the status bar names the branch rather than filling in a moment later.
-	a.rescan()
 	// Last, so the card is drawn over an interface that is already built: it
 	// names the datasource and the keys, and both have to be settled first.
 	a.showIntroOnce()
@@ -563,9 +539,8 @@ func (a *App) buildWidgets() {
 	a.grid.SetInputCapture(a.gridKey)
 
 	// Every region shares one component so they cannot drift apart in
-	// behaviour, including the editor — which has no tabs, only a header
-	// saying which file it holds.
-	a.editorRegion = newTabbed().watch(a.editorDetail)
+	// behaviour, including the editor, which has no tabs at all.
+	a.editorRegion = newTabbed()
 	a.editorRegion.only(a.editor)
 	a.editorRegion.record = a.recorderFor(a.editorRegion)
 
@@ -585,18 +560,6 @@ func (a *App) buildWidgets() {
 	a.topBar.record = a.hits.set
 	a.statusBar = newStatusBar(a.currentStatus)
 	a.statusBar.record = a.hits.set
-}
-
-// editorDetail names the file the buffer came from, and whether it has
-// diverged from it. Empty for a scratch buffer, which has no file to name.
-func (a *App) editorDetail() string {
-	if !a.openFile.isOpen() {
-		return ""
-	}
-	if a.fileDirty() {
-		return a.openFile.rel + " *"
-	}
-	return a.openFile.rel
 }
 
 // schemaDetail is the trailing note on the schema pane's header, read at draw
@@ -694,15 +657,14 @@ func resultHint(s resultState) string {
 	}
 }
 
-// currentTopBar is where the session is, read at draw time so the schema and
-// the branch cannot lag behind the thing that changed them.
+// currentTopBar is where the session is, read at draw time so the schema
+// cannot lag behind the thing that changed it.
 func (a *App) currentTopBar() topBarState {
 	ds := a.conn.DataSource()
 	return topBarState{
 		env:     ds.Env,
 		dsName:  ds.Name,
 		schema:  a.currentSchema(),
-		branch:  a.worktreeLabel(),
 		helpKey: a.helpKeyLabel(),
 	}
 }
@@ -820,10 +782,7 @@ const (
 	pageComplete   = "complete"
 	pagePalette    = "palette"
 	pageHistory    = "history"
-	pageGoTo       = "goto"
 	pageUseSchema  = "useschema"
-	pageFiles      = "files"
-	pageAttach     = "attach"
 	pageSearch     = "search"
 	pageCommand    = "command"
 	pageDataSource = "datasource"
@@ -999,12 +958,6 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.searchAgain(true)
 	case keymap.ActionSearchHistory:
 		a.showHistory()
-	case keymap.ActionGoToTable:
-		a.showGoToTable()
-	case keymap.ActionFindFile:
-		a.showFindFile()
-	case keymap.ActionSaveFile:
-		a.saveFile()
 
 	case keymap.ActionHelp:
 		a.showHelp()
@@ -1099,31 +1052,10 @@ func (a *App) refreshHints() {
 // fits beside a schema name on a narrow terminal; the menu holds the rest.
 const hintsShown = 3
 
-// quit leaves, asking first when the buffer holds unsaved file changes.
-//
-// The confirmation only appears for an edited file, not for a scratch buffer:
-// text typed into datavase has never been anywhere else, and prompting about
-// every session's leftovers is how a prompt stops being read.
+// quit leaves, asking first when there is an open transaction to roll back.
 func (a *App) quit() {
-	// Two things can be lost by leaving, and both get asked about, dearest
-	// first. An open transaction is unsaved work of the same kind as an
-	// unsaved buffer and rather more expensive, since quitting rolls it back.
 	if a.conn.InTransaction() {
 		a.confirmDiscardTransaction()
-		return
-	}
-	a.quitWithUnsavedFile()
-}
-
-// quitWithUnsavedFile is the second question quitting has to ask, and where
-// the transaction dialog continues once it has been answered — otherwise
-// agreeing to roll back would take an unsaved file down with it, unasked.
-func (a *App) quitWithUnsavedFile() {
-	if a.fileDirty() {
-		a.confirmDiscard(
-			fmt.Sprintf("%s has unsaved changes.\n\nQuit and lose them?", a.openFile.rel),
-			"Quit",
-			a.forceQuit)
 		return
 	}
 	a.forceQuit()
@@ -1593,7 +1525,7 @@ func (a *App) confirmDiscardTransaction() {
 		SetDoneFunc(func(_ int, label string) {
 			a.closeDialog()
 			if label == "Roll back and quit" {
-				a.quitWithUnsavedFile()
+				a.forceQuit()
 			}
 		})
 

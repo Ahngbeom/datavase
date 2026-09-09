@@ -248,19 +248,6 @@ func baseMap() *Map {
 	m.bind(ActionCommandPalette,
 		append(ctrlAndCmdRune('a', tcell.ModShift),
 			Binding{Key: tcell.KeyF3})...)
-	m.bind(ActionGoToTable, ctrlAndCmdRune('n', 0)...)
-
-	// The worktree's files. ⌘⇧O is DataGrip's "go to file"; ⌘⇧N, which the
-	// Windows keyboard uses for it, is already the schema picker here.
-	m.bind(ActionFindFile,
-		append(ctrlAndCmdRune('o', tcell.ModShift),
-			Binding{Key: tcell.KeyF8})...)
-
-	// F2 carries saving for terminals that still treat Ctrl+S as XOFF and
-	// freeze rather than deliver it. Cancelling is ⌘F2, so plain F2 is free.
-	m.bind(ActionSaveFile,
-		append(ctrlAndCmdRune('s', 0),
-			Binding{Key: tcell.KeyF2})...)
 
 	// Tab switching and inspection.
 	//

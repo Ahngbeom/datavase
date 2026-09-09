@@ -362,3 +362,32 @@ datasources:
 		})
 	}
 }
+
+func TestAnOlderKeymapBlockIsIgnoredRatherThanRefused(t *testing.T) {
+	cfg, err := Parse(strings.NewReader(`
+datasources:
+  - name: local
+    host: 127.0.0.1
+    user: root
+keymap:
+  preset: vim
+  actions:
+    run: ["f5"]
+`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v; a v0.8 config must still open", err)
+	}
+	if got := cfg.Ignored(); len(got) != 1 || got[0] != "keymap" {
+		t.Errorf("Ignored() = %v, want [keymap]", got)
+	}
+}
+
+func TestAConfigWithNoKeymapIgnoresNothing(t *testing.T) {
+	cfg, err := Parse(strings.NewReader("datasources:\n  - name: local\n    host: h\n    user: u\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Ignored(); len(got) != 0 {
+		t.Errorf("Ignored() = %v, want none", got)
+	}
+}

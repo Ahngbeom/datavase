@@ -1,10 +1,6 @@
 package keymap
 
 import (
-	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -14,8 +10,6 @@ type Map struct {
 	byBinding map[Binding]Action
 	// byAction preserves each action's bindings for the help screen.
 	byAction map[Action][]Binding
-	// preset is which named keyboard this map was built from.
-	preset Preset
 }
 
 // Lookup returns the action bound to the event, or ActionNone.
@@ -37,64 +31,6 @@ func (m *Map) bind(a Action, bindings ...Binding) {
 	}
 	m.byAction[a] = append(m.byAction[a], bindings...)
 	sortBindings(m.byAction[a])
-}
-
-// Apply replaces the bindings of the named actions.
-//
-// It is all-or-nothing: a map with one bad entry changes nothing, so a typo
-// in configuration cannot leave the user with a half-rebound keyboard.
-func (m *Map) Apply(overrides map[string][]string) error {
-	parsed := make(map[Action][]Binding, len(overrides))
-
-	// Iterate in a fixed order so the same configuration always reports the
-	// same first error.
-	names := make([]string, 0, len(overrides))
-	for name := range overrides {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		action, ok := actionByName[name]
-		if !ok {
-			return fmt.Errorf("unknown action %q in keymap; valid actions are: %s",
-				name, strings.Join(sortedActionNames(), ", "))
-		}
-
-		for _, spec := range overrides[name] {
-			b, err := ParseBinding(spec)
-			if err != nil {
-				return fmt.Errorf("keymap action %q: %w", name, err)
-			}
-			parsed[action] = append(parsed[action], b)
-		}
-	}
-
-	// Everything parsed; now it is safe to mutate.
-	for action, bindings := range parsed {
-		m.clear(action)
-		m.bind(action, bindings...)
-	}
-	return nil
-}
-
-// clear drops an action's existing bindings so Apply replaces rather than
-// accumulates — otherwise a user who rebinds a key would still be able to
-// trigger it with the old one.
-func (m *Map) clear(a Action) {
-	for _, b := range m.byAction[a] {
-		delete(m.byBinding, b)
-	}
-	delete(m.byAction, a)
-}
-
-func sortedActionNames() []string {
-	names := make([]string, 0, len(actionByName))
-	for name := range actionByName {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // ctrlAndCmd returns the same key bound under both Ctrl and Cmd.
@@ -139,18 +75,12 @@ func plain(key tcell.Key) []Binding {
 	return []Binding{{Key: key}}
 }
 
-// Default returns the key map for the default preset.
+// Default is the key map. There is one.
 func Default() *Map {
-	m, err := ForPreset(DefaultPreset)
-	if err != nil {
-		// The default preset is a constant in this package; if it does not
-		// resolve, the package is broken, not the caller's input.
-		panic(err)
-	}
-	return m
+	return baseMap()
 }
 
-// baseMap returns the DataGrip-flavoured key map every preset starts from.
+// baseMap builds the DataGrip-flavoured key map.
 //
 // Where DataGrip and VS Code agree, that key is used. Where they differ,
 // DataGrip wins — this is a SQL tool, and that is the muscle memory being

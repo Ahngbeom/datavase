@@ -113,10 +113,17 @@ type Config struct {
 	DataSources []DataSource `yaml:"datasources"`
 	Defaults    Defaults     `yaml:"defaults"`
 
-	// Keymap chooses the keyboard preset and overrides individual bindings.
-	// See the Keymap type for the accepted forms.
-	Keymap Keymap `yaml:"keymap"`
+	// Keymap is read and discarded. Earlier versions wrote it, and refusing
+	// the whole file over a key that no longer does anything would lock out
+	// exactly the people upgrading.
+	Keymap map[string]any `yaml:"keymap,omitempty"`
+
+	ignored []string
 }
+
+// Ignored names the top-level keys that were present and did nothing, so
+// the caller can say so once rather than leave a setting silently dead.
+func (c *Config) Ignored() []string { return c.ignored }
 
 // Default values applied when the corresponding key is absent.
 const (
@@ -137,6 +144,10 @@ func Parse(r io.Reader) (*Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Keymap != nil {
+		cfg.ignored = append(cfg.ignored, "keymap")
+		cfg.Keymap = nil
 	}
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {

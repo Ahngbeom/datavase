@@ -52,7 +52,7 @@ func TestUsageMentionsTheVersionCommand(t *testing.T) {
 	h := newHarness(t)
 	h.app.Run([]string{"help"})
 
-	if !strings.Contains(h.err.String(), "dv version") {
-		t.Errorf("usage does not mention the version command:\n%s", h.err)
+	if !strings.Contains(h.out.String(), "dv version") {
+		t.Errorf("usage does not mention the version command:\n%s", h.out)
 	}
 }

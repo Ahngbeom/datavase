@@ -8,21 +8,15 @@ import (
 // the second registration simply wins and the first action becomes
 // unreachable. Nothing else in the suite would notice.
 func TestNoTwoActionsShareABinding(t *testing.T) {
-	for _, preset := range Presets() {
-		m, err := ForPreset(preset)
-		if err != nil {
-			t.Fatalf("%s: %v", preset, err)
-		}
+	m := Default()
 
-		owner := make(map[Binding]Action)
-		for _, action := range AllActions() {
-			for _, b := range m.Bindings(action) {
-				if previous, taken := owner[b]; taken && previous != action {
-					t.Errorf("%s preset: %v and %v are both bound to %s",
-						preset, previous, action, b.Label(false))
-				}
-				owner[b] = action
+	owner := make(map[Binding]Action)
+	for _, action := range AllActions() {
+		for _, b := range m.Bindings(action) {
+			if previous, taken := owner[b]; taken && previous != action {
+				t.Errorf("%v and %v are both bound to %s", previous, action, b.Label(false))
 			}
+			owner[b] = action
 		}
 	}
 }

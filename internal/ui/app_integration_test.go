@@ -94,26 +94,7 @@ func newHarness(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, false)
-}
-
-// newHarnessAssumingPreset is newHarness for the tests that are about a
-// session whose configuration never named a keyboard — the case the opening
-// line's assumed-keyboard clause exists for.
-func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
-	t.Helper()
-
-	ds, password := testmysql.DataSource(t)
-	ds.Env = env
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	conn, err := db.Open(ctx, ds, password, "")
-	if err != nil {
-		t.Fatalf("db.Open() error = %v", err)
-	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds, true)
+	return harnessWith(t, &session.Session{Conn: conn}, ds)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -123,10 +104,10 @@ func newHarnessAssumingPreset(t *testing.T, env config.Env) *harness {
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds, false)
+	return harnessWith(t, sess, ds)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, presetAssumed bool) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
 
 	t.Cleanup(func() { sess.Close() })
@@ -155,19 +136,7 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, pre
 	}
 	t.Cleanup(func() { hist.Close() })
 
-	// The keyboard is stated rather than taken from the default, so these
-	// tests — typing into the editor, undo, completion — do not start failing
-	// the day the default changes, for reasons that have nothing to do with
-	// them.
-	keys, err := keymap.ForPreset(keymap.PresetDataGrip)
-	if err != nil {
-		t.Fatalf("ForPreset(datagrip) error = %v", err)
-	}
-
-	app := New(sess, cfg, Deps{
-		Keys: keys, Cache: cache, History: hist,
-		PresetAssumed: presetAssumed,
-	})
+	app := New(sess, cfg, Deps{Cache: cache, History: hist})
 	app.SetScreen(screen)
 
 	h := &harness{
@@ -794,48 +763,6 @@ func TestHelpOpensAndCloses(t *testing.T) {
 	if strings.Contains(h.text(), "run the statement under the cursor") {
 		t.Errorf("help did not close:\n%s", h.text())
 	}
-}
-
-// Help that names a key the application does not actually respond to is
-// worse than no help, and it misleads exactly the people consulting it.
-func TestHelpShowsTheBindingsThatAreInForce(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-
-	// Rebind to something no default uses, so a hardcoded help text would
-	// fail to mention it.
-	h.app.app.QueueUpdateDraw(func() {
-		if err := h.app.keys.Apply(map[string][]string{"run": {"f8"}}); err != nil {
-			t.Errorf("Apply() error = %v", err)
-		}
-	})
-	h.settle()
-
-	h.do(keymap.ActionHelp)
-
-	got := h.text()
-	line := lineContaining(t, got, keymap.ActionRun.Describe())
-
-	if !strings.Contains(line, "F8") {
-		t.Errorf("the run line does not show the rebound key: %q", line)
-	}
-	// Checked on this line alone: Shift+F5 still belongs to run-all, and a
-	// whole-screen search would match it.
-	if strings.Contains(line, "F5") {
-		t.Errorf("the run line still shows the replaced default: %q", line)
-	}
-}
-
-// lineContaining returns the screen line holding want.
-func lineContaining(t *testing.T, screen, want string) string {
-	t.Helper()
-
-	for _, line := range strings.Split(screen, "\n") {
-		if strings.Contains(line, want) {
-			return line
-		}
-	}
-	t.Fatalf("no line contains %q:\n%s", want, screen)
-	return ""
 }
 
 // Every key the help prints must resolve back to the action it is listed

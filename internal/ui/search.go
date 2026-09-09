@@ -150,10 +150,10 @@ func (a *App) jumpToMatch(pattern string, where searchWhere, origin searchOrigin
 
 // gridKey gives the results the search keys.
 //
-// Plainly, in every keyboard preset: a grid is not a text field, so there is
-// nothing for an unmodified letter to collide with. tview's own table already
-// answers to hjkl, g and G, so movement is left to it rather than reimplemented
-// here where the two could disagree.
+// Plainly: a grid is not a text field, so there is nothing for an unmodified
+// letter to collide with. tview's own table already answers to hjkl, g and G,
+// so movement is left to it rather than reimplemented here where the two
+// could disagree.
 func (a *App) gridKey(ev *tcell.EventKey) *tcell.EventKey {
 	if ev.Key() != tcell.KeyRune {
 		return ev

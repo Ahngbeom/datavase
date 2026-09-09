@@ -1,8 +1,7 @@
 // Package keymap turns key events into named actions.
 //
-// Keeping key knowledge out of the UI has two payoffs: the whole mapping can
-// be tested without a terminal, and the bindings become data the user can
-// override in configuration rather than constants only a rebuild can change.
+// Keeping key knowledge out of the UI is what lets the whole mapping be
+// tested without a terminal. There is one map, Default; nothing overrides it.
 package keymap
 
 // Action is something the user asked for, independent of how they asked.
@@ -163,64 +162,6 @@ var descriptions = map[Action]string{
 // must announce itself rather than appear dead.
 var reserved = map[Action]bool{}
 
-// familiar says whether an action's binding is the one every editor and every
-// macOS application already uses, so it is not something dv teaches.
-//
-// The test is sameness, not shape: ⌘D looks conventional and means "select
-// the next occurrence" in VS Code, which is the most expensive kind of
-// difference — a user believes they already know it. Where a call is close,
-// it goes here as false, because a key wrongly listed as known is a key
-// nobody is taught.
-//
-// It is a property of the action rather than of the chord. A preset may
-// rebind anything; what a reader already knows does not move with it.
-var familiar = map[Action]bool{
-	// Cursor movement and selection, identical in every text field.
-	ActionWordLeft:          true,
-	ActionWordRight:         true,
-	ActionSelectWordLeft:    true,
-	ActionSelectWordRight:   true,
-	ActionLineStart:         true,
-	ActionLineEnd:           true,
-	ActionSelectLineStart:   true,
-	ActionSelectLineEnd:     true,
-	ActionDeleteWordLeft:    true,
-	ActionDeleteToLineStart: true,
-
-	// The clipboard, and the keys that mean the same thing everywhere.
-	// ⌘C is deliberately absent: its action is CopyOrCancel.
-	ActionCut:       true,
-	ActionPaste:     true,
-	ActionSelectAll: true,
-	ActionFind:      true,
-	ActionQuit:      true,
-
-	ActionRun:              false,
-	ActionRunAll:           false,
-	ActionCancel:           false,
-	ActionCopyOrCancel:     false,
-	ActionToggleComment:    false,
-	ActionDuplicateLine:    false,
-	ActionDeleteLine:       false,
-	ActionNextPane:         false,
-	ActionPrevPane:         false,
-	ActionToggleSidebar:    false,
-	ActionRefreshSchema:    false,
-	ActionUseSchema:        false,
-	ActionComplete:         false,
-	ActionFindNext:         false,
-	ActionFindPrev:         false,
-	ActionSearchHistory:    false,
-	ActionCycleTab:         false,
-	ActionInspect:          false,
-	ActionSortColumn:       false,
-	ActionSwitchDataSource: false,
-	ActionHelp:             false,
-}
-
-// Familiar reports that dv does not have to teach this action's key.
-func (a Action) Familiar() bool { return familiar[a] }
-
 // order fixes how actions appear on the help screen, grouped by purpose.
 var order = []Action{
 	ActionRun, ActionRunAll, ActionCancel,
@@ -259,12 +200,3 @@ func AllActions() []Action {
 	copy(out, order)
 	return out
 }
-
-// actionByName is the reverse of actionNames, for configuration parsing.
-var actionByName = func() map[string]Action {
-	m := make(map[string]Action, len(actionNames))
-	for a, name := range actionNames {
-		m[name] = a
-	}
-	return m
-}()

@@ -79,8 +79,6 @@ func (a *App) Run(args []string) int {
 		return a.auth(args[1:])
 	case "check":
 		return a.check(args[1:])
-	case "keys":
-		return a.keys(args[1:])
 	case "help", "-h", "--help":
 		a.usage()
 		return exitOK
@@ -92,21 +90,15 @@ func (a *App) Run(args []string) int {
 }
 
 func (a *App) usage() {
-	fmt.Fprint(a.Err, `datavase — terminal MySQL client
+	fmt.Fprint(a.Out, `datavase — terminal MySQL client
 
 usage:
-  dv init               set up the first datasource, asking for what it needs
-  dv [open <name>]      open the TUI
+  dv [open <name>]      open the interface
   dv ls                 list configured datasources
   dv auth <name>        store a datasource password in the keychain
   dv auth -rm <name>    remove a stored password
   dv check <name>       verify that the datasource is reachable
   dv version            print the version
-  dv keys               show the key map
-  dv keys --ghostty     print Ghostty config so ⌘ bindings reach datavase
-  dv keys --iterm2      explain the equivalent iTerm2 settings
-  dv keys --tmux        print tmux settings for modified keys
-  dv keys --debug       report what this terminal sends for each key
   dv help               show this message
 `)
 }
@@ -144,6 +136,11 @@ func (a *App) openCmd(args []string) int {
 // With no name given it picks the single configured datasource; guessing
 // among several would risk opening production when dev was meant.
 func (a *App) open(name string) int {
+	if name == "" && len(a.Config.DataSources) == 0 {
+		fmt.Fprintln(a.Err, "no datasources are configured; add one to the config file")
+		return exitUsage
+	}
+
 	if name == "" {
 		if len(a.Config.DataSources) != 1 {
 			fmt.Fprintf(a.Err,

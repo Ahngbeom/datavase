@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/keymap"
@@ -131,8 +130,8 @@ var helpGroups = []struct {
 
 // helpText renders the key reference from the live key map.
 //
-// Generating it rather than writing it out is what keeps the help honest
-// after a user rebinds something in configuration — a hardcoded list would
+// Generating it from the map rather than writing it out is what keeps the
+// help honest if a binding in baseMap ever changes — a hardcoded list would
 // start lying to precisely the people who need it.
 func (a *App) helpText() string {
 	var b strings.Builder
@@ -148,9 +147,7 @@ func (a *App) helpText() string {
 
 	b.WriteString("\n  Enter in the schema tree expands it, or pastes a column name.\n")
 
-	if advice := keymap.TerminalAdvice(os.Getenv("TERM"), a.keys); advice != "" {
-		fmt.Fprintf(&b, "\n%s\n", tag(colourNotice, advice))
-	}
+	b.WriteString("\n" + tag(colourMuted, "If ⌘↩ or Ctrl+↩ does nothing here, F5 runs: some terminals keep modified keys.") + "\n")
 
 	b.WriteString("\n" + tag(colourMuted, "Press Escape to close."))
 	return b.String()
@@ -169,46 +166,24 @@ func keyReferenceLine(km *keymap.Map, action keymap.Action) string {
 		action.Describe())
 }
 
-// helpReference renders the key groups and, below them, the keys a reader
-// already knows.
+// helpReference renders every key group in full.
 //
 // It takes the map rather than reading the App's so the reference can be
 // checked without building an interface: what it renders depends only on
 // that map and the package-level onMac, neither of which needs a terminal.
 func helpReference(km *keymap.Map) string {
 	var b strings.Builder
-	var known []keymap.Action
-
 	for _, group := range helpGroups {
-		ours, groupKnown := keymap.SplitByFamiliarity(group.actions)
-		known = append(known, groupKnown...)
-		if len(ours) == 0 {
-			continue
-		}
-
 		fmt.Fprintf(&b, "\n%s\n", headingTag(group.title))
-		for _, action := range ours {
+		for _, action := range group.actions {
 			b.WriteString(keyReferenceLine(km, action))
 		}
 	}
-
-	fmt.Fprintf(&b, "\n%s\n", headingTag("Already what you expect"))
-	for _, line := range keymap.PackFamiliar(km, known, onMac, familiarWidth) {
-		fmt.Fprintf(&b, "  %s\n", line)
-	}
-
 	return b.String()
 }
 
 // helpKeyColumn is the width of the key column on the help screen.
 const helpKeyColumn = 20
-
-// familiarWidth keeps the packed block from wrapping on an eighty-column
-// terminal, the narrowest this reference is meant to be read on. A wrapped
-// line costs two rows, which undoes the packing it wrapped. At that size the
-// dialog is 80-2*dialogMargin wide, its border takes two columns and the
-// block is indented two.
-const familiarWidth = 80 - 2*dialogMargin - 2 - 2
 
 func (a *App) showHelp() {
 	text := a.helpText()

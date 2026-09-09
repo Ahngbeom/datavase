@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
@@ -60,14 +59,8 @@ type App struct {
 	content *gridContent
 	status  status
 
-	// keys resolves key events to actions. Holding it here rather than
-	// consulting package-level state is what lets the bindings come from
-	// configuration.
+	// keys resolves key events to actions.
 	keys *keymap.Map
-
-	// presetAssumed says the configuration named no keyboard, so a.keys is
-	// the default rather than a choice.
-	presetAssumed bool
 
 	// sidebarVisible tracks the schema pane, which the layout is rebuilt
 	// around when it is toggled. sidebarRule is the hairline beside it.
@@ -189,17 +182,12 @@ func batchSummary(total, ran int, why string, inTransaction bool) string {
 // be created — a read-only home directory should cost the user completion,
 // not the whole application.
 type Deps struct {
-	Keys    *keymap.Map
 	Cache   *catalog.Cache
 	History *history.Store
 	// Connect opens another datasource, for switching mid-session. Nil leaves
 	// the session on the datasource it started with, and the switch says so
 	// rather than failing silently.
 	Connect func(context.Context, *config.DataSource) (*session.Session, error)
-	// PresetAssumed says the configuration named no keyboard preset, so Keys
-	// is the default rather than a choice. False — "they chose it" — is the
-	// safe default for tests and for a config that did name one.
-	PresetAssumed bool
 }
 
 // New builds the interface for an open session.
@@ -211,19 +199,13 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	conn := sess.Conn
 	ds := conn.DataSource()
 
-	keys := deps.Keys
-	if keys == nil {
-		keys = keymap.Default()
-	}
-
 	a := &App{
 		app:             tview.NewApplication(),
 		sess:            sess,
 		conn:            conn,
 		connect:         deps.Connect,
 		cfg:             cfg,
-		keys:            keys,
-		presetAssumed:   deps.PresetAssumed,
+		keys:            keymap.Default(),
 		cache:           deps.Cache,
 		history:         deps.History,
 		buf:             result.NewBuffer(cfg.Defaults.BufferMax),
@@ -264,20 +246,13 @@ func (a *App) captureScreen() {
 	})
 }
 
-// openingMessage greets the user and, when the terminal cannot deliver the
-// primary bindings, says so straight away.
-//
-// Finding out that Ctrl+Enter does nothing by pressing it and watching
-// nothing happen is the worst way to learn it; the status bar is already
-// there and costs nothing to read.
+// openingMessage greets the user with what the first line of a session has to
+// say.
 func (a *App) openingClauses(serverVersion string) []string {
-	term := os.Getenv("TERM")
-
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
-		advice:        keymap.TerminalAdviceShort(term, a.keys),
 	})
 }
 
@@ -286,9 +261,6 @@ type opening struct {
 	serverVersion string
 	helpKey       string
 	sidebarKey    string
-	// advice is what this terminal cannot deliver, or empty when it can
-	// deliver everything.
-	advice string
 }
 
 // openingClauses is the greeting, most actionable first.
@@ -300,21 +272,15 @@ type opening struct {
 //
 // The order decides what survives, and it is the whole of the ranking: a
 // clause's position in this slice is its shedding priority, most protected
-// first. What the terminal cannot deliver comes first because it is the only
-// place anyone is told that the key this interface keeps naming will do
-// nothing when they press it. The schema tree follows immediately — the
-// sidebar starts hidden, so this is the only place its existence is
-// announced, and losing it is losing the one way a first-time user finds it
-// at all. F1 comes next: it reaches the full reference. The server version
-// brings up the rear: it is a greeting rather than an instruction, and
-// knowing which MariaDB answered has never stood between anyone and their
-// first query.
+// first. The schema tree comes first — the sidebar starts hidden, so this is
+// the only place its existence is announced, and losing it is losing the one
+// way a first-time user finds it at all. F1 comes next: it reaches the full
+// reference. The server version brings up the rear: it is a greeting rather
+// than an instruction, and knowing which MariaDB answered has never stood
+// between anyone and their first query.
 func openingClauses(o opening) []string {
 	var out []string
 
-	if o.advice != "" {
-		out = append(out, o.advice)
-	}
 	// The schema tree is not on screen, so this is where anyone learns it
 	// exists at all.
 	if o.sidebarKey != "" {
@@ -340,37 +306,22 @@ func (a *App) helpKeyLabel() string {
 	return bindings[0].Label(onMac)
 }
 
-// keyLabel names an action's key as this terminal can actually deliver it.
-//
-// On a terminal without the extended keyboard protocol the primary binding is
-// one the user cannot press, so the function-key fallback is named instead —
-// advice nobody can follow is worse than none.
+// keyLabel names an action's key.
 func (a *App) keyLabel(action keymap.Action) string {
 	bindings := a.keys.DisplayBindings(action)
 	if len(bindings) == 0 {
 		return action.String()
 	}
-	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
-		return bindings[len(bindings)-1].Label(onMac)
-	}
 	return bindings[0].Label(onMac)
 }
 
-// editorPlaceholder names the run key, preferring one this terminal can
-// actually deliver so the hint is not advice the user cannot follow.
+// editorPlaceholder names the run key.
 func (a *App) editorPlaceholder() string {
 	bindings := a.keys.DisplayBindings(keymap.ActionRun)
 	if len(bindings) == 0 {
 		return "SELECT …"
 	}
-
-	binding := bindings[0]
-	if !keymap.SupportsExtendedKeys(os.Getenv("TERM")) {
-		// Fall back to the last binding, which is the plain function key
-		// that works everywhere.
-		binding = bindings[len(bindings)-1]
-	}
-	return "SELECT … then " + binding.Label(onMac) + " to run"
+	return "SELECT … then " + bindings[0].Label(onMac) + " to run"
 }
 
 // Run starts the event loop and blocks until the user quits.

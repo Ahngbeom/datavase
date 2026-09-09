@@ -2,21 +2,17 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/history"
-	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/ui"
@@ -48,39 +44,18 @@ func run() int {
 		path = p
 	}
 
-	// `dv init` is dispatched here rather than by cli.App for the same reason
-	// `dv version` is: App holds a *config.Config, and the whole point of this
-	// command is that there is not one yet. The parsing lives in cli so that
-	// it is checkable without a terminal.
-	if wanted, code := cli.HandleInit(os.Stderr, flag.Args()); wanted {
-		if code != 0 {
-			return code
-		}
-		return runWizard(path)
-	}
-
 	cfg, err := config.Load(path)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			fmt.Fprintf(os.Stderr, "no configuration at %s\n", path)
 			return 1
 		}
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
 
-		// Nothing is configured yet. Someone sitting at a terminal can answer
-		// the questions now, which is the whole difference between "datavase
-		// does not work" and a session. A pipe cannot answer them, and blocking
-		// on one that never will is worse than saying what to run.
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			printGettingStarted(path)
-			return 1
-		}
-		if code := runWizard(path); code != 0 {
-			return code
-		}
-		if cfg, err = config.Load(path); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			return 1
-		}
+	for _, key := range cfg.Ignored() {
+		fmt.Fprintf(os.Stderr, "config: %q is no longer used and was ignored\n", key)
 	}
 
 	app := &cli.App{
@@ -99,13 +74,6 @@ func run() int {
 // bounds the connection attempt only; the interface itself runs until the
 // user quits.
 func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
-	// Key bindings are resolved before connecting: a typo in the keymap
-	// should fail immediately, not after a password prompt and a handshake.
-	keys, err := keymap.FromConfig(cfg.Keymap.Preset, cfg.Keymap.Actions)
-	if err != nil {
-		return fmt.Errorf("keymap: %w", err)
-	}
-
 	// The schema cache is optional: a read-only home directory should cost
 	// completion, not the whole session.
 	var cache *catalog.Cache
@@ -136,19 +104,17 @@ func openUI(ctx context.Context, ds *config.DataSource, password string, cfg *co
 	// the one it leaves, and a session closed twice or by nobody is how a
 	// tunnel outlives the thing it was carrying.
 	return ui.New(sess, cfg, ui.Deps{
-		Keys:          keys,
-		Cache:         cache,
-		History:       hist,
-		Connect:       connectTo,
-		PresetAssumed: !cfg.Keymap.PresetSet,
+		Cache:   cache,
+		History: hist,
+		Connect: connectTo,
 	}).Run()
 }
 
 // secrets is where every password is read and written.
 //
-// One function rather than three constructions, so the environment layer
-// cannot end up on the interface's reads but not the wizard's writes — which
-// would show up as a datasource that works until you switch to it.
+// One function rather than separate constructions, so the environment layer
+// cannot end up on one caller's reads but not another's — which would show up
+// as a datasource that works until you switch to it.
 func secrets() secret.Store { return secret.WithEnv(secret.NewKeychain()) }
 
 // connectTo opens another datasource for a switch mid-session.
@@ -205,117 +171,4 @@ func readPassword(prompt string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
-}
-
-// runWizard writes the first configuration file.
-//
-// Everything it says goes to stderr, including what it managed to do: the
-// wizard is a conversation, and a conversation in the middle of `dv init >
-// somewhere` would end up in the file rather than in front of the user.
-func runWizard(path string) int {
-	w := &cli.Wizard{
-		Path:         path,
-		Out:          os.Stderr,
-		Ask:          ask,
-		Choose:       choose,
-		ReadPassword: readPassword,
-		Secrets:      secrets(),
-		// The timeout bounds one attempt, not the wizard: a deadline over the
-		// whole thing would expire while someone was still typing.
-		Probe: func(ctx context.Context, ds *config.DataSource, password string) (string, error) {
-			ctx, cancel := context.WithTimeout(ctx, cli.CheckTimeout)
-			defer cancel()
-			return probe(ctx, ds, password)
-		},
-	}
-
-	if err := w.Run(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "\n%v\n", err)
-		return 1
-	}
-	return 0
-}
-
-// stdin is shared by every question. A fresh reader per prompt would discard
-// whatever the last one had already buffered, which on a fast paste is the
-// next answer.
-//
-// readPassword reads the descriptor directly rather than through this, and the
-// two only coexist because of what a terminal in its ordinary line-editing mode
-// does: a read returns at most one line, so this never buffers past the answer
-// it was asked for, and there is nothing left in it for term.ReadPassword to
-// lose. Anything else is not a terminal, and readPassword refuses those
-// outright rather than reading a password from a pipe.
-var stdin = bufio.NewReader(os.Stdin)
-
-// ask reads one line, taking def when the answer is empty.
-func ask(prompt, def string) (string, error) {
-	if def != "" {
-		fmt.Fprintf(os.Stderr, "%s [%s]: ", prompt, def)
-	} else {
-		fmt.Fprintf(os.Stderr, "%s: ", prompt)
-	}
-
-	line, err := stdin.ReadString('\n')
-	// A final line without a newline is still an answer; only an empty read is
-	// the end of the input.
-	if err != nil && line == "" {
-		return "", err
-	}
-	if trimmed := strings.TrimSpace(line); trimmed != "" {
-		return trimmed, nil
-	}
-	return def, nil
-}
-
-// choose numbers the options and reads one back.
-//
-// Numbers rather than arrow keys: this runs before the terminal interface
-// exists, and putting a raw-mode menu in front of the setup wizard would make
-// the first thing a new user meets the thing most likely to render wrongly.
-func choose(prompt string, options []string, def int) (int, error) {
-	fmt.Fprintf(os.Stderr, "\n%s\n", prompt)
-	for i, option := range options {
-		marker := " "
-		if i == def {
-			marker = "*"
-		}
-		fmt.Fprintf(os.Stderr, "  %s %d) %s\n", marker, i+1, option)
-	}
-
-	// A negative default is a question with no answer to fall back on: nothing
-	// is marked, nothing is offered in brackets, and Enter on its own asks
-	// again rather than resolving to something nobody picked.
-	fallback := ""
-	if def >= 0 {
-		fallback = strconv.Itoa(def + 1)
-	}
-
-	for {
-		answer, err := ask("choice", fallback)
-		if err != nil {
-			return 0, err
-		}
-
-		n, convErr := strconv.Atoi(answer)
-		if convErr == nil && n >= 1 && n <= len(options) {
-			return n - 1, nil
-		}
-		fmt.Fprintf(os.Stderr, "choose a number between 1 and %d.\n", len(options))
-	}
-}
-
-// printGettingStarted is what a machine that cannot answer the wizard is told.
-//
-// It names the command rather than printing a configuration file: the file is
-// what `dv init` is for, and an example someone retypes is an example they can
-// get past the parser only by luck.
-func printGettingStarted(path string) {
-	fmt.Fprintf(os.Stderr, `no configuration found at %s
-
-run this at a terminal and it will ask for what goes in it:
-
-  dv init
-
-`, path)
 }

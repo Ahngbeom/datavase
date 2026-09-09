@@ -67,7 +67,7 @@ func (a *App) dataSourceChoices(term string) []searchItem {
 	if len(items) == 0 {
 		if term == "" {
 			return []searchItem{nothingHere("no other datasource is configured",
-				"add one with `dv init`")}
+				"add one to the config file")}
 		}
 		return []searchItem{noMatch("datasource", term)}
 	}

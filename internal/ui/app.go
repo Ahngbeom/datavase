@@ -20,7 +20,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/guard"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
@@ -157,17 +156,6 @@ type App struct {
 	// listedTables mirrors what the list currently shows, so a highlighted
 	// row can be mapped back to the table it stands for.
 	listedTables []catalog.Table
-
-	// ddlView shows a table definition on demand.
-	ddlView *tview.TextView
-	ddlText string
-
-	// planView shows the query plan, laying it out at whatever width it has
-	// when it is drawn.
-	planView *planPane
-
-	// sessionsView lists what else is running on the server.
-	sessionsView *sessionsPane
 
 	// completion is nil until the schema cache is available; the popup says
 	// so rather than appearing broken.
@@ -551,9 +539,6 @@ func (a *App) buildWidgets() {
 
 	a.resultTabs = newTabbed().watch(a.resultDetail)
 	a.resultTabs.add(tabResults, a.grid)
-	a.resultTabs.add(tabDDL, a.buildDDLTab())
-	a.resultTabs.add(tabPlan, a.buildPlanTab())
-	a.resultTabs.add(tabSessions, a.buildSessionsTab())
 	a.resultTabs.record = a.recorderFor(a.resultTabs)
 
 	a.topBar = newTopBar(a.currentTopBar)
@@ -586,35 +571,21 @@ func schemaPaneDetail(tab, currentSchema string) string {
 }
 
 // resultDetail says what the empty results tab would otherwise not say.
-//
-// editorFocused reads a.editor.HasFocus() rather than a.app.GetFocus():
-// this runs at draw time (tabbed's detail is read from Draw), and asking
-// the Application who has focus from inside Draw deadlocks — see the
-// warning on tabbed.detail (panel.go). HasFocus is a plain field read on
-// the primitive itself and takes no lock.
 func (a *App) resultDetail() string {
 	return resultHint(resultState{
-		tab:           a.resultTabs.current(),
-		columns:       a.buf.ColumnCount(),
-		running:       a.running != nil,
-		wrote:         a.status.written != nil,
-		editorFocused: a.editor.HasFocus(),
+		columns: a.buf.ColumnCount(),
+		running: a.running != nil,
+		wrote:   a.status.written != nil,
 	})
 }
 
 // resultState is everything the hint depends on.
 type resultState struct {
-	tab     string
 	columns int
 	running bool
 	// wrote says the last statement changed rows instead of returning them,
 	// which is an empty grid for a reason rather than an empty grid.
 	wrote bool
-	// editorFocused is the one place Esc does not return to results:
-	// returnToResults steps aside there so vim's own Esc (leave insert
-	// mode) still gets it. The hint has to agree, or it promises a key
-	// that a Tab press into the editor quietly stops delivering.
-	editorFocused bool
 }
 
 // resultHint is the trailing line on the results tab's header.
@@ -626,21 +597,7 @@ type resultState struct {
 // statement was running and the bar two rows below said so. A pane telling
 // the user to do the thing they are watching happen is the same contradiction
 // the finders opened with.
-//
-// A tab that is not the results tab has no other way of telling you the
-// results are still there, so it says how to get back — Esc, a literal
-// rather than a bound action's key label, since rebinding "back" would take
-// it away from every dialog that already relies on it (see
-// returnToResults). Silent whenever the editor holds focus: that is the one
-// place Esc means something else, and a hint naming a key that does not do
-// what it says is worse than none.
 func resultHint(s resultState) string {
-	if s.tab != tabResults {
-		if s.editorFocused {
-			return ""
-		}
-		return "Esc returns to results"
-	}
 	if s.columns > 0 {
 		return ""
 	}
@@ -768,11 +725,6 @@ const (
 	tabTree    = "tree"
 	tabTables  = "tables"
 	tabResults = "results"
-	// Lower case like the others. A single shouted name in a strip of quiet
-	// ones reads as an error rather than as an acronym.
-	tabDDL      = "ddl"
-	tabPlan     = "plan"
-	tabSessions = "sessions"
 )
 
 const (
@@ -786,7 +738,6 @@ const (
 	pageSearch     = "search"
 	pageCommand    = "command"
 	pageDataSource = "datasource"
-	pageKill       = "kill"
 	pageIntro      = "intro"
 	pageMenu       = "menu"
 )
@@ -801,19 +752,10 @@ func (a *App) focusOrder() []tview.Primitive {
 	return order
 }
 
-// resultPrimitive and schemaPrimitive return whichever widget the visible tab
-// holds, so Tab lands on something focusable rather than on the tab strip.
+// resultPrimitive and schemaPrimitive return whichever widget Tab should
+// land on, rather than the tab strip.
 func (a *App) resultPrimitive() tview.Primitive {
-	switch a.resultTabs.current() {
-	case tabDDL:
-		return a.ddlView
-	case tabPlan:
-		return a.planView
-	case tabSessions:
-		return a.sessionsView
-	default:
-		return a.grid
-	}
+	return a.grid
 }
 
 func (a *App) schemaPrimitive() tview.Primitive {
@@ -869,10 +811,8 @@ func (a *App) bindKeys() {
 	})
 }
 
-// returnToResults sends Esc back to the results tab from any of the other
-// three, picking up the keyboard along with it — inspecting a table, asking
-// for a plan or listing sessions can all leave the keyboard somewhere else
-// entirely, and the tab strip alone does not say how to get back.
+// returnToResults sends Esc back to the results tab, picking up the keyboard
+// along with it, from wherever a dialog or another pane left it.
 //
 // Esc is deliberately not a keymap.Action: making it one would let it be
 // rebound away from every dialog that already relies on it as the one
@@ -938,16 +878,6 @@ func (a *App) dispatch(action keymap.Action) bool {
 		a.sortColumn()
 	case keymap.ActionSwitchDataSource:
 		a.showDataSources()
-	case keymap.ActionExplain:
-		a.explainStatement()
-	case keymap.ActionAnalyze:
-		a.analyzeStatement()
-	case keymap.ActionSessions:
-		a.showSessions()
-	case keymap.ActionKillSession:
-		a.showKillSession(procs.StopStatement)
-	case keymap.ActionLocks:
-		a.showLocks()
 	case keymap.ActionCommandPalette:
 		a.showCommandPalette()
 	case keymap.ActionFind:
@@ -1216,8 +1146,6 @@ func (a *App) finishBatch(why string) {
 func (a *App) copyOrCancel() {
 	intent := copyContext{
 		running:      a.running != nil,
-		onDDL:        a.app.GetFocus() == a.ddlView,
-		onPlan:       a.app.GetFocus() == a.planView,
 		onGrid:       a.app.GetFocus() == a.grid,
 		hasSelection: a.editor.HasSelection(),
 	}.resolve()
@@ -1225,14 +1153,6 @@ func (a *App) copyOrCancel() {
 	switch intent {
 	case intentCancel:
 		a.cancelRunning()
-	case intentDefinition:
-		if !a.copyDDL() {
-			a.notice("nothing to copy")
-		}
-	case intentPlan:
-		if !a.copyPlan() {
-			a.notice("nothing to copy")
-		}
 	case intentSelection:
 		a.copySelection()
 	case intentCell:
@@ -1289,10 +1209,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 	})
 	a.running = stream
 
-	// Whether the answer is a plan is settled here, from the statement that
-	// was sent, rather than remembered from the key that asked: a confirmation
-	// dialog can sit between the two for as long as the user likes.
-	go a.consume(stream, sql, started, stmt.PlansAsJSON())
+	go a.consume(stream, sql, started)
 }
 
 // consume forwards stream events onto the UI goroutine.
@@ -1300,7 +1217,7 @@ func (a *App) start(stmt sqlparse.Statement, decision guard.Decision) {
 // tview may only be touched from its own goroutine, hence QueueUpdateDraw.
 // Rows land in the buffer immediately so the grid can show them as they
 // arrive rather than waiting for the statement to finish.
-func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plansJSON bool) {
+func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 	for ev := range stream.Events {
 		switch ev.Kind {
 		case db.EventColumns:
@@ -1339,11 +1256,6 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time, plan
 		switch {
 		case err == nil:
 			a.status.phase = phaseDone
-			// A statement that answered in JSON answered with a plan, and a
-			// screenful of braces in the grid is not what was asked for.
-			if plansJSON && a.buf.RowCount() > 0 {
-				a.showPlanFrom(a.buf)
-			}
 
 		// A cancellation is an outcome the user asked for, so it reads as a
 		// normal finish. The driver usually notices the cancelled context
@@ -1427,10 +1339,6 @@ func (a *App) currentStatus() status {
 // hook that the grid does not already know about. Reading the offset is also
 // the only exact answer — how many columns fit on the right depends on widths
 // tview works out while it draws.
-//
-// It reports nothing while another tab is in front. The offset survives the
-// tab switch, and a bar warning about a grid nobody is looking at is a warning
-// that gets learned as noise.
 func (a *App) columnsOffView() int {
 	if a.resultTabs == nil || a.resultTabs.current() != tabResults {
 		return 0
@@ -1532,16 +1440,11 @@ func (a *App) confirmDiscardTransaction() {
 	a.openDialog(modal)
 }
 
-// inspect shows whatever has focus in full: a table's definition from the
-// schema pane, a row from the results.
-//
-// One word for one intent, resolved by where the caret is — the same shape as
-// copy-or-cancel and as "/", which searches whichever pane is focused. A
-// second key for "the same thing but over there" is a key nobody remembers.
+// inspect shows the selected result row in full.
 func (a *App) inspect() {
-	if a.app.GetFocus() == a.grid {
-		a.showRow()
+	if a.app.GetFocus() != a.grid {
+		a.notice("select a result row first")
 		return
 	}
-	a.inspectTable()
+	a.showRow()
 }

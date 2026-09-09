@@ -60,27 +60,6 @@ func TestTheColumnNoticeGoesAwayWhenTheGridScrollsBack(t *testing.T) {
 	})
 }
 
-// The offset survives a tab switch, and a bar warning about a grid nobody is
-// looking at is a warning that gets learned as noise.
-func TestTheColumnNoticeIsSilentOnAnotherTab(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.runSQL(wideSelect, 1)
-
-	h.do(keymap.ActionNextPane)
-	h.waitFor("the grid", func(a *App) bool { return a.app.GetFocus() == a.grid })
-	for i := 0; i < 6; i++ {
-		h.press(tcell.KeyRight)
-	}
-	h.waitFor("the notice", func(a *App) bool {
-		return strings.Contains(a.currentStatus().render(), "left of view")
-	})
-
-	h.inspect(func(a *App) bool { a.resultTabs.show(tabDDL); return true })
-	h.waitFor("the notice to go quiet", func(a *App) bool {
-		return !strings.Contains(a.currentStatus().render(), "left of view")
-	})
-}
-
 // A statement whose columns cannot all fit on a terminal at once. The values
 // are what make it wide: eight narrow columns fit side by side on the
 // simulated eighty, and a grid that never scrolls tests nothing.

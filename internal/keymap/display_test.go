@@ -124,11 +124,11 @@ func TestTheSplitPreservesTheOrderItWasGiven(t *testing.T) {
 	// The input interleaves the two groups, and the expected output of each is
 	// in descending Action order: an implementation that sorted, rather than
 	// keeping what it was handed, would pass an ascending expectation by luck.
-	in := []Action{ActionExplain, ActionPaste, ActionRun, ActionCut}
+	in := []Action{ActionSortColumn, ActionPaste, ActionRun, ActionCut}
 	ours, known := SplitByFamiliarity(in)
 
-	if len(ours) != 2 || ours[0] != ActionExplain || ours[1] != ActionRun {
-		t.Errorf("dv's own = %v, want [explain run] in that order", ours)
+	if len(ours) != 2 || ours[0] != ActionSortColumn || ours[1] != ActionRun {
+		t.Errorf("dv's own = %v, want [sort-column run] in that order", ours)
 	}
 	if len(known) != 2 || known[0] != ActionPaste || known[1] != ActionCut {
 		t.Errorf("familiar = %v, want [paste cut] in that order", known)

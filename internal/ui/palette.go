@@ -11,7 +11,6 @@ import (
 	"github.com/Ahngbeom/datavase/internal/export"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/match"
-	"github.com/Ahngbeom/datavase/internal/procs"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/Ahngbeom/datavase/internal/vim"
 )
@@ -53,7 +52,6 @@ var paletteCategories = []string{
 	catSchema,
 	catEditing,
 	catWrites,
-	catServer,
 	catKeyboard,
 	catOther,
 }
@@ -65,7 +63,6 @@ const (
 	catSchema   = "Schema and datasource"
 	catEditing  = "Editing"
 	catWrites   = "Changing data"
-	catServer   = "The server"
 	catKeyboard = "Keyboard"
 	catOther    = "Other"
 )
@@ -234,53 +231,6 @@ func paletteCommands() []command {
 			run:      (*App).showHistory,
 		},
 		{
-			name:     "explain",
-			category: catRunning,
-			summary:  "show how the server would run the statement under the cursor",
-			covers:   keymap.ActionExplain,
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).explainStatement,
-		},
-		{
-			name:     "analyze",
-			category: catRunning,
-			summary:  "run the statement under the cursor and show what it actually did",
-			covers:   keymap.ActionAnalyze,
-			contexts: []menuContext{ctxEditor},
-			run:      (*App).analyzeStatement,
-		},
-		{
-			name:     "sessions",
-			category: catServer,
-			summary:  "list what else is running on the server",
-			covers:   keymap.ActionSessions,
-			contexts: []menuContext{ctxStatusBar},
-			run:      (*App).showSessions,
-		},
-		{
-			name:     "locks",
-			category: catServer,
-			summary:  "show which connections are waiting on which",
-			covers:   keymap.ActionLocks,
-			contexts: []menuContext{ctxStatusBar},
-			run:      (*App).showLocks,
-		},
-		{
-			name:     "stop a statement",
-			category: catServer,
-			summary:  "stop the statement running on another connection",
-			covers:   keymap.ActionKillSession,
-			contexts: []menuContext{ctxStatusBar},
-			run:      func(a *App) { a.showKillSession(procs.StopStatement) },
-		},
-		{
-			name:     "stop a connection",
-			category: catServer,
-			summary:  "end another connection, rolling back anything it held open",
-			exact:    true,
-			run:      func(a *App) { a.showKillSession(procs.StopConnection) },
-		},
-		{
 			name:     "sort by column",
 			category: catResults,
 			summary:  "order the results by the selected column, and back again",
@@ -298,9 +248,9 @@ func paletteCommands() []command {
 		{
 			name:     "inspect",
 			category: catResults,
-			summary:  "show the selected table or result row in full",
+			summary:  "show the selected result row in full",
 			covers:   keymap.ActionInspect,
-			contexts: []menuContext{ctxResult, ctxTree, ctxTables},
+			contexts: []menuContext{ctxResult},
 			run:      (*App).inspect,
 		},
 		{

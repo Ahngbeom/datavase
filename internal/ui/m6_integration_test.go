@@ -247,26 +247,15 @@ func TestInspectingARowShowsTheValueTheGridCutShort(t *testing.T) {
 	}
 }
 
-// Inspect means "show me this in full", and which thing depends on where the
-// caret is — a second key for the same intent somewhere else is one nobody
-// remembers.
-func TestInspectStillShowsATableDefinitionFromTheSchemaPane(t *testing.T) {
+// Inspect only ever reads the grid now, so pressing it with focus anywhere
+// else must say so rather than doing nothing.
+func TestInspectWithFocusOffTheGridSaysSo(t *testing.T) {
 	h := newHarness(t, config.EnvDev)
-	h.showSidebar()
 
 	h.do(keymap.ActionInspect)
 
-	// Whatever it did, it must not have been the row view: the caret is in
-	// the schema pane, and "inspect" there has always meant the definition.
-	h.settle()
-	if h.inspect(func(a *App) bool {
-		name, _ := a.pages.GetFrontPage()
-		return name == pageConfirm
-	}) {
-		t.Errorf("inspect opened the row view from the schema pane:\n%s", h.text())
-	}
-	if strings.Contains(h.text(), "no row selected") {
-		t.Errorf("inspect took the results branch from the schema pane:\n%s", h.text())
+	if !h.waitForScreen("select a result row first") {
+		t.Errorf("inspecting off the grid gave no feedback:\n%s", h.text())
 	}
 }
 

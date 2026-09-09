@@ -14,7 +14,7 @@ import (
 //
 // It draws no box. Three boxes cost six rows and six columns of chrome, and
 // each of their titles repeated what the tab strip two rows below already
-// said — " results " above "▸results DDL". The header is now the only place a
+// said — " results " above "▸results". The header is now the only place a
 // region names itself, and a hairline separates it from its neighbour.
 //
 // The schema pane, the result pane and the editor all use it, so there is no

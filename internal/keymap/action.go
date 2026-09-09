@@ -59,8 +59,8 @@ const (
 	ActionCommandPalette
 	// ActionCycleTab moves through the tabs of whichever pane has focus.
 	ActionCycleTab
-	// ActionInspect shows whatever is selected in full: a table's definition,
-	// or a result row read down the page instead of across it.
+	// ActionInspect shows the selected result row read down the page instead
+	// of across it.
 	ActionInspect
 	// ActionSortColumn orders the results by the selected column, and back
 	// again — the third press restores the order the server sent.
@@ -68,18 +68,6 @@ const (
 	// ActionSwitchDataSource moves the session to another configured
 	// datasource.
 	ActionSwitchDataSource
-	// ActionExplain asks the server how it would run the statement under the
-	// cursor, without running it.
-	ActionExplain
-	// ActionAnalyze runs the statement under the cursor and reports what it
-	// actually did, against what was expected.
-	ActionAnalyze
-	// ActionSessions lists what else is running on the server.
-	ActionSessions
-	// ActionKillSession stops another connection's statement.
-	ActionKillSession
-	// ActionLocks shows which connections are waiting on which.
-	ActionLocks
 
 	// Application.
 	ActionHelp
@@ -124,11 +112,6 @@ var actionNames = map[Action]string{
 	ActionInspect:           "inspect",
 	ActionSortColumn:        "sort-column",
 	ActionSwitchDataSource:  "switch-datasource",
-	ActionExplain:           "explain",
-	ActionAnalyze:           "analyze",
-	ActionSessions:          "sessions",
-	ActionKillSession:       "kill-session",
-	ActionLocks:             "locks",
 	ActionHelp:              "help",
 	ActionQuit:              "quit",
 }
@@ -168,14 +151,9 @@ var descriptions = map[Action]string{
 	ActionSearchHistory:     "search the query history",
 	ActionCommandPalette:    "open the command palette",
 	ActionCycleTab:          "switch tab in the focused pane",
-	ActionInspect:           "show the selected table or result row in full",
+	ActionInspect:           "show the selected result row in full",
 	ActionSortColumn:        "sort the results by the selected column",
 	ActionSwitchDataSource:  "switch to another datasource",
-	ActionExplain:           "explain the statement under the cursor",
-	ActionAnalyze:           "run it and report what it actually did",
-	ActionSessions:          "list what else is running on the server",
-	ActionKillSession:       "stop another connection's statement",
-	ActionLocks:             "show which connections are waiting on which",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",
 }
@@ -241,11 +219,6 @@ var familiar = map[Action]bool{
 	ActionInspect:          false,
 	ActionSortColumn:       false,
 	ActionSwitchDataSource: false,
-	ActionExplain:          false,
-	ActionAnalyze:          false,
-	ActionSessions:         false,
-	ActionKillSession:      false,
-	ActionLocks:            false,
 	ActionHelp:             false,
 }
 
@@ -254,7 +227,7 @@ func (a Action) Familiar() bool { return familiar[a] }
 
 // order fixes how actions appear on the help screen, grouped by purpose.
 var order = []Action{
-	ActionRun, ActionRunAll, ActionCancel, ActionExplain, ActionAnalyze,
+	ActionRun, ActionRunAll, ActionCancel,
 	ActionWordLeft, ActionWordRight, ActionSelectWordLeft, ActionSelectWordRight,
 	ActionLineStart, ActionLineEnd, ActionSelectLineStart, ActionSelectLineEnd,
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
@@ -264,7 +237,7 @@ var order = []Action{
 	ActionCommandPalette, ActionInspect,
 	ActionSortColumn,
 	ActionNextPane, ActionPrevPane, ActionCycleTab, ActionToggleSidebar,
-	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource, ActionSessions, ActionKillSession, ActionLocks,
+	ActionRefreshSchema, ActionUseSchema, ActionSwitchDataSource,
 	ActionHelp, ActionQuit,
 }
 

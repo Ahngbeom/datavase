@@ -151,15 +151,12 @@ func (a *App) adopt(sess *session.Session) {
 
 	// The rows on screen belong to the datasource that produced them, and
 	// nothing about them is true of this one. The same goes for the schema
-	// that was chosen and the definition last looked at: a name that exists
-	// on both servers is the case where keeping them would mislead rather
-	// than merely confuse.
+	// that was chosen: a name that exists on both servers is the case where
+	// keeping it would mislead rather than merely confuse.
 	a.buf.Reset()
 	a.content.unsort()
 	a.grid.ScrollToBeginning()
 	a.selectedSchema = ""
-	a.ddlText = ""
-	a.ddlView.SetText("")
 
 	// Completion is scoped to the datasource in the cache, so it is rebuilt
 	// rather than kept; a stale one offers tables that are not there.

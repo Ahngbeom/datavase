@@ -284,34 +284,6 @@ func baseMap() *Map {
 		append(ctrlAndCmdRune('n', tcell.ModShift),
 			Binding{Key: tcell.KeyF7})...)
 
-	// The plan. ⌘E for explain; DataGrip puts it on ⌘⇧E, which is one more
-	// finger for something asked as often as a statement is run. There is no
-	// function key left, and the palette carries it for a terminal that keeps
-	// ⌘ and Ctrl chords for itself.
-	m.bind(ActionExplain, ctrlAndCmdRune('e', 0)...)
-
-	// ANALYZE runs the statement, so it is the shifted one: a finger away
-	// from the plan, and never the key that is reached for by accident.
-	m.bind(ActionAnalyze, ctrlAndCmdRune('e', tcell.ModShift)...)
-
-	// What else is running. Not ⌘⇧P, which reads as "process list" and is the
-	// command palette on the VS Code preset — a collision the preset test
-	// caught. ⌘⇧U for "who else is using this".
-	//
-	// The first binding here with no function key behind it: F1 to F12 are
-	// spoken for. The palette carries it for a terminal that keeps ⌘ and Ctrl
-	// chords to itself, which is the rule the coverage test actually enforces
-	// — the function keys were always the convenience, not the guarantee.
-	m.bind(ActionSessions, ctrlAndCmdRune('u', tcell.ModShift)...)
-
-	// Stopping somebody else's statement. Deliberately not next to ⌘⇧U on the
-	// keyboard: this is the one operation here that reaches into another
-	// person's session, and a neighbouring key is a mis-hit away.
-	m.bind(ActionKillSession, ctrlAndCmdRune('w', tcell.ModShift)...)
-
-	// Who is waiting on whom.
-	m.bind(ActionLocks, ctrlAndCmdRune('l', tcell.ModShift)...)
-
 	// Switching datasource. ⌘⇧D for datasource; F11 is the fallback, and the
 	// last function key this map has left.
 	m.bind(ActionSwitchDataSource,

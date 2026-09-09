@@ -128,18 +128,17 @@ func (a *App) menuContentWidth() int {
 // click inside a pane's body, which is most of the screen, has no zone at
 // all.
 //
-// The tree and the tables list share one region, swapped by a.schemaTabs,
-// and the grid shares its own region with the DDL, plan and sessions tabs,
-// swapped by a.resultTabs; tview does not reset a hidden page's rect when
-// it stops being drawn, so whichever of a region's tabs was last on top
-// keeps that region's coordinates and InRect on it keeps matching there
-// too. Checking which tab is actually current, not just which rect a
-// position falls in, is what a stale rect from a sibling tab cannot fool.
+// The tree and the tables list share one region, swapped by a.schemaTabs;
+// tview does not reset a hidden page's rect when it stops being drawn, so
+// whichever of the region's tabs was last on top keeps that region's
+// coordinates and InRect on it keeps matching there too. Checking which tab
+// is actually current, not just which rect a position falls in, is what a
+// stale rect from a sibling tab cannot fool. a.gridVisible guards the grid
+// the same way.
 //
-// false means no widget claims the point — a region header row, the sidebar
-// rule, or the DDL/plan/sessions body once a.grid's stale rect has been
-// ruled out above. ctxEditor used to be the fallback for exactly that case,
-// which meant a right click over a table's definition could open the
+// false means no widget claims the point — a region header row or the
+// sidebar rule. ctxEditor used to be the fallback for exactly that case,
+// which meant a right click over an unclaimed point could open the
 // editor's own menu: several of its entries (delete line, duplicate line,
 // comment) write the buffer, not merely read it, so the click could edit
 // SQL the user cannot currently see. Editor commands are only offered where
@@ -169,13 +168,12 @@ func (a *App) contextAt(x, y int) (menuContext, bool) {
 // A right click does not move focus or selection the way tview's own click
 // handling does for a left click — bindMouse swallows it before that runs.
 // Without the focus half, "inspect" chosen from a menu opened on a result
-// row would read the focus left over from wherever the pointer was before
-// and show a table's definition instead of the row, because inspect and
-// selectedTable both decide what to show by asking which widget has focus.
-// Without the selection half, right-clicking a row that is not the one
-// already selected and choosing "copy row" would copy the wrong row — the
-// menu's whole promise of acting on "here" would be false in the context it
-// is used in most.
+// row would read the focus left over from wherever the pointer was before,
+// and refuse the row because inspect decides what to show by asking which
+// widget has focus. Without the selection half, right-clicking a row that
+// is not the one already selected and choosing "copy row" would copy the
+// wrong row — the menu's whole promise of acting on "here" would be false
+// in the context it is used in most.
 func (a *App) focusContext(ctx menuContext, x, y int) {
 	switch ctx {
 	case ctxResult:

@@ -61,8 +61,8 @@ what it deliberately does *not* know, and those boundaries are load-bearing:
 
 - `sqlparse` — a tokenizer, not a parser. Answers only the questions `guard`
   and the editor ask: statement boundaries, statement kind, top-level `WHERE`.
-  Also owns `QuoteIdentifier`, which both `catalog` and `db` need (`catalog`
-  imports `db`, so it could not live in either).
+  Also owns `QuoteIdentifier`, which `db` needs to quote a schema name before
+  a `USE`.
 - `guard` — `Evaluate(stmt, policy) Decision` is a pure function. **Fail-closed:**
   anything the tokenizer cannot classify is refused against production.
 - `keymap` — key events → named `Action`s. The UI switches on actions, never

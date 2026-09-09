@@ -81,15 +81,13 @@ func (a *App) menuOpen() bool {
 	return name == pageMenu
 }
 
-// gridVisible reports whether x, y lands on the grid and the grid is the
-// result pane's own current tab, rather than DDL, plan or sessions sharing
-// its rect.
+// gridVisible reports whether x, y lands on the grid and the result pane's
+// tab is the one that shows it.
 //
-// tview does not reset a hidden primitive's rect when it stops being drawn
-// (contextAt's own comment, menu.go), so a.grid.InRect keeps matching a
-// screen position long after the DDL tab has replaced it there. Every
-// caller that would otherwise act on the grid from a screen position has to
-// gate on this, or it acts on a result the user cannot see.
+// The result pane holds only tabResults now, but tview does not reset a
+// hidden primitive's rect when it stops being drawn (contextAt's own
+// comment, menu.go), so a stale InRect match is a risk this guard exists to
+// close off, not a case in today's tab set.
 func (a *App) gridVisible(x, y int) bool {
 	return a.resultTabs.current() == tabResults && a.grid.InRect(x, y)
 }

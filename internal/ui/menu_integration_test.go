@@ -3,15 +3,12 @@
 package ui
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/keymap"
-	"github.com/Ahngbeom/datavase/internal/testmysql"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -233,100 +230,6 @@ func TestMenuRespondsToAnImmediateClickAfterTheRightClickThatOpenedIt(t *testing
 	h.waitFor("the immediate click to have run copy row", func(a *App) bool {
 		return a.readClipboard() == "x"
 	})
-}
-
-// seedTwoRealTables makes sure two distinctly named tables exist and are in
-// the cache, so the tables tab has more than one row to click between —
-// mirroring seedSequenceTable (panel_integration_test.go), which needs only
-// one.
-func seedTwoRealTables(t *testing.T, h *harness, names ...string) {
-	t.Helper()
-
-	ctx := context.Background()
-	for _, name := range names {
-		if _, err := h.app.conn.Exec(ctx,
-			"CREATE TABLE IF NOT EXISTS "+name+" (n INT PRIMARY KEY)"); err != nil {
-			t.Fatalf("creating %s: %v", name, err)
-		}
-	}
-
-	snap, err := catalog.FetchSnapshot(ctx, h.app.conn)
-	if err != nil {
-		t.Fatalf("FetchSnapshot() error = %v", err)
-	}
-	if err := h.cache.Save(ctx, h.app.conn.DataSource().Name, snap); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-}
-
-// The tables tab half of the same promise as the grid and the tree:
-// right-clicking a table that is not the one already selected and choosing
-// "inspect" must show the clicked table's definition, not the selected
-// one's.
-func TestRightClickingATablesTabRowActsOnThatRowNotTheOldSelection(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	seedTwoRealTables(t, h, "dv_menu_a", "dv_menu_b")
-
-	h.focusSchemaPane()
-	h.do(keymap.ActionCycleTab)
-	h.app.app.QueueUpdateDraw(func() {
-		h.app.selectedSchema = testmysql.DefaultDatabase
-		h.app.renderTables()
-	})
-	h.waitFor("at least two tables listed", func(a *App) bool {
-		return len(a.listedTables) >= 2
-	})
-
-	var target int
-	var targetName string
-	h.inspect(func(a *App) bool {
-		current := a.tableList.GetCurrentItem()
-		for i, table := range a.listedTables {
-			if i != current {
-				target, targetName = i, table.Name
-				return true
-			}
-		}
-		return false
-	})
-
-	x, y := h.tableItemPosition(target)
-	h.rightClick(x, y)
-
-	h.clickMenuText("inspect")
-
-	h.waitFor("the clicked table's definition, not the selected one's, to be shown", func(a *App) bool {
-		return strings.Contains(a.ddlText, targetName)
-	})
-}
-
-// A right click over DDL, plan or sessions must not be classified as the
-// result: a.grid keeps its last-drawn rect after a.resultTabs switches away
-// from it, the same as a.tree does for the schema pane, and would otherwise
-// win the switch in contextAt on a stale match rather than the tab that is
-// actually showing.
-//
-// Falling through to ctxEditor was worse than a misclassification: several
-// editor commands write the buffer (delete line, duplicate line, comment),
-// so a menu opened there could edit SQL the user cannot currently see. No
-// widget claims this position, so no menu opens at all.
-func TestRightClickingANonGridResultTabIsNotClassifiedAsTheResult(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.runSQL("SELECT 1 AS n", 1)
-
-	x, y := h.gridHeaderPosition(0)
-
-	h.app.app.QueueUpdateDraw(func() { h.app.resultTabs.show(tabDDL) })
-	h.settle()
-
-	if got := h.inspect(func(a *App) bool { ctx, ok := a.contextAt(x, y); return ok && ctx == ctxResult }); got {
-		t.Error("a right click over the DDL tab, where the grid used to be, was still classified as the result")
-	}
-
-	h.rightClick(x, y)
-	if h.inspect(func(a *App) bool { return a.menuOpen() }) {
-		t.Error("right-clicking the DDL body opened a menu — the editor's, since nothing else claims that position")
-	}
 }
 
 // The region header rows publish a zone for a left click (zoneRegionName),

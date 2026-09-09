@@ -18,8 +18,6 @@ const (
 	// intentNothing has nothing to offer, and says so.
 	intentNothing copyIntent = iota
 	intentCancel
-	intentDefinition
-	intentPlan
 	intentSelection
 	intentCell
 )
@@ -27,8 +25,6 @@ const (
 // copyContext is everything the key's meaning depends on.
 type copyContext struct {
 	running      bool
-	onDDL        bool
-	onPlan       bool
 	onGrid       bool
 	hasSelection bool
 }
@@ -49,10 +45,6 @@ func (c copyContext) resolve() copyIntent {
 		return intentCancel
 	}
 	switch {
-	case c.onDDL:
-		return intentDefinition
-	case c.onPlan:
-		return intentPlan
 	case c.hasSelection:
 		return intentSelection
 	case c.onGrid:

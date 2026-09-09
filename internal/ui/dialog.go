@@ -202,7 +202,6 @@ var helpGroups = []struct {
 		title: "Running",
 		actions: []keymap.Action{
 			keymap.ActionRun, keymap.ActionRunAll, keymap.ActionCancel,
-			keymap.ActionExplain, keymap.ActionAnalyze,
 		},
 	},
 	{
@@ -235,7 +234,7 @@ var helpGroups = []struct {
 	{
 		title: "Results",
 		actions: []keymap.Action{
-			keymap.ActionSortColumn, keymap.ActionSessions, keymap.ActionKillSession, keymap.ActionLocks,
+			keymap.ActionSortColumn,
 		},
 	},
 	{

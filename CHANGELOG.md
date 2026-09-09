@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## v0.9.1 — Unreleased
+## v0.9.1 — 2026-09-09
 
 **Nothing to do before upgrading.** No configuration changes and no keys moved.
 
@@ -17,14 +17,13 @@ completion, the tree names the double-click that previews a table, and a
 result with rows offers copy, sort and opening a row. Only the focused region
 speaks, so the screen stays quiet and moving between panes is how the rest is
 found. Nothing on screen had said that completion or the preview existed.
+Where a header is too narrow for a key's full spelling it names the same
+action's function key, which is also the one a terminal is least likely to
+swallow.
 
 **An empty result invites the statement** rather than describing the gap, and
 a failure that names a missing table points at the tree — after the server's
 own words, and only when the line has room for both.
-
-**The key reference stops wrapping.** Three descriptions were wider than the
-dialog, and the tail of each landed under the key column reading as an entry
-of its own.
 
 **The schema tree is on screen when a session opens.** It was a key away, on
 the reasoning that the finders already answer "where is that table" — but a
@@ -38,6 +37,11 @@ command palette, which v0.9.0 removed; the whole-result copy is not always
 what someone wants out of a grid.
 
 ### Fixed
+
+**The key reference stops wrapping.** Five descriptions were wider than the
+dialog that holds them — on a machine that spells the keys `Super+Shift+C`
+rather than `⌘⇧C`, where the key column alone takes half the width. The tail
+of each landed at column zero, under the keys, reading as an entry of its own.
 
 **The schema pane stays where the wheel put it, and a click lands on the row
 you are looking at.** Scrolling the tree or the tables tab moved the view

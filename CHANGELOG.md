@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.10.0 — 2026-09-11
 
 **Nothing to do before upgrading.** One optional key was added to the
 configuration; nothing existing changed meaning.

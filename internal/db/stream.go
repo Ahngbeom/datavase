@@ -490,6 +490,9 @@ const (
 	// erQueryInterrupted is what a killed statement reports to its own
 	// connection.
 	erQueryInterrupted = 1317
+	// erCantExecuteInReadOnlyTransaction is the refusal a read-only session
+	// gives a write.
+	erCantExecuteInReadOnlyTransaction = 1792
 )
 
 func isUnknownThreadError(err error) bool {
@@ -522,4 +525,11 @@ func isMySQLError(err error, number uint16) bool {
 		return me.Number == number
 	}
 	return false
+}
+
+// IsReadOnlyRefusal reports whether err is the server refusing a write
+// because the session is read-only, which a read_only datasource asks for
+// on every connection it opens.
+func IsReadOnlyRefusal(err error) bool {
+	return isMySQLError(err, erCantExecuteInReadOnlyTransaction)
 }

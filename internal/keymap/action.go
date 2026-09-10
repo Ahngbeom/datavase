@@ -159,7 +159,7 @@ var descriptions = map[Action]string{
 	ActionInspect:           "show the selected result row in full",
 	ActionSortColumn:        "sort by the selected column",
 	ActionCopyRow:           "copy the selected row, tab separated",
-	ActionCopyResult:        "copy the whole result",
+	ActionCopyResult:        "copy or save the whole result",
 	ActionSwitchDataSource:  "open the datasource list",
 	ActionHelp:              "show this help",
 	ActionQuit:              "quit",

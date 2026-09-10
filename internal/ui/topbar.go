@@ -18,6 +18,9 @@ import (
 type topBarState struct {
 	dsName string
 	schema string
+	// readOnly is on the line whatever the width, beside the datasource:
+	// whether this session can write is a fact about where you are.
+	readOnly bool
 	// helpKey names the key that opens the reference, looked up rather than
 	// hardcoded so a rebound one is not advertised as F1.
 	helpKey string
@@ -81,6 +84,10 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 		before := line
 		line += result.EscapeTags(t.schema)
 		mark(before, zoneSchema)
+	}
+
+	if t.readOnly {
+		line += " " + tag(colourNotice, "read-only")
 	}
 
 	if form.helpKey && t.helpKey != "" {

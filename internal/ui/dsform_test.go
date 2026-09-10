@@ -87,3 +87,14 @@ func TestValidateRequiresNameHostAndUser(t *testing.T) {
 		}
 	}
 }
+
+func TestReadOnlySurvivesTheFormRoundTrip(t *testing.T) {
+	ds := config.DataSource{Name: "prod", Host: "db.internal", Port: 3306, User: "ro", ReadOnly: true}
+	back, err := fieldsFromDataSource(&ds).toDataSource()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !back.ReadOnly {
+		t.Error("the form dropped read_only on the way through")
+	}
+}

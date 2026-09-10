@@ -5,6 +5,26 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+**Nothing to do before upgrading.** One optional key was added to the
+configuration; nothing existing changed meaning.
+
+### Added
+
+**A datasource can be read-only.** `read_only: true` on a datasource — or the
+box on its form — has the server refuse every write on every connection to
+it, so a slip in the wrong window stops at the server rather than at whatever
+the client recognised as a write. The top line says `read-only` while you are
+on one, and a refused statement names the setting instead of the server's
+account of a transaction nobody opened.
+
+**The whole result can be saved as a CSV file.** The copy key offered
+Markdown and JSON, both to the clipboard, and a result of fifty thousand rows
+has nowhere useful to go from there. The same key now also writes a CSV file:
+it offers a name made of the datasource and the moment, and refuses a path
+that is already a file rather than replacing it.
+
 ## v0.9.1 — 2026-09-09
 
 **Nothing to do before upgrading.** No configuration changes and no keys moved.

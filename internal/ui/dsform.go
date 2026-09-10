@@ -13,6 +13,7 @@ import (
 // is separate from the widgets so the rules can be tested without a screen.
 type dsFields struct {
 	name, host, port, user, database                   string
+	readOnly                                           bool
 	tls, tlsCA                                         string
 	tunnelHost, tunnelPort, tunnelUser, tunnelIdentity string
 }
@@ -21,6 +22,7 @@ func fieldsFromDataSource(ds *config.DataSource) dsFields {
 	f := dsFields{
 		name: ds.Name, host: ds.Host, port: strconv.Itoa(ds.Port), user: ds.User,
 		database: ds.Database, tls: string(ds.TLS), tlsCA: ds.TLSCA,
+		readOnly: ds.ReadOnly,
 	}
 	if ds.Tunnel != nil {
 		f.tunnelHost, f.tunnelUser, f.tunnelIdentity = ds.Tunnel.Host, ds.Tunnel.User, ds.Tunnel.Identity
@@ -42,6 +44,7 @@ func (f dsFields) toDataSource() (config.DataSource, error) {
 		Name: strings.TrimSpace(f.name), Host: strings.TrimSpace(f.host), Port: port,
 		User: strings.TrimSpace(f.user), Database: strings.TrimSpace(f.database),
 		TLS: config.TLSMode(f.tls), TLSCA: strings.TrimSpace(f.tlsCA),
+		ReadOnly: f.readOnly,
 	}
 
 	tunnelTyped := strings.TrimSpace(f.tunnelPort) != "" || strings.TrimSpace(f.tunnelUser) != "" ||

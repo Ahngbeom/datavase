@@ -84,3 +84,27 @@ func TestTheBastionsOwnReasonSurvives(t *testing.T) {
 		}
 	}
 }
+
+// The server reports a refused write as "cannot execute statement in a READ
+// ONLY transaction", which sends someone looking for a BEGIN they never typed
+// and, at seventy cells, leaves no room beside it for the reason. When the
+// interface itself asked for read-only it knows the reason, and says that
+// instead.
+func TestARefusedWriteOnAReadOnlyDataSourceIsSaidInFewWords(t *testing.T) {
+	server := &mysql.MySQLError{Number: 1792, Message: "Cannot execute statement in a READ ONLY transaction"}
+
+	got := readOnlyRefusal(server, true)
+	if got == nil || !strings.Contains(got.Error(), "read_only") || len(got.Error()) > 60 {
+		t.Errorf("readOnlyRefusal() = %v, want a short message naming read_only", got)
+	}
+
+	// A datasource that is not read-only got this from the user's own SET
+	// TRANSACTION, and the server's words are the right ones.
+	if got := readOnlyRefusal(server, false); got != server {
+		t.Errorf("readOnlyRefusal() = %v, want the server's error untouched", got)
+	}
+	other := &mysql.MySQLError{Number: 1064}
+	if got := readOnlyRefusal(other, true); got != other {
+		t.Errorf("readOnlyRefusal() = %v, want an unrelated error untouched", got)
+	}
+}

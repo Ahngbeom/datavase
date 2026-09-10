@@ -100,3 +100,23 @@ func TestAConfigWithNoDatasourcesIsValid(t *testing.T) {
 		t.Errorf("Empty() lacks defaults: %+v", got.Defaults)
 	}
 }
+
+func TestWriteKeepsReadOnlyAndLeavesItOutOtherwise(t *testing.T) {
+	c := sample()
+	c.DataSources[1].ReadOnly = true
+
+	var buf bytes.Buffer
+	if err := Write(&buf, c); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(buf.String(), "read_only: true") != 1 {
+		t.Errorf("Write() must write read_only once, for the datasource that has it:\n%s", buf.String())
+	}
+	back, err := Parse(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.DataSources[0].ReadOnly || !back.DataSources[1].ReadOnly {
+		t.Errorf("read_only did not survive the round trip: %+v", back.DataSources)
+	}
+}

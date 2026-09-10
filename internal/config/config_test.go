@@ -386,3 +386,26 @@ func TestAConfigWithNoKeymapIgnoresNothing(t *testing.T) {
 		t.Errorf("Ignored() = %v, want none", got)
 	}
 }
+
+func TestReadOnlyIsReadFromTheFile(t *testing.T) {
+	const src = `
+datasources:
+  - name: prod
+    host: db.internal
+    user: ro
+    read_only: true
+  - name: local
+    host: 127.0.0.1
+    user: root
+`
+	cfg, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !cfg.DataSources[0].ReadOnly {
+		t.Error("read_only: true was not read")
+	}
+	if cfg.DataSources[1].ReadOnly {
+		t.Error("a datasource without read_only became read-only")
+	}
+}

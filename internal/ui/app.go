@@ -558,9 +558,10 @@ func resultHint(s resultState, k affordanceKeys) string {
 func (a *App) currentTopBar() topBarState {
 	ds := a.conn.DataSource()
 	return topBarState{
-		dsName:  ds.Name,
-		schema:  a.currentSchema(),
-		helpKey: a.helpKeyLabel(),
+		dsName:   ds.Name,
+		schema:   a.currentSchema(),
+		readOnly: ds.ReadOnly,
+		helpKey:  a.helpKeyLabel(),
 	}
 }
 
@@ -1061,7 +1062,8 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 			// What failed and where are different questions, and the driver
 			// only answers the first: a bastion that has stopped forwarding
 			// looks exactly like a database that has.
-			a.status.err = failureCause(err, a.transportFailure(), a.bastionName())
+			cause := failureCause(err, a.transportFailure(), a.bastionName())
+			a.status.err = readOnlyRefusal(cause, a.conn.DataSource().ReadOnly)
 		}
 
 		// The queue is resumed from here rather than from start(), because

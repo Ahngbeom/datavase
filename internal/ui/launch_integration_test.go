@@ -106,8 +106,8 @@ func TestAddingAnEntryInTheLauncherWritesTheFile(t *testing.T) {
 	screen.InjectKey(tcell.KeyTab, 0, tcell.ModNone) // port
 	screen.InjectKey(tcell.KeyTab, 0, tcell.ModNone) // user
 	type_("root")
-	// Tab through password, database, tls, tls_ca, tunnel host/port/user/identity, Test → Save.
-	for i := 0; i < 10; i++ {
+	// Tab through password, database, read only, tls, tls_ca, tunnel host/port/user/identity, Test → Save.
+	for i := 0; i < 11; i++ {
 		screen.InjectKey(tcell.KeyTab, 0, tcell.ModNone)
 	}
 	screen.InjectKey(tcell.KeyEnter, 0, tcell.ModNone) // Save

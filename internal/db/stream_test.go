@@ -31,3 +31,18 @@ func TestReachedServerDistinguishesAServerRefusalFromALostConnection(t *testing.
 		})
 	}
 }
+
+// A refused write on a read-only datasource has to be recognisable by
+// number: the interface replaces the server's sentence with its own, and
+// matching on the words would break on a server that phrases it differently.
+func TestIsReadOnlyRefusalKnowsTheServersNumber(t *testing.T) {
+	if !IsReadOnlyRefusal(fmt.Errorf("running: %w", &mysql.MySQLError{Number: 1792})) {
+		t.Error("error 1792 was not recognised as a read-only refusal")
+	}
+	if IsReadOnlyRefusal(&mysql.MySQLError{Number: 1064}) {
+		t.Error("a syntax error was taken for a read-only refusal")
+	}
+	if IsReadOnlyRefusal(nil) {
+		t.Error("nil was taken for a read-only refusal")
+	}
+}

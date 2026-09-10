@@ -15,11 +15,15 @@ type copyFormat int
 const (
 	formatMarkdown copyFormat = iota
 	formatJSON
+	formatCSV
 )
 
 func (f copyFormat) String() string {
-	if f == formatJSON {
+	switch f {
+	case formatJSON:
 		return "JSON"
+	case formatCSV:
+		return "CSV"
 	}
 	return "Markdown"
 }
@@ -44,13 +48,17 @@ func (a *App) showCopyFormats() {
 		a.app.SetFocus(a.grid)
 		a.copyResult(formatJSON)
 	})
+	list.AddItem("CSV file", "written to disk, for a spreadsheet", 'c', func() {
+		a.pages.RemovePage(pageCopyFormat)
+		a.promptSavePath()
+	})
 	list.SetDoneFunc(func() {
 		a.pages.RemovePage(pageCopyFormat)
 		a.app.SetFocus(a.grid)
 	})
-	list.SetBorder(true).SetTitle(" copy the result as ")
+	list.SetBorder(true).SetTitle(" the result as ")
 
-	a.pages.AddPage(pageCopyFormat, centred(list, 44, 8), true, true)
+	a.pages.AddPage(pageCopyFormat, centred(list, 44, 10), true, true)
 	a.app.SetFocus(list)
 }
 
@@ -81,6 +89,8 @@ func resultText(buf *result.Buffer, content *gridContent, f copyFormat) (string,
 	switch f {
 	case formatJSON:
 		err = export.JSON(&out, buf.Columns(), rows)
+	case formatCSV:
+		err = export.CSV(&out, buf.Columns(), rows)
 	default:
 		err = export.Markdown(&out, buf.Columns(), rows)
 	}

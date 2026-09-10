@@ -236,7 +236,7 @@ func (c *Conn) Begin(ctx context.Context) error {
 		conn.Close()
 		return fmt.Errorf("reading the connection id: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, "START TRANSACTION"); err != nil {
+	if _, err := conn.ExecContext(ctx, c.startTransaction()); err != nil {
 		conn.Close()
 		return err
 	}
@@ -308,6 +308,10 @@ func (c *Conn) acquire(ctx context.Context) (*sql.Conn, uint64, func(), error) {
 			conn.Close()
 			return nil, 0, nil, fmt.Errorf("reading the connection id: %w", err)
 		}
+		if err := c.makeReadOnly(ctx, conn); err != nil {
+			conn.Close()
+			return nil, 0, nil, err
+		}
 		return conn, id, func() {
 			conn.Close()
 		}, nil
@@ -326,4 +330,33 @@ func (c *Conn) acquire(ctx context.Context) (*sql.Conn, uint64, func(), error) {
 		c.txBusy = false
 		c.txMu.Unlock()
 	}, nil
+}
+
+// makeReadOnly asks the server to refuse writes on conn, when the datasource
+// says so.
+//
+// It is done on every statement's connection rather than once at Open, since
+// the pool hands connections round and a setting made on one is absent from
+// the next. The round trip is the price, and only read-only datasources pay
+// it. The statement form is used rather than the DSN's system-variable
+// shorthand because MySQL and MariaDB name the variable differently, and the
+// wrong name refuses the connection outright.
+func (c *Conn) makeReadOnly(ctx context.Context, conn *sql.Conn) error {
+	if !c.ds.ReadOnly {
+		return nil
+	}
+	if _, err := conn.ExecContext(ctx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
+		return fmt.Errorf("making the connection read-only: %w", err)
+	}
+	return nil
+}
+
+// startTransaction is the statement Begin sends. A transaction on a
+// read-only datasource is opened read-only itself: the session setting
+// above is made per statement, and Begin takes its connection before any.
+func (c *Conn) startTransaction() string {
+	if c.ds.ReadOnly {
+		return "START TRANSACTION READ ONLY"
+	}
+	return "START TRANSACTION"
 }

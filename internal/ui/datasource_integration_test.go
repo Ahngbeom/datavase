@@ -58,7 +58,8 @@ func TestAddingADatasourceInSessionSavesTheFile(t *testing.T) {
 	for _, r := range "u" {
 		h.inject(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 	}
-	for i := 0; i < 10; i++ {
+	// Tab through password, database, read only, tls, tls_ca, tunnel host/port/user/identity, Test → Save.
+	for i := 0; i < 11; i++ {
 		h.press(tcell.KeyTab)
 	}
 	h.press(tcell.KeyEnter) // Save

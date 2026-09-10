@@ -13,7 +13,7 @@ Four things, and no more:
 - **Run a statement** with `⌘↩` (`Ctrl+↩`, or `F5`).
 - **Read the answer** in a grid, and copy what you need out of it: the cell
   with `⌘C`, the row with `⌘⇧R`, the whole result as Markdown or JSON with
-  `⌘⇧C`.
+  `⌘⇧C` — or as a CSV file on disk, from the same key.
 
 Also there, because the four need them: an SSH tunnel to a bastion, table and
 column completion, a searchable history of what you ran, passwords in the OS
@@ -104,6 +104,7 @@ datasources:
   - name: app
     host: db.internal        # as named from the bastion
     user: readonly
+    read_only: true          # the server refuses every write
     tls: verify-identity
     tunnel:
       host: bastion.example.com
@@ -125,6 +126,13 @@ a confusing error.
 An absent `tls:` means `preferred`. If you are coming from 0.8 with `env: prod`
 and no `tls:`, that datasource still gets `required` — write `tls: required`
 down now, because `env` stops being read in a later release.
+
+**`read_only: true`** has the server refuse every write on that datasource,
+on every connection, so nothing the client failed to recognise as a write
+can get through. The top line says `read-only` while you are on one, and a
+refused statement says which setting refused it. It is a guard against a
+slip rather than a boundary: `SET SESSION TRANSACTION READ WRITE` lifts it,
+and whoever types that has decided to.
 
 Passwords never go in this file. Store them in the OS keychain:
 
@@ -175,7 +183,7 @@ does not forward `⌘` to the program it hosts.
 | Preview a table (`LIMIT 100`) | `↩` in the tables tab | double-click it in the tree, click it in the tables tab |
 | Copy the selection or the cell | `⌘C` | |
 | Copy the selected row, tab separated | `⌘⇧R` · `F8` | |
-| Copy the whole result as Markdown or JSON | `⌘⇧C` · `F3` | `copy` on the result header |
+| Copy the whole result as Markdown or JSON, or save it as a CSV file | `⌘⇧C` · `F3` | `copy` on the result header |
 | Datasource list | `⌘⇧D` · `F11` | the datasource name in the top bar |
 | Choose the schema | `⌘⇧N` · `F7` | the schema name in the top bar |
 | Reload the schema tree | `⌘R` | |
@@ -285,8 +293,11 @@ the tree previews it.
 
 **Three sizes of copy.** `⌘C` in the results takes the cell under the cursor;
 `⌘⇧R` takes that whole row, tab separated, so it lands in a spreadsheet as
-columns; `⌘⇧C` takes the entire result as Markdown or JSON. `⌘C` in the editor
-takes the selection, as it does anywhere else.
+columns; `⌘⇧C` takes the entire result as Markdown or JSON, or writes it to a
+CSV file, which is where fifty thousand rows belong rather than on a
+clipboard. It offers a name made of the datasource and the moment, and refuses
+a path that is already a file. `⌘C` in the editor takes the selection, as it
+does anywhere else.
 
 **Copying** goes two ways at once. The terminal is asked to take the text —
 the only route that reaches your own clipboard when `dv` is running over SSH —

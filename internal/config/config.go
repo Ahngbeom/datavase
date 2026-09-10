@@ -91,6 +91,12 @@ type DataSource struct {
 	// only meaningful under a mode that verifies, and is refused under any
 	// other rather than read and ignored.
 	TLSCA string `yaml:"tls_ca,omitempty"`
+
+	// ReadOnly has the server refuse every write on this datasource. The
+	// server rather than the tokenizer, which classifies statements for the
+	// editor and was never meant to be a boundary: a write hidden in a stored
+	// procedure or a multi-table syntax it does not know would walk past it.
+	ReadOnly bool `yaml:"read_only,omitempty"`
 }
 
 // Defaults holds tunables shared by every datasource.

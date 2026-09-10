@@ -289,6 +289,7 @@ func (p *dsPicker) showForm(ds *config.DataSource) {
 	}
 	form.AddPasswordField(passwordLabel, "", 30, '•', func(s string) { password = s })
 	form.AddInputField("database", fields.database, 30, nil, func(s string) { fields.database = s })
+	form.AddCheckbox("read only (the server refuses writes)", fields.readOnly, func(on bool) { fields.readOnly = on })
 	form.AddDropDown("tls", tlsModes, tlsIndex, func(option string, _ int) { fields.tls = option })
 	form.AddInputField("tls_ca (PEM file, verify modes only)", fields.tlsCA, 30, nil, func(s string) { fields.tlsCA = s })
 	form.AddInputField("tunnel host (blank: no tunnel)", fields.tunnelHost, 30, nil, func(s string) { fields.tunnelHost = s })

@@ -147,3 +147,14 @@ func TestTopBarZonesAgreeWithEveryFormOfTheLine(t *testing.T) {
 		}
 	}
 }
+
+func TestTheTopLineSaysWhenTheDataSourceIsReadOnly(t *testing.T) {
+	line, _ := topBarState{dsName: "app", schema: "shop", readOnly: true}.renderWidth(80)
+	if !strings.Contains(line, "read-only") {
+		t.Errorf("renderWidth() = %q, want read-only on it", line)
+	}
+	line, _ = topBarState{dsName: "app", schema: "shop"}.renderWidth(80)
+	if strings.Contains(line, "read-only") {
+		t.Errorf("renderWidth() = %q says read-only for a datasource that is not", line)
+	}
+}

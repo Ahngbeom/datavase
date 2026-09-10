@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/Ahngbeom/datavase/internal/db"
@@ -49,4 +50,18 @@ func (a *App) bastionName() string {
 		return tun.Host
 	}
 	return "the bastion"
+}
+
+// readOnlyRefusal replaces the server's account of a refused write with the
+// interface's own, when the interface is what asked for read-only.
+//
+// The server says "cannot execute statement in a READ ONLY transaction":
+// true, seventy cells wide, and about a transaction nobody opened. On a
+// datasource that is not read_only the words are the right ones — the user
+// set that transaction up themselves — and they are left alone.
+func readOnlyRefusal(err error, readOnly bool) error {
+	if !readOnly || !db.IsReadOnlyRefusal(err) {
+		return err
+	}
+	return errors.New("write refused: read_only is set on this datasource")
 }

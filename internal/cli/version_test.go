@@ -56,3 +56,18 @@ func TestUsageMentionsTheVersionCommand(t *testing.T) {
 		t.Errorf("usage does not mention the version command:\n%s", h.out)
 	}
 }
+
+// "-c file version" reaches Run rather than HandleVersion, because the flag
+// has to be parsed first to be skipped. The README promises -c on every
+// command, and "unknown command" is the wrong answer to the one that needs
+// no configuration at all.
+func TestVersionIsAnsweredAfterTheConfigFlag(t *testing.T) {
+	h := newHarness(t)
+
+	if code := h.app.Run([]string{"version"}); code != exitOK {
+		t.Fatalf("Run(version) = %d, want %d; stderr: %s", code, exitOK, h.err.String())
+	}
+	if got := strings.TrimSpace(h.out.String()); !strings.HasPrefix(got, "dv ") {
+		t.Errorf("printed %q, want the version", got)
+	}
+}

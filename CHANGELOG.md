@@ -5,7 +5,7 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.10.0 — 2026-09-11
 
 **Nothing to do before upgrading.** One optional key was added to the
 configuration; nothing existing changed meaning.
@@ -24,6 +24,13 @@ Markdown and JSON, both to the clipboard, and a result of fifty thousand rows
 has nowhere useful to go from there. The same key now also writes a CSV file:
 it offers a name made of the datasource and the moment, and refuses a path
 that is already a file rather than replacing it.
+
+### Fixed
+
+**`dv -c file version` answers with the version.** The version was handled
+before the configuration flag was parsed, so with the flag in front the word
+reached the ordinary dispatch, which did not know it and said "unknown
+command". README promises `-c` on every command; now it is.
 
 ## v0.9.1 — 2026-09-09
 

@@ -1,0 +1,8 @@
+datasources:
+  - name: shop
+    host: 127.0.0.1
+    port: 13306
+    user: root
+    database: shop
+    read_only: true
+    tls: disabled

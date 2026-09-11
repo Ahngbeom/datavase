@@ -83,6 +83,11 @@ func (a *App) Run(args []string) int {
 		return a.auth(args[1:])
 	case "check":
 		return a.check(args[1:])
+	case "version", "--version", "-v":
+		// Reached when -c came first: HandleVersion saw the flag, not the
+		// word, and flag.Parse has since taken the flag away.
+		HandleVersion(a.Out, args)
+		return exitOK
 	case "help", "-h", "--help":
 		a.usage()
 		return exitOK

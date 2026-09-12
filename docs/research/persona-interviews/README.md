@@ -1,6 +1,6 @@
 # datavase Persona Interview Research
 
-> Status: 5/20 complete
+> Status: 10/20 complete
 >
 > Product baseline: `Ahngbeom/datavase` through PR #89
 >
@@ -23,11 +23,11 @@ Who would replace a terminal `mysql` workflow with datavase, why would they chan
 | 03 | Regulated SRE | Enterprise production adoption | Medium-low | 1 | Complete |
 | 04 | Startup CTO | Small-team recommended workflow | Very high | 1 | Complete |
 | 05 | MySQL DBA | Expert primary-user fit | Low; reviewer fit high | 1 | Complete |
-| 06 | Junior Backend Engineer | Learning cost and safety anxiety | TBD | 2 | Planned |
-| 07 | Senior Backend Engineer | Autonomy and switching threshold | TBD | 2 | Planned |
-| 08 | Platform Engineer | Standardization and support burden | TBD | 2 | Planned |
-| 09 | Solo Developer | Low-frequency individual adoption | TBD | 2 | Planned |
-| 10 | Agency/Maintenance Developer | Multi-client datasource workflow | TBD | 2 | Planned |
+| 06 | Junior Backend Engineer | Learning cost and safety anxiety | Medium; adopter fit low | 2 | Complete |
+| 07 | Senior Backend Engineer | Autonomy and switching threshold | Medium | 2 | Complete |
+| 08 | Platform Engineer | Standardization and support burden | Medium-high as rollout owner | 2 | Complete |
+| 09 | Solo Developer | Low-frequency individual adoption | Low | 2 | Complete |
+| 10 | Agency/Maintenance Developer | Multi-client datasource workflow | High, conditional on isolation | 2 | Complete |
 | 11 | PostgreSQL-first Developer | MySQL-only product boundary | TBD | 3 | Planned |
 | 12 | MariaDB Operator | Compatibility depth | TBD | 3 | Planned |
 | 13 | Windows/WSL Developer | Terminal and distribution friction | TBD | 3 | Planned |
@@ -56,4 +56,4 @@ Who would replace a terminal `mysql` workflow with datavase, why would they chan
 
 ## Current provisional hypothesis
 
-The strongest candidate is a Backend/Platform/SRE engineer in a startup or small team who directly reads MySQL/MariaDB production data, already uses a terminal workflow, can install a tool without central approval, and experiences environment confusion or accidental-write anxiety.
+The strongest candidate is a Backend/Platform/SRE or multi-client maintenance engineer who repeatedly reads MySQL/MariaDB production data from a terminal. Frequency, environment clarity, reliable reconnection, and the ability to adopt or distribute trusted datasource configuration predict fit better than job title alone.

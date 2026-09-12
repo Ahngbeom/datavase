@@ -4,6 +4,8 @@
 
 A terminal MySQL/MariaDB client. Single static binary, no runtime, no IDE.
 
+![dv opens a read-only datasource, runs a query, saves the result as a CSV file, and refuses an UPDATE](docs/demo.gif)
+
 Four things, and no more:
 
 - **Datasources.** Keep as many as you like; connect, add, edit and delete them

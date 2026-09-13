@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Ahngbeom/datavase/internal/result"
 )
 
 // CSV writes columns and rows as comma-separated values.
@@ -127,7 +129,10 @@ func jsonValue(v any) any {
 		// than corrupting it into replacement characters.
 		return base64.StdEncoding.EncodeToString(value)
 	case time.Time:
-		return value.Format(time.RFC3339)
+		// Nano rather than plain RFC3339, which has no room for the fraction
+		// at all; the trailing zeros are dropped, so a whole second is still
+		// spelled as one.
+		return value.Format(time.RFC3339Nano)
 	default:
 		return v
 	}
@@ -159,7 +164,7 @@ func plainText(v any) string {
 	case float32:
 		return strconv.FormatFloat(float64(value), 'f', -1, 32)
 	case time.Time:
-		return value.Format("2006-01-02 15:04:05")
+		return value.Format(result.TimeLayout)
 	default:
 		return fmt.Sprint(v)
 	}

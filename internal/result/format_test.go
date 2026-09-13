@@ -123,3 +123,21 @@ func TestTruncateKeepsCellsNarrow(t *testing.T) {
 		})
 	}
 }
+
+// A DATETIME(6) carries a fraction, and a client that renders it away has
+// turned a precise answer into a plausible one. Ordering, deduplication and
+// "what happened first" all live in those digits.
+func TestATimestampKeepsTheFractionItArrivedWith(t *testing.T) {
+	withFraction := time.Date(2026, 9, 14, 1, 2, 3, 456789000, time.UTC)
+	if got, want := Format(withFraction), "2026-09-14 01:02:03.456789"; got != want {
+		t.Errorf("Format() = %q, want %q", got, want)
+	}
+
+	// And a whole second stays a whole second: six zeros after every
+	// timestamp in a column of them is noise, and it is not how the server
+	// spells a DATETIME with no fractional part either.
+	whole := time.Date(2026, 9, 14, 1, 2, 3, 0, time.UTC)
+	if got, want := Format(whole), "2026-09-14 01:02:03"; got != want {
+		t.Errorf("Format() = %q, want %q", got, want)
+	}
+}

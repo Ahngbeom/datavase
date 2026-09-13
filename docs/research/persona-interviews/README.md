@@ -1,6 +1,6 @@
 # datavase Persona Interview Research
 
-> Status: 15/20 complete
+> Status: 20/20 complete
 >
 > Product baseline: `Ahngbeom/datavase` through PR #89
 >
@@ -33,17 +33,17 @@ Who would replace a terminal `mysql` workflow with datavase, why would they chan
 | 13 | Windows/WSL Developer | Terminal and distribution friction | Medium, conditional | 3 | Complete |
 | 14 | Kubernetes Pod Operator | Ephemeral runtime workflow | Medium, conditional | 3 | Complete |
 | 15 | Cloud Developer without Bastion | Local terminal use without SSH wedge | Low | 3 | Complete |
-| 16 | Engineering Manager | Purchase and rollout decision | TBD | 4 | Planned |
-| 17 | Security Engineer | Trust boundary and approval | TBD | 4 | Planned |
-| 18 | Developer Experience Engineer | Onboarding and team distribution | TBD | 4 | Planned |
-| 19 | Open-source CLI Power User | Competitive replacement threshold | TBD | 4 | Planned |
-| 20 | Churned Trial User | Retention failure | TBD | 4 | Planned |
+| 16 | Engineering Manager | Purchase and rollout decision | Gatekeeper, not primary user | 4 | Complete |
+| 17 | Security Engineer | Trust boundary and approval | Gatekeeper and validator | 4 | Complete |
+| 18 | Developer Experience Engineer | Onboarding and team distribution | Rollout owner | 4 | Complete |
+| 19 | Open-source CLI Power User | Competitive replacement threshold | Medium-high, role-specific | 4 | Complete |
+| 20 | Churned Trial User | Retention failure | High initial fit; failed retention | 4 | Complete |
 
 ## Files
 
 - `interviews/`: one complete record per persona
 - `waves/`: cross-persona findings for each group of five
-- `final-synthesis.md`: conclusions after all 20 simulations (planned)
+- `final-synthesis.md`: conclusions across all 20 simulations
 
 ## Common method
 

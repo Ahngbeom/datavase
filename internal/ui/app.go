@@ -560,7 +560,7 @@ func (a *App) currentTopBar() topBarState {
 	return topBarState{
 		dsName:   ds.Name,
 		schema:   a.currentSchema(),
-		readOnly: ds.ReadOnly,
+		readOnly: a.conn.ReadOnlyConfirmed(),
 		helpKey:  a.helpKeyLabel(),
 	}
 }

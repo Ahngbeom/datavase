@@ -65,6 +65,11 @@ type Conn struct {
 	// trip is tens of milliseconds on every statement.
 	schemaEverSwitched atomic.Bool
 
+	// readOnlyConfirmed is the server's own answer, taken at Open. It is what
+	// the interface reports, so that the marker on screen cannot outlive the
+	// protection it describes.
+	readOnlyConfirmed bool
+
 	version string
 }
 
@@ -101,8 +106,24 @@ func Open(ctx context.Context, ds *config.DataSource, password, addr string) (*C
 
 	c := &Conn{ds: ds, pool: pool, control: control, version: version,
 		controlMu: make(chan struct{}, 1)}
+
+	// Fail closed, and fail here: a read_only datasource whose session the
+	// server will not confirm must not become a session at all. Refusing at
+	// the first statement instead would leave someone sitting in front of an
+	// open datasource that says read-only and is not.
+	if ds.ReadOnly {
+		if err := enforceReadOnly(ctx, control); err != nil {
+			c.Close()
+			return nil, fmt.Errorf("opening %s: %w", ds.Name, err)
+		}
+		c.readOnlyConfirmed = true
+	}
 	return c, nil
 }
+
+// ReadOnlyConfirmed reports whether the server agreed that this session
+// refuses writes. False for a datasource that never asked.
+func (c *Conn) ReadOnlyConfirmed() bool { return c.readOnlyConfirmed }
 
 // DataSource returns the datasource this connection serves.
 func (c *Conn) DataSource() *config.DataSource { return c.ds }
@@ -236,6 +257,16 @@ func (c *Conn) Begin(ctx context.Context) error {
 		conn.Close()
 		return fmt.Errorf("reading the connection id: %w", err)
 	}
+
+	// Before the transaction starts, because the characteristics of a session
+	// cannot be changed once one is in progress. START TRANSACTION READ ONLY
+	// below stops the writes either way, but it leaves the session itself
+	// writable — and this is the connection a user holds longest, so it is
+	// the last one that should be the only one nothing confirmed.
+	if err := c.makeReadOnly(ctx, conn); err != nil {
+		conn.Close()
+		return err
+	}
 	if _, err := conn.ExecContext(ctx, c.startTransaction()); err != nil {
 		conn.Close()
 		return err
@@ -332,23 +363,19 @@ func (c *Conn) acquire(ctx context.Context) (*sql.Conn, uint64, func(), error) {
 	}, nil
 }
 
-// makeReadOnly asks the server to refuse writes on conn, when the datasource
-// says so.
+// makeReadOnly makes conn refuse writes and has the server confirm it, when
+// the datasource says so.
 //
 // It is done on every statement's connection rather than once at Open, since
 // the pool hands connections round and a setting made on one is absent from
-// the next. The round trip is the price, and only read-only datasources pay
-// it. The statement form is used rather than the DSN's system-variable
+// the next. The statement form is used rather than the DSN's system-variable
 // shorthand because MySQL and MariaDB name the variable differently, and the
 // wrong name refuses the connection outright.
 func (c *Conn) makeReadOnly(ctx context.Context, conn *sql.Conn) error {
 	if !c.ds.ReadOnly {
 		return nil
 	}
-	if _, err := conn.ExecContext(ctx, "SET SESSION TRANSACTION READ ONLY"); err != nil {
-		return fmt.Errorf("making the connection read-only: %w", err)
-	}
-	return nil
+	return enforceReadOnly(ctx, conn)
 }
 
 // startTransaction is the statement Begin sends. A transaction on a

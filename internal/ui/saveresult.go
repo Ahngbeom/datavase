@@ -30,7 +30,11 @@ func writeResultFile(path, text string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("%s already exists", path)
+			// The reason before the path, for the same reason the way back
+			// goes before the driver's words: a path is long, the status bar
+			// truncates from the right, and the reason is the half that says
+			// whether to pick another name.
+			return fmt.Errorf("already exists, not replaced: %s", path)
 		}
 		return err
 	}

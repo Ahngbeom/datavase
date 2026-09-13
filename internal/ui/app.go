@@ -1078,12 +1078,12 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 			cause = readOnlyRefusal(cause, a.conn.DataSource().ReadOnly)
 
 			// Naming the key here rather than in a hint the status bar may
-			// shed: on the terminal where the line is too narrow to carry
-			// both, the way back is the half worth keeping.
+			// shed, and ahead of the cause rather than after it: on the
+			// terminal where the line is too narrow to carry both, the way
+			// back is the half worth keeping.
 			if lostSession(err) {
 				a.sessionLost = true
-				cause = fmt.Errorf("%w — this connection is gone, %s reconnects",
-					cause, a.keyLabel(keymap.ActionRefreshSchema))
+				cause = lostSessionCause(cause, a.keyLabel(keymap.ActionRefreshSchema))
 			}
 			a.status.err = cause
 		}

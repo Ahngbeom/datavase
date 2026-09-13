@@ -78,7 +78,7 @@ func TestWritingAResultRefusesToOverwriteAFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("the second write replaced a file that was already there")
 	}
-	if !strings.Contains(err.Error(), "exists") {
+	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("err = %v, want it to say the file exists", err)
 	}
 	got, _ := os.ReadFile(path)

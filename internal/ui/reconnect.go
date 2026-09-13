@@ -21,6 +21,18 @@ func lostSession(err error) bool {
 	return err != nil && !db.ReachedServer(err)
 }
 
+// lostSessionCause says the connection is gone and names the way back,
+// ahead of the driver's account of how it found out.
+//
+// The order is the whole of it. The status bar truncates from the right, so
+// whatever is last is what a narrow terminal loses — and "dial tcp
+// 127.0.0.1:13306: connect: connection refused" is where it failed, while
+// the key is what to do about it. Only one of those is worth the last cells
+// on the line.
+func lostSessionCause(cause error, reconnectKey string) error {
+	return fmt.Errorf("this connection is gone, %s reconnects — %w", reconnectKey, cause)
+}
+
 // reconnect opens a new session on the same datasource, on one keystroke and
 // never on its own.
 //

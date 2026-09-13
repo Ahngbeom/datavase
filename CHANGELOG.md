@@ -14,6 +14,18 @@ have opened and shown a marker it could not back.
 
 ### Added
 
+**The top line names the account and the server.** `user@host:port`, beside
+the datasource and the schema. The datasource name was chosen by whoever
+wrote the configuration file and two of them can be one letter apart; this is
+the fact someone is checking when they stop to ask whether this is the window
+they think it is. The port is part of it because two tunnels forwarded to two
+ports on localhost are otherwise the same string. The schema pane said the
+server already, and `⌘B` takes the schema pane off the screen.
+
+On a terminal too narrow to hold everything the account and server give way,
+after the help key and before anything that says where you are: truncating
+the line keeps the leftmost cells, which would take `read-only` off the end.
+
 **Statement history can be turned off.** `history: false` under `defaults`
 stops finished statements being written to disk, and the file is never
 created. The statements someone runs against a production database are the

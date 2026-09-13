@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -21,6 +22,14 @@ type topBarState struct {
 	// readOnly is on the line whatever the width, beside the datasource:
 	// whether this session can write is a fact about where you are.
 	readOnly bool
+	// identity is the account and the server, as "user@host:port".
+	//
+	// The datasource name above it was chosen by whoever wrote the
+	// configuration file, and two of them can be one letter apart. This is
+	// the fact someone is checking when they stop to ask whether this is the
+	// window they think it is — and the tree says it too, until ⌘B puts the
+	// tree away.
+	identity string
 	// helpKey names the key that opens the reference, looked up rather than
 	// hardcoded so a rebound one is not advertised as F1.
 	helpKey string
@@ -34,14 +43,22 @@ type topBarState struct {
 // there — a dozen fields whose importance depends on what just happened — but
 // this line holds three things and a fixed opinion about the order they go
 // in, and a list says that opinion out loud.
-type topBarForm struct{ helpKey bool }
+type topBarForm struct{ identity, helpKey bool }
 
-// topBarForms, most complete first. The datasource chip and the schema are in
-// neither form's control: which server this is has to survive a terminal of
-// any width.
+// topBarForms, most complete first. The datasource chip, the schema and the
+// read-only marker are in no form's control: which server this is, and
+// whether it can be written to, have to survive a terminal of any width.
+//
+// Two forms rather than four, because the help key is not shed here. It is
+// right-aligned, so line() drops it whenever the gap before it would be less
+// than two cells — which means the first form already degrades to "identity,
+// no help key" on its own, and a form saying so would never be reached. What
+// this list decides is the one thing that inline check cannot: that the
+// identity gives way before the line is truncated, since truncating keeps
+// the leftmost cells and would take read-only off the end.
 var topBarForms = []topBarForm{
+	{identity: true, helpKey: true},
 	{helpKey: true},
-	{},
 }
 
 // renderWidth produces the line, degrading until it fits, alongside the
@@ -84,6 +101,10 @@ func (t topBarState) line(form topBarForm, width int) (string, []zone) {
 		before := line
 		line += result.EscapeTags(t.schema)
 		mark(before, zoneSchema)
+	}
+
+	if form.identity && t.identity != "" {
+		line += "  " + tag(colourMuted, t.identity)
 	}
 
 	if t.readOnly {
@@ -142,4 +163,14 @@ func (b *topBar) Draw(screen tcell.Screen) {
 		b.record(y, offsetZones(zones, x))
 	}
 	b.TextView.Draw(screen)
+}
+
+// serverIdentity is the account and the server this datasource reaches, in
+// the spelling every other tool uses for it.
+//
+// The port is part of it rather than a detail: two tunnels forwarded to two
+// ports on localhost are otherwise the same string, and that is exactly the
+// pair someone gets the wrong way round.
+func serverIdentity(ds *config.DataSource) string {
+	return fmt.Sprintf("%s@%s:%d", ds.User, ds.Host, ds.Port)
 }

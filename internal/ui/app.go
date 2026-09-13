@@ -564,6 +564,7 @@ func (a *App) currentTopBar() topBarState {
 	return topBarState{
 		dsName:   ds.Name,
 		schema:   a.currentSchema(),
+		identity: serverIdentity(ds),
 		readOnly: a.conn.ReadOnlyConfirmed(),
 		helpKey:  a.helpKeyLabel(),
 	}

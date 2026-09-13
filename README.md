@@ -260,7 +260,7 @@ step with what the keys actually do.
 ### The screen
 
 ```
-█ app @app_db                                             F1 keys
+█ app @app_db  root@db.internal:3306  read-only           F1 keys
 █────────────────────────────────────────────────────────────────
 █▌
 █ SELECT id, email FROM users
@@ -274,7 +274,14 @@ step with what the keys actually do.
 ```
 
 **The top line is where you are; the bottom line is what just happened.** The
-datasource and the schema an unqualified statement will reach stay put up top.
+datasource, the schema an unqualified statement will reach, the account and
+server behind them, and whether writes are refused all stay put up top. The
+datasource name was chosen by whoever wrote the configuration file and two of
+them can be one letter apart; `user@host:port` is the fact, and the port is
+part of it because two tunnels forwarded to two ports on localhost are
+otherwise the same string. The schema pane names the server too, until `⌘B`
+puts the pane away. On a terminal too narrow for all of it the account and
+server give way, and the datasource, the schema and `read-only` do not.
 Row counts, timings, warnings and the SQL a table preview ran go below. The
 datasource is filled rather than merely coloured, so which server this is
 survives a terminal of any width; the column down the left is the same fill

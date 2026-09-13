@@ -20,7 +20,13 @@ import (
 const NullText = "NULL"
 
 // TimeLayout is the timestamp rendering, chosen to match MySQL's own.
-const TimeLayout = "2006-01-02 15:04:05"
+//
+// The fractional part is written only when there is one — that is what the
+// nines mean — so a DATETIME keeps the precision it was stored with and a
+// column of whole seconds is not six zeros wider for nothing. Rendering the
+// fraction away turns a precise answer into a plausible one, and ordering,
+// deduplication and "which happened first" all live in those digits.
+const TimeLayout = "2006-01-02 15:04:05.999999"
 
 // Format renders a scanned value as display text.
 func Format(v any) string {

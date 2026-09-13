@@ -12,7 +12,29 @@ moved. A `read_only` datasource now refuses to open against a server that
 will not confirm the session, which is a connection that would previously
 have opened and shown a marker it could not back.
 
+### Fixed
+
+**A timestamp keeps the fraction it arrived with.** A `DATETIME(6)` was
+rendered to the second — on screen, in a copied cell, in CSV and in JSON —
+so `01:02:03.456789` became `01:02:03` everywhere it could be read. Ordering,
+deduplication and "which of these happened first" all live in those digits,
+and a value that is wrong but plausible is acted on where a value that is
+missing is only investigated. A whole second is still spelled as one.
+
 ### Added
+
+**MySQL 8.4 is tested on every change, beside MariaDB 11.4.** "MySQL
+compatible" is a claim about a protocol, and this client makes claims about
+behaviour; the two servers do not agree about reserved words or fractional
+timestamps, and a suite that had only ever met one of them could not say
+which half of the README was true. README now states what is checked and,
+more usefully, what is not.
+
+**Values are checked from the server to the file.** A new test reads a
+`DECIMAL` with trailing zeros, an unsigned integer past what a signed one
+holds, `NULL` beside an empty string, a fractional timestamp, text that is
+neither ASCII nor one line, and asserts they arrive intact in the grid and in
+the export — on both servers. This is where the timestamp above was found.
 
 **A connection that did not happen says which hop failed.** Every one of them
 arrived as the same kind of sentence — a name that does not resolve, a port

@@ -330,3 +330,34 @@ func TestMarkdownIsFaithfulToTypedValues(t *testing.T) {
 		t.Errorf("Markdown() = %q; values must render the way CSV renders them", got)
 	}
 }
+
+// The file is the copy that outlives the session, so a fraction dropped on
+// the way into it is the one that is gone for good.
+func TestExportedTimestampsKeepTheirFraction(t *testing.T) {
+	rows := [][]any{{time.Date(2026, 9, 14, 1, 2, 3, 456789000, time.UTC)}}
+
+	var csv bytes.Buffer
+	if err := CSV(&csv, []string{"at"}, rows); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(csv.String(), "01:02:03.456789") {
+		t.Errorf("CSV() = %q, want the fraction kept", csv.String())
+	}
+
+	var js bytes.Buffer
+	if err := JSON(&js, []string{"at"}, rows); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(js.String(), ".456789") {
+		t.Errorf("JSON() = %q, want the fraction kept", js.String())
+	}
+
+	// A whole second keeps its plain spelling in both.
+	var whole bytes.Buffer
+	if err := CSV(&whole, []string{"at"}, [][]any{{time.Date(2026, 9, 14, 1, 2, 3, 0, time.UTC)}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(whole.String(), "01:02:03\n") {
+		t.Errorf("CSV() = %q, want no invented zeros", whole.String())
+	}
+}

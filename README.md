@@ -349,6 +349,31 @@ terminal its selection back.** Mouse reporting is turned on by the client, for
 its own terminal, independently of this setting. Everything the mouse can reach
 is on the key table above.
 
+## What is actually tested
+
+A client is easy to claim compatibility for and hard to be compatible: a
+successful `SELECT 1` says the protocol matched, not that a `DECIMAL` kept
+its scale or that `information_schema` answered the same question. This is
+what runs on every change, and what does not.
+
+| Checked every change | What that covers |
+|---|---|
+| MariaDB 11.4 | the whole suite: streaming, cancellation through `KILL QUERY`, catalog reads, session read-only, reconnection, the interface itself, and that values keep their scale, sign, fraction, encoding and emptiness from the server through the grid to the exported file |
+| MySQL 8.4 | the same suite, against the same assertions |
+| linux/amd64 | where the suite runs |
+| macOS, Linux and Windows, amd64 and arm64 | the release is built and packaged for each, on every change rather than at tag time |
+
+**Not checked, so not claimed.** Other server versions are likely to work and
+nothing here says they do. The interface is exercised against a simulated
+screen, so what a particular terminal does with `⌘`, the mouse or the
+clipboard is not covered — the fallbacks exist because of it. The macOS and
+Windows binaries are built on every change and run by nobody.
+
+**One thing CSV cannot say.** An empty field is both a `NULL` and an empty
+string, and inventing a spelling for one of them would be a convention this
+file made up. Where the difference matters, the grid shows `NULL` for absence
+and nothing for emptiness, and a JSON export writes `null` and `""`.
+
 ## Checking where a download came from
 
 Every released archive and package is signed by the workflow that built it. To

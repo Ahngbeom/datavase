@@ -33,16 +33,35 @@ jobs:
   integration:
     runs-on: ubuntu-latest
 
+    # Both servers, because "MySQL-compatible" is a claim about a protocol and
+    # this program makes claims about behaviour: reserved words, fractional
+    # timestamps and what information_schema answers are not the same on the
+    # two, and a suite that only ever met one of them cannot say which half of
+    # the README is true. fail-fast off, so a break on one still reports the
+    # other rather than hiding it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - server: mariadb:11.4
+            # The mariadb image dropped the mysql* symlinks, so the two
+            # health checks cannot be one string.
+            ping: mariadb-admin ping -uroot -pdatavase-test --silent
+          - server: mysql:8.4
+            ping: mysqladmin ping -uroot -pdatavase-test --silent
+
     services:
-      mariadb:
-        image: mariadb:11.4
+      db:
+        image: ${{ matrix.server }}
+        # MYSQL_* rather than MARIADB_*: the MariaDB image still honours them,
+        # which is what lets one service block serve both.
         env:
-          MARIADB_ROOT_PASSWORD: datavase-test
-          MARIADB_DATABASE: datavase_test
+          MYSQL_ROOT_PASSWORD: datavase-test
+          MYSQL_DATABASE: datavase_test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd "mariadb-admin ping -uroot -pdatavase-test --silent"
+          --health-cmd "${{ matrix.ping }}"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20

@@ -12,7 +12,31 @@ moved. A `read_only` datasource now refuses to open against a server that
 will not confirm the session, which is a connection that would previously
 have opened and shown a marker it could not back.
 
+### Added
+
+**Statement history can be turned off.** `history: false` under `defaults`
+stops finished statements being written to disk, and the file is never
+created. The statements someone runs against a production database are the
+most sensitive thing this program writes down, and until now the only way
+not to keep them was to delete them afterwards.
+
+**SECURITY.md says what is and is not a boundary.** Where to report
+something privately, what reaches the network (the database and the bastion,
+and nothing else), what reaches the disk and with which permissions, how to
+pin or go back to a version, and the three claims that read wider than they
+are: session read-only is a guard against a slip, `auto_limit` bounds what
+is fetched rather than what the server does, and cancelling is a request the
+server decides on.
+
+README gains the same facts in shorter form, plus what an exported file
+actually contains: `auto_limit` and `buffer_max` both decide it, both say so
+on screen while the result is there, and a CSV is the result you were
+looking at rather than the whole table.
+
 ### Fixed
+
+**The README said the schema pane starts hidden.** It has opened with the
+session since v0.9.1, and the sentence two paragraphs below it said so.
 
 **A timestamp keeps the fraction it arrived with.** A `DATETIME(6)` was
 rendered to the second — on screen, in a copied cell, in CSV and in JSON —

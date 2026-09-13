@@ -409,3 +409,26 @@ datasources:
 		t.Error("a datasource without read_only became read-only")
 	}
 }
+
+// The statements someone runs against a production database are the most
+// sensitive thing this program writes to disk, and the machines where that
+// matters most are the ones where nobody gets to choose the client. An
+// absent key keeps the history, because that is what every existing
+// configuration means.
+func TestHistoryCanBeTurnedOff(t *testing.T) {
+	off, err := Parse(strings.NewReader("defaults:\n  history: false\n"))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if off.Defaults.KeepHistory() {
+		t.Error("history: false did not turn it off")
+	}
+
+	absent, err := Parse(strings.NewReader("defaults:\n  auto_limit: 10\n"))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if !absent.Defaults.KeepHistory() {
+		t.Error("a configuration that says nothing about history lost it")
+	}
+}

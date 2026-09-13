@@ -12,6 +12,20 @@ moved. A `read_only` datasource now refuses to open against a server that
 will not confirm the session, which is a connection that would previously
 have opened and shown a marker it could not back.
 
+### Added
+
+**A dropped session says so, and `⌘R` opens a new one.** A connection that
+went away while nobody was looking — an idle timeout, a network blip, a
+laptop that slept — surfaced as the driver's "invalid connection", which
+reads as the database being in trouble and says nothing about what to do
+next. The statement that discovers it now says the connection is gone and
+names the key back, the new session keeps the schema that was chosen and
+confirms `read_only` again, and what is in the editor is not re-run.
+
+The reload key does it, because a session that is gone has nothing to reload
+until it is back, and a second binding for something that can only be done in
+one state is a key nobody finds at the moment they need it.
+
 ### Changed
 
 **`read-only` on the top line is now the server's answer, not the

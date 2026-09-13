@@ -133,6 +133,10 @@ type App struct {
 
 	// running is the statement in flight, if any. Only the UI goroutine
 	// touches it, which is what makes Ctrl+C unambiguous.
+	// sessionLost says the connection behind this interface is gone, which
+	// turns the reload key into the way back.
+	sessionLost bool
+
 	running *db.Stream
 
 	// batch is a "run everything" in flight, nil otherwise. Like running, it
@@ -742,7 +746,14 @@ func (a *App) dispatch(action keymap.Action) bool {
 	case keymap.ActionToggleSidebar:
 		a.toggleSidebar()
 	case keymap.ActionRefreshSchema:
-		a.loadSchemas()
+		// The same key, because on a session that is gone there is nothing to
+		// reload until there is a session — and a second binding for a thing
+		// that can only be done in one state is a key nobody finds in time.
+		if a.sessionLost {
+			a.reconnect()
+		} else {
+			a.loadSchemas()
+		}
 
 	case keymap.ActionUseSchema:
 		a.showUseSchema()
@@ -1063,7 +1074,17 @@ func (a *App) consume(stream *db.Stream, sqlText string, started time.Time) {
 			// only answers the first: a bastion that has stopped forwarding
 			// looks exactly like a database that has.
 			cause := failureCause(err, a.transportFailure(), a.bastionName())
-			a.status.err = readOnlyRefusal(cause, a.conn.DataSource().ReadOnly)
+			cause = readOnlyRefusal(cause, a.conn.DataSource().ReadOnly)
+
+			// Naming the key here rather than in a hint the status bar may
+			// shed: on the terminal where the line is too narrow to carry
+			// both, the way back is the half worth keeping.
+			if lostSession(err) {
+				a.sessionLost = true
+				cause = fmt.Errorf("%w — this connection is gone, %s reconnects",
+					cause, a.keyLabel(keymap.ActionRefreshSchema))
+			}
+			a.status.err = cause
 		}
 
 		// The queue is resumed from here rather than from start(), because

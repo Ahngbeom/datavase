@@ -197,7 +197,7 @@ does not forward `⌘` to the program it hosts.
 | Copy the whole result as Markdown or JSON, or save it as a CSV file | `⌘⇧C` · `F3` | `copy` on the result header |
 | Datasource list | `⌘⇧D` · `F11` | the datasource name in the top bar |
 | Choose the schema | `⌘⇧N` · `F7` | the schema name in the top bar |
-| Reload the schema tree | `⌘R` | |
+| Reload the schema tree, or reconnect a dropped session | `⌘R` | |
 | Hide or show the schema tree | `⌘B` | |
 | Move between panes | `⇥` / `⇧⇥` | a pane's name |
 | Switch tab in the focused pane | `Ctrl+⇥` · `F6` | a tab |
@@ -291,6 +291,16 @@ is where a click lands.
 running and completion in the editor, the preview in the tree, copy and sort
 and row in the result. Move between panes with `⇥` to see the rest; `F1` has
 all of it at once.
+
+**When the connection goes** — an idle timeout, a dropped network, a laptop
+that slept — the statement that discovers it says the connection is gone and
+names the key that opens a new session. `⌘R` is that key; on a live session
+it still reloads the tree, and there is nothing to reload on a dead one.
+Reconnecting keeps the schema you had chosen, because dropping back to the
+datasource's default without a word is how the right statement comes to be
+run against the wrong schema, and it confirms `read_only` again on the new
+session. Nothing is re-run: the statement in the editor is yours to send
+again or not.
 
 **The editor** is an ordinary one: typing types, and there is no mode to leave
 first. **The grid** streams the result as it arrives, sorts on a column and

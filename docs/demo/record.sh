@@ -13,8 +13,17 @@ done
 
 docker exec -i datavase-test-db mariadb -uroot -pdatavase-test < docs/demo/seed.sql
 
+# The demo database goes into the same container the integration tests use,
+# and several of those assert on what the schema tree contains — so leaving
+# it behind fails five tests in a suite that has nothing to do with the
+# recording.
+drop_demo_database() {
+	docker exec -i datavase-test-db \
+		mariadb -uroot -pdatavase-test -e 'DROP DATABASE IF EXISTS shop' 2>/dev/null || true
+}
+
 work=$(mktemp -d)
-trap 'tmux kill-session -t dvdemo 2>/dev/null || true; rm -rf "$work"' EXIT
+trap 'tmux kill-session -t dvdemo 2>/dev/null || true; drop_demo_database; rm -rf "$work"' EXIT
 
 tmux kill-session -t dvdemo 2>/dev/null || true
 tmux new-session -d -s dvdemo -x 124 -y 32 -c "$work" \

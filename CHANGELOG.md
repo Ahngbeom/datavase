@@ -5,6 +5,31 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+**Nothing to do before upgrading.** No configuration changes and no keys
+moved. A `read_only` datasource now refuses to open against a server that
+will not confirm the session, which is a connection that would previously
+have opened and shown a marker it could not back.
+
+### Changed
+
+**`read-only` on the top line is now the server's answer, not the
+configuration's intention.** The marker was drawn from `read_only: true` in
+the file. Those are two different facts: one says what was asked for, and
+only the server knows what the session about to run a statement will
+actually refuse. A marker taken from the first keeps saying "read-only" over
+a session that has stopped being one, and a guard that is believed and
+absent is worse than one that was never claimed. `dv` now asks the server to
+confirm the session on every connection a statement takes, and refuses to
+open the datasource at all when the answer does not come back.
+
+**A transaction now runs on a confirmed session too.** `START TRANSACTION
+READ ONLY` stopped the writes, but it left the session itself writable — so
+the one connection a user holds longest was the only one nothing had checked.
+The session is confirmed before the transaction starts, because a session's
+characteristics cannot be changed once one is in progress.
+
 ## v0.10.0 — 2026-09-11
 
 **Nothing to do before upgrading.** One optional key was added to the

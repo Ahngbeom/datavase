@@ -131,10 +131,19 @@ down now, because `env` stops being read in a later release.
 
 **`read_only: true`** has the server refuse every write on that datasource,
 on every connection, so nothing the client failed to recognise as a write
-can get through. The top line says `read-only` while you are on one, and a
-refused statement says which setting refused it. It is a guard against a
-slip rather than a boundary: `SET SESSION TRANSACTION READ WRITE` lifts it,
-and whoever types that has decided to.
+can get through. A refused statement says which setting refused it.
+
+**The server is asked to confirm it, and the datasource does not open until
+it does.** `read-only` on the top line is the server's answer about the
+session your next statement will run on, not a repetition of what this file
+asked for — a marker that only read the configuration would keep saying
+"read-only" over a session that had stopped being one. If the server will
+not confirm, `dv` says so and connects to nothing, because a protection that
+is believed and absent is worse than one that was never claimed.
+
+It is still a guard against a slip rather than a boundary:
+`SET SESSION TRANSACTION READ WRITE` lifts it for the session, and whoever
+types that has decided to. The next statement puts it back.
 
 Passwords never go in this file. Store them in the OS keychain:
 

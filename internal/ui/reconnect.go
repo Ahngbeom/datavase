@@ -48,7 +48,7 @@ func (a *App) reconnect() {
 		a.app.QueueUpdateDraw(func() {
 			if err != nil {
 				a.status.phase = phaseFailed
-				a.status.err = fmt.Errorf("reconnecting to %s: %w", ds.Name, err)
+				a.status.err = whatToCheck(fmt.Errorf("reconnecting to %s: %w", ds.Name, err))
 				return
 			}
 			a.adoptReconnected(sess)

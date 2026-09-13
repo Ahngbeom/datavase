@@ -4,10 +4,12 @@ package ui
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/keymap"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/testmysql"
@@ -159,5 +161,34 @@ func TestReconnectingConfirmsReadOnlyAgain(t *testing.T) {
 	}
 	if !h.inspect(func(a *App) bool { return strings.Contains(a.status.message, "read-only") }) {
 		t.Errorf("the new session did not say it is still read-only:\n%s", h.text())
+	}
+}
+
+// A reconnection that fails is the moment someone decides whether to keep
+// pressing the key or to go and fix something, and "connecting failed" does
+// not help them choose.
+func TestAFailedReconnectionSaysWhatToLookAt(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.inspect(func(a *App) bool {
+		a.connect = func(context.Context, *config.DataSource) (*session.Session, error) {
+			return nil, &net.DNSError{Err: "no such host", Name: "db.internal", IsNotFound: true}
+		}
+		return true
+	})
+
+	h.loseTheSession()
+	h.typeSQL("SELECT 1")
+	h.do(keymap.ActionRun)
+	h.waitFor("the failure", func(a *App) bool { return a.sessionLost })
+
+	h.do(keymap.ActionRefreshSchema)
+	h.waitFor("the failed reconnection", func(a *App) bool {
+		return a.status.err != nil && strings.Contains(a.status.err.Error(), "db.internal")
+	})
+
+	if !h.inspect(func(a *App) bool {
+		return strings.Contains(a.status.err.Error(), db.FaultUnresolved.Hint())
+	}) {
+		t.Errorf("the failure does not say what to check:\n%s", h.text())
 	}
 }

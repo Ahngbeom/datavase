@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/version"
 )
@@ -215,6 +216,12 @@ func (a *App) check(args []string) int {
 	version, err := a.Probe(ctx, ds, password)
 	if err != nil {
 		fmt.Fprintf(a.Err, "cannot reach %q: %v\n", ds.Name, err)
+		// On its own line: this command is run at the moment someone is
+		// deciding whether to look at this file, their VPN, or the password
+		// they stored, and the driver's sentence answers none of the three.
+		if hint := db.Diagnose(err).Hint(); hint != "" {
+			fmt.Fprintf(a.Err, "%s\n", hint)
+		}
 		return exitError
 	}
 

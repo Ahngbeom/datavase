@@ -178,6 +178,14 @@ dv version            # print the version
 dv help               # the same list, from the binary
 ```
 
+**`dv check` names what to look at.** A connection that did not happen is
+reported the same way by every hop — a wrong host, a closed port, a VPN that
+is down, a certificate, a password, a database that is not there — and which
+one it was decides who can fix it. Where `dv` can tell them apart it says so
+on the line after the server's own words, naming the setting or the thing
+outside this program that decides it. The same sentence appears on screen
+when connecting or reconnecting fails.
+
 `-c path/to/config.yaml` points any of them at another configuration file.
 
 ### Keys

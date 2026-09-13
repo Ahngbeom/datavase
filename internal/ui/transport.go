@@ -65,3 +65,17 @@ func readOnlyRefusal(err error, readOnly bool) error {
 	}
 	return errors.New("write refused: read_only is set on this datasource")
 }
+
+// whatToCheck adds what to go and look at to a connection that did not
+// happen.
+//
+// Only where the failure is one this program can tell apart: a sentence that
+// fits every failure directs nobody, and appending one to a message that
+// already says exactly what went wrong makes it worse.
+func whatToCheck(err error) error {
+	hint := db.Diagnose(err).Hint()
+	if hint == "" {
+		return err
+	}
+	return fmt.Errorf("%w — %s", err, hint)
+}

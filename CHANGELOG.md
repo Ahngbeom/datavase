@@ -14,6 +14,15 @@ have opened and shown a marker it could not back.
 
 ### Added
 
+**A connection that did not happen says which hop failed.** Every one of them
+arrived as the same kind of sentence — a name that does not resolve, a port
+with nothing behind it, a VPN that is down, a certificate, a password, a
+database that is not there — and telling them apart is what decides whether
+to look at the configuration file, the network, or the stored password.
+`dv check` now says it on the line after the server's own words, and
+connecting or reconnecting says it on screen. Only where the failure is one
+that can be told apart: a sentence that fits every failure directs nobody.
+
 **A dropped session says so, and `⌘R` opens a new one.** A connection that
 went away while nobody was looking — an idle timeout, a network blip, a
 laptop that slept — surfaced as the driver's "invalid connection", which

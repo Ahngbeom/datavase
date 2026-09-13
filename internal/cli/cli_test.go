@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"strings"
 	"testing"
 
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/secret"
 )
 
@@ -225,5 +227,25 @@ func TestOpeningWithNoDatasourcesLaunchesTheList(t *testing.T) {
 		Launch: func() error { launched = true; return nil }}
 	if code := app.Run(nil); code != exitOK || !launched {
 		t.Errorf("Run() = %d, launched = %v; a first run must open the list", code, launched)
+	}
+}
+
+// "connecting failed" is the one thing the reader already knows. What they
+// cannot tell from it is whether to look at this file, their VPN, or the
+// password they stored, and check exists to be run at exactly that moment.
+func TestCheckSaysWhatToLookAtWhenItCanTell(t *testing.T) {
+	h := newHarness(t)
+	if err := h.app.Secrets.Set("prod-app", "pw"); err != nil {
+		t.Fatalf("Secrets.Set() error = %v", err)
+	}
+	h.app.Probe = func(context.Context, *config.DataSource, string) (string, error) {
+		return "", &net.DNSError{Err: "no such host", Name: "db.internal", IsNotFound: true}
+	}
+
+	if code := h.app.Run([]string{"check", "prod-app"}); code == 0 {
+		t.Fatal("Run(check) = 0, want a non-zero exit code")
+	}
+	if got := h.err.String(); !strings.Contains(got, db.FaultUnresolved.Hint()) {
+		t.Errorf("stderr = %q, want it to say what to check", got)
 	}
 }

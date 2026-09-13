@@ -158,3 +158,61 @@ func TestTheTopLineSaysWhenTheDataSourceIsReadOnly(t *testing.T) {
 		t.Errorf("renderWidth() = %q says read-only for a datasource that is not", line)
 	}
 }
+
+// The datasource name is chosen by whoever wrote the configuration file, and
+// two of them can be one letter apart. The server and the account are the
+// facts, and they are what someone is checking when they stop to ask whether
+// this is the window they think it is.
+func TestTheTopLineNamesTheServerAndTheAccount(t *testing.T) {
+	s := baseTopBar()
+	s.identity = "root@db.internal:3306"
+
+	got, _ := s.renderWidth(120)
+	if !strings.Contains(got, "root@db.internal:3306") {
+		t.Errorf("renderWidth() = %q, want the account and the server on it", got)
+	}
+}
+
+// What goes when the line will not hold everything, in order. The help key
+// is a convenience; where you are is not, and the datasource, the schema and
+// read-only are the three that must survive any terminal.
+func TestTheTopLineShedsInOrderAndNeverShedsWhereYouAre(t *testing.T) {
+	s := baseTopBar()
+	s.identity = "root@db.internal:3306"
+	s.readOnly = true
+
+	wide, _ := s.renderWidth(120)
+	if !strings.Contains(wide, "F1") || !strings.Contains(wide, "root@db.internal:3306") {
+		t.Fatalf("width 120: %q does not carry everything", wide)
+	}
+
+	// Wide enough for the identity and not for the help key beside it: the
+	// key is right-aligned and goes when the gap before it would close up.
+	medium, _ := s.renderWidth(52)
+	if strings.Contains(medium, "F1 keys") {
+		t.Errorf("width 52: the help key outlasted the room for it: %q", medium)
+	}
+	if !strings.Contains(medium, "root@db.internal:3306") {
+		t.Errorf("width 52: the server went before the help key: %q", medium)
+	}
+
+	// Too narrow for the identity at all. It goes rather than the line being
+	// truncated, because truncating keeps the leftmost cells and read-only
+	// is on the end.
+	narrow, _ := s.renderWidth(40)
+	if strings.Contains(narrow, "db.internal") {
+		t.Errorf("width 40: the identity was kept and something else paid: %q", narrow)
+	}
+
+	for _, width := range []int{120, 52, 40, 30} {
+		got, _ := s.renderWidth(width)
+		for _, want := range []string{"prod-app", "app_db", "read-only"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("width %d: %q lost %q", width, got, want)
+			}
+		}
+		if w := visibleCost(got); w > width {
+			t.Errorf("width %d: the bar is %d cells: %q", width, w, got)
+		}
+	}
+}

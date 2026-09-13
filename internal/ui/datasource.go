@@ -99,7 +99,7 @@ func (a *App) openDataSource(ds *config.DataSource) {
 		a.app.QueueUpdateDraw(func() {
 			if err != nil {
 				a.status.phase = phaseFailed
-				a.status.err = fmt.Errorf("connecting to %s: %w", ds.Name, err)
+				a.status.err = whatToCheck(fmt.Errorf("connecting to %s: %w", ds.Name, err))
 				return
 			}
 			a.adopt(sess)

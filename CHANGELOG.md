@@ -5,12 +5,16 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
-## Unreleased
+## v0.11.0 — 2026-09-14
 
-**Nothing to do before upgrading.** No configuration changes and no keys
-moved. A `read_only` datasource now refuses to open against a server that
-will not confirm the session, which is a connection that would previously
-have opened and shown a marker it could not back.
+**Nothing to do before upgrading,** unless you have a `read_only` datasource
+pointed at a server that will not confirm a read-only session. That
+connection used to open and show a marker it could not back; it now refuses
+to open, and says so. Nothing else changed meaning and no keys moved.
+
+This release adds no capability. It closes the gaps between what `dv` said
+and what it did — which is what the six most-cited findings in
+`docs/research/persona-interviews/` turned out to be.
 
 ### Added
 
@@ -46,6 +50,13 @@ on screen while the result is there, and a CSV is the result you were
 looking at rather than the whole table.
 
 ### Fixed
+
+**The half of a message worth reading now comes first.** The status bar
+truncates from the right, and two messages had put the useful half last: a
+dropped connection ended with the key that reconnects, and a refused export
+ended with the reason after a long path. On a terminal of any ordinary width
+both were cut off — so the line said where the failure happened and not what
+to do about it, which is the wrong way round.
 
 **The README said the schema pane starts hidden.** It has opened with the
 session since v0.9.1, and the sentence two paragraphs below it said so.

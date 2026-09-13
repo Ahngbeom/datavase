@@ -111,7 +111,20 @@ type Defaults struct {
 	// regression for anyone who copies by dragging. Off costs only the ways
 	// in: every click reaches an action also bound to a key.
 	Mouse *bool `yaml:"mouse,omitempty"`
+
+	// History says whether finished statements are written to the local
+	// store. Absent means they are, which is what every configuration
+	// written before this key existed meant.
+	//
+	// It is here rather than per datasource because the file holding them is
+	// one file: turning it off for the datasource that matters would leave
+	// the statements someone ran against it in the same store as the rest,
+	// under a name that says they are not.
+	History *bool `yaml:"history,omitempty"`
 }
+
+// KeepHistory reports whether finished statements are remembered.
+func (d Defaults) KeepHistory() bool { return d.History == nil || *d.History }
 
 // Config is the root of the configuration file.
 type Config struct {

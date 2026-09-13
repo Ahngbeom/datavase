@@ -120,3 +120,31 @@ func TestWriteKeepsReadOnlyAndLeavesItOutOtherwise(t *testing.T) {
 		t.Errorf("read_only did not survive the round trip: %+v", back.DataSources)
 	}
 }
+
+// Saving must not write a decision nobody made: a file that gains
+// "history: true" on its way through the datasource dialog is a file that
+// now disagrees with the next release if the default ever moves.
+func TestWriteKeepsHistoryOnlyWhenItWasSaidOutLoud(t *testing.T) {
+	var untouched bytes.Buffer
+	if err := Write(&untouched, sample()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(untouched.String(), "history:") {
+		t.Errorf("Write() invented a history setting:\n%s", untouched.String())
+	}
+
+	off := sample()
+	no := false
+	off.Defaults.History = &no
+	var stated bytes.Buffer
+	if err := Write(&stated, off); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Parse(&stated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Defaults.KeepHistory() {
+		t.Errorf("history: false did not survive the round trip:\n%s", stated.String())
+	}
+}

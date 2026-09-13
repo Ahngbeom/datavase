@@ -118,6 +118,7 @@ defaults:
   fetch_chunk: 500        # rows per batch while streaming
   buffer_max: 50000       # rows held in memory before truncating
   mouse: true             # false turns off clicks; see "The screen"
+  history: false          # do not write finished statements to disk
 ```
 
 The datasource dialog writes this file, so comments in it do not survive a
@@ -282,7 +283,8 @@ continued, and it is the only thing on screen that ignores your terminal theme.
 Regions are separated by a single rule rather than boxed. Each names itself
 once, on its own header line, and the one holding the keyboard is marked `▌`.
 
-**The schema pane** starts hidden; `⌘B` brings it. It has two tabs. **tree**
+**The schema pane** is open when a session starts, and `⌘B` puts it away
+for that session. It has two tabs. **tree**
 expands a schema for its tables and a table for its columns, marks the schema
 unqualified names resolve against with `●`, and previews a table on a
 double-click; `↩` on a column node puts its name in the editor. **tables** is a
@@ -348,6 +350,48 @@ feature for them. **This makes `dv` ignore the mouse; it does not hand the
 terminal its selection back.** Mouse reporting is turned on by the client, for
 its own terminal, independently of this setting. Everything the mouse can reach
 is on the key table above.
+
+## What this program leaves on the machine
+
+| What | Where |
+|---|---|
+| Datasources | `$XDG_CONFIG_HOME/datavase/config.yaml`, or `~/.config/datavase/config.yaml` |
+| Statement history | `$XDG_STATE_HOME/datavase/history.db`, or `~/.local/state/datavase/history.db` |
+| Schema cache | the same directory, `datavase.db` |
+| Passwords | the OS keychain, or `DATAVASE_PASSWORD_<NAME>` in the environment |
+
+The two databases live in a directory created `0700`, which is what protects
+them; the files inside it are `0644`. Deleting either is safe at any time —
+the cache is rebuilt on the next reload, costing completion and the tables
+tab until then, and the history is simply gone.
+
+**`history: false` under `defaults` stops statements being written at all,**
+and the file is never created. Reach for it where the statements themselves
+are the sensitive thing. Nothing else is recorded: there is no telemetry, no
+update check and no crash reporting, so the only things `dv` connects to are
+your database and the bastion in front of it.
+
+Going back a version is downloading an older one; no release writes state an
+earlier one cannot read. The install script takes `DV_VERSION` for that, and
+[SECURITY.md](SECURITY.md) has the rest of the trust surface: what is and is
+not a boundary, what reaches the network, and how to report something.
+
+## An exported file is what was on screen
+
+Two settings decide what a result holds before it is ever exported, and both
+say so at the bottom of the screen while the result is there:
+
+- **`auto_limit`** adds a `LIMIT` to a `SELECT` that does not limit itself,
+  so the result — and the file — stops there. The status line says
+  `LIMIT 1000 added` when it happened. It bounds what is fetched, not what
+  the server does: a statement that scans the whole table still scans it.
+- **`buffer_max`** caps the rows held in memory. Past it the result is
+  truncated, the status line says so, and the export says
+  `truncated at buffer_max` as it writes.
+
+So a CSV is exactly the result you were looking at, which is not always the
+whole table. Raise either setting, or narrow the statement, before exporting
+something that has to be complete.
 
 ## What is actually tested
 

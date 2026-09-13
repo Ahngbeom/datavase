@@ -113,9 +113,11 @@ func openSession(sess *session.Session, cfg *config.Config, path string) error {
 		}
 	}
 
-	// History is optional for the same reason as the cache.
+	// History is optional for the same reason as the cache, and refusable
+	// for a different one: the statements someone runs against a production
+	// database are the most sensitive thing this program writes to disk.
 	var hist *history.Store
-	if p, err := history.DefaultPath(); err == nil {
+	if p, err := history.DefaultPath(); err == nil && cfg.Defaults.KeepHistory() {
 		if opened, err := history.Open(p); err == nil {
 			hist = opened
 			defer hist.Close()

@@ -100,6 +100,30 @@ first two; the rest explain them.
 | Support minutes | count what you spend answering |
 | What they never found | the end-of-pilot call |
 
+### Counting repeat use
+
+Use these definitions before the first participant starts so that nobody is
+removed or added after seeing the result.
+
+- **T0** is the participant's local calendar date when they begin installation.
+- **Week 1** is T0 through T0+6. The measurement window is T0+7 through T0+27.
+- A **qualifying day** is a local working day on which the participant,
+  independently and for real work, connects to the target database with `dv`
+  and runs at least one read query. Multiple uses on one date count once.
+- Installation checks, demos, training, and researcher-requested queries do not
+  count.
+- A missing diary, withdrawal, or fewer than three days on which database work
+  occurred does not remove a participant from the denominator. That participant
+  remains one of five and does not pass.
+- Using `mysql` or a GUI on the same day does not erase a qualifying `dv` day.
+  Record the fallback and why it happened separately.
+
+Count only active minutes spent reading, diagnosing or answering as support;
+do not count time waiting for a reply. Classify it as `install/docs`,
+`product defect`, `environment/access`, or `coaching`. If someone writes
+a participant's configuration or query for them, mark that use as contaminated
+and do not count it.
+
 ### The weekly diary
 
 Five lines, once a week. Do not build a form; send the five lines and take
@@ -126,6 +150,34 @@ using it and stopped thinking about it. A silent week is data, not a gap.
 
 These are not bugs to log and continue past. Stop, fix, and restart the four
 weeks. The product's entire claim is that its narrow surface is trustworthy.
+
+### Incident response
+
+Treat every report that matches a stop condition as **suspected** and do this
+before deciding whether the product caused it:
+
+1. Ask all five participants to stop using `dv`; pause the whole cohort, not
+   only the person who reported it.
+2. Mark the pilot `paused — suspected critical failure` and stop calculating
+   the gate.
+3. Preserve the minimum evidence needed to reproduce it: version and binary
+   checksum, OS and architecture, database major version, time, a sanitized
+   query or minimal reproduction, observed results and artifact hashes. Never
+   put production data, credentials, hostnames, datasource or schema names, or
+   private queries in GitHub.
+4. Classify the incident as `confirmed product defect`, `not reproduced`,
+   `external cause`, or `inconclusive`.
+5. A confirmed product defect invalidates the run. Keep the earlier diary and
+   support records for the audit trail, but mark every earlier gate day void.
+   An inconclusive report remains paused by default; resuming it requires the
+   owner's written risk decision.
+6. Restart only after a patched release has regression coverage, independent
+   verification, and confirmation that all five participants run that release.
+   Give everyone a new T0 and run the full four weeks again.
+
+An external cause may resume from the paused run once it is documented. A
+report that was not reproduced does not resume automatically: preserve the
+attempts and make the decision explicit in the tracking issue.
 
 ## The gate
 

@@ -93,23 +93,29 @@ first two; the rest explain them.
 
 | Measure | How |
 |---|---|
-| **Repeat use** — days on which they used it for real work, after week 1 | weekly diary |
+| **Repeat use** — qualifying days, as defined below | weekly diary |
 | **Critical failures** — wrong value, wrong read-only state, wrong datasource shown, credential exposed | diary, and ask directly every week |
 | Time to first successful query | ask in week 1, in minutes, and whether they opened the README |
 | Fallback moments | the diary line below |
 | Support minutes | count what you spend answering |
 | What they never found | the end-of-pilot call |
 
-### Counting repeat use
+### How to count
 
 Use these definitions before the first participant starts so that nobody is
 removed or added after seeing the result.
 
 - **T0** is the participant's local calendar date when they begin installation.
 - **Week 1** is T0 through T0+6. The measurement window is T0+7 through T0+27.
-- A **qualifying day** is a local working day on which the participant,
+- A **qualifying day** is any local calendar date on which the participant,
   independently and for real work, connects to the target database with `dv`
-  and runs at least one read query. Multiple uses on one date count once.
+  and runs at least one statement. Multiple uses on one date count once.
+  Weekends count: production database work clusters on incidents, and
+  incidents happen at weekends.
+- Reads and writes both qualify. What is being measured is whether someone
+  reached for `dv` again, not what they reached for it to do. Note in the
+  record which it was — the positioning rests on production reads, and five
+  participants who only ever wrote would be a finding rather than a pass.
 - Installation checks, demos, training, and researcher-requested queries do not
   count.
 - A missing diary, withdrawal, or fewer than three days on which database work
@@ -148,8 +154,10 @@ using it and stopped thinking about it. A silent week is data, not a gap.
   or schema is shown;
 - a credential appears anywhere it should not.
 
-These are not bugs to log and continue past. Stop, fix, and restart the four
-weeks. The product's entire claim is that its narrow surface is trustworthy.
+These are not bugs to log and continue past. Stop everyone, find out what
+caused it, and follow **Incident response** below — a confirmed defect costs
+the run and the four weeks start again. The product's entire claim is that
+its narrow surface is trustworthy.
 
 ### Incident response
 
@@ -164,7 +172,11 @@ before deciding whether the product caused it:
    checksum, OS and architecture, database major version, time, a sanitized
    query or minimal reproduction, observed results and artifact hashes. Never
    put production data, credentials, hostnames, datasource or schema names, or
-   private queries in GitHub.
+   private queries in GitHub. That material does not go in this repository
+   at all: whatever cannot be sanitized stays with the participant's own
+   team, or in the maintainer's local notes if it is theirs to keep, and what
+   reaches the tracking issue is the sanitized minimum plus a note that the
+   rest exists and where.
 4. Classify the incident as `confirmed product defect`, `not reproduced`,
    `external cause`, or `inconclusive`.
 5. A confirmed product defect invalidates the run. Keep the earlier diary and
@@ -186,7 +198,7 @@ here, whichever way it goes.
 
 | | Pass |
 |---|---|
-| Repeat use | **3 of 5** used it on three or more distinct working days after week 1 |
+| Repeat use | **3 of 5** reached three or more qualifying days in the measurement window |
 | Critical failures | **0** |
 
 **If it passes:** open the distribution channels — awesome-tuis, Terminal
@@ -195,7 +207,9 @@ the participants' own answer to diary line 2 most often was, in their words.
 Then ask the four who stayed what a team version would have to do, and put a
 price in the question.
 
-**If repeat use is 1 or 2:** the reason is in diary line 2. Fix that, ship,
+**If repeat use is 1 or 2:** the reason is in diary line 2, or in line 5 for
+anyone who never had the chance — a month with no database work counts as
+not passing and says nothing about the product. Fix what line 2 names, ship,
 and run five new people. Do not widen the product — the same research that
 produced v0.11 says every added database, OS boundary and proxy multiplies
 what has to stay true.

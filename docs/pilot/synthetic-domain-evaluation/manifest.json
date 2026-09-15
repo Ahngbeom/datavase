@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "synthetic": true,
+  "run_id": "sde-20260915-005610",
+  "binary": {
+    "path": "./dv",
+    "version": "dv (devel)",
+    "sha256": "f91f1fd387ba3a8a6cff65b30f2ef31f829d17046db24a8609901404139c10c5"
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "database": "MariaDB 11.4"
+  },
+  "control": {
+    "stop_signal": "/private/tmp/datavase-sde-20260915-005610/STOP",
+    "stop_poll": "before_each_external_or_product_action"
+  },
+  "scenarios": [
+    {
+      "id": "commerce",
+      "container": "datavase-eval-commerce",
+      "port": 13316,
+      "database": "commerce_ops",
+      "datasource": "commerce-eval",
+      "password_env": "DATAVASE_PASSWORD_COMMERCE_EVAL",
+      "config_dir": "/private/tmp/datavase-sde-20260915-005610/commerce/config",
+      "state_dir": "/private/tmp/datavase-sde-20260915-005610/commerce/state",
+      "artifacts": {
+        "fixture": "docs/pilot/synthetic-domain-evaluation/fixtures/commerce.sql",
+        "events": "docs/pilot/synthetic-domain-evaluation/events/commerce.jsonl",
+        "transcript": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+        "report": "docs/pilot/synthetic-domain-evaluation/reports/commerce.md",
+        "export": "docs/pilot/synthetic-domain-evaluation/exports/commerce.csv"
+      }
+    },
+    {
+      "id": "saas-support",
+      "container": "datavase-eval-saas",
+      "port": 13317,
+      "database": "saas_support",
+      "datasource": "saas-support-eval",
+      "password_env": "DATAVASE_PASSWORD_SAAS_SUPPORT_EVAL",
+      "config_dir": "/private/tmp/datavase-sde-20260915-005610/saas-support/config",
+      "state_dir": "/private/tmp/datavase-sde-20260915-005610/saas-support/state",
+      "artifacts": {
+        "fixture": "docs/pilot/synthetic-domain-evaluation/fixtures/saas-support.sql",
+        "events": "docs/pilot/synthetic-domain-evaluation/events/saas-support.jsonl",
+        "transcript": "docs/pilot/synthetic-domain-evaluation/transcripts/saas-support-tui.txt",
+        "report": "docs/pilot/synthetic-domain-evaluation/reports/saas-support.md",
+        "export": "docs/pilot/synthetic-domain-evaluation/exports/saas-support.csv"
+      }
+    },
+    {
+      "id": "healthcare-ops",
+      "container": "datavase-eval-health",
+      "port": 13318,
+      "database": "healthcare_ops",
+      "datasource": "healthcare-ops-eval",
+      "password_env": "DATAVASE_PASSWORD_HEALTHCARE_OPS_EVAL",
+      "config_dir": "/private/tmp/datavase-sde-20260915-005610/healthcare-ops/config",
+      "state_dir": "/private/tmp/datavase-sde-20260915-005610/healthcare-ops/state",
+      "artifacts": {
+        "fixture": "docs/pilot/synthetic-domain-evaluation/fixtures/healthcare-ops.sql",
+        "events": "docs/pilot/synthetic-domain-evaluation/events/healthcare-ops.jsonl",
+        "transcript": "docs/pilot/synthetic-domain-evaluation/transcripts/healthcare-ops-tui.txt",
+        "report": "docs/pilot/synthetic-domain-evaluation/reports/healthcare-ops.md",
+        "export": "docs/pilot/synthetic-domain-evaluation/exports/healthcare-ops.csv"
+      }
+    }
+  ]
+}

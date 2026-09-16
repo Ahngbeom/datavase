@@ -1,0 +1,5 @@
+ticket_id,tenant,requester,priority,status,subject,customer_note,created_at
+9001,northstar-labs,Alex Kim,P1,open,Advanced export unavailable,"Export page says “not entitled”.
+Customer launch is today, please escalate.",2026-09-15 00:12:34.123456
+9003,hanul-data,김하늘,P1,open,로그인 지연,서울 리전에서 간헐적 지연,2026-09-15 00:45:00.5
+9006,pixel-yard,Sara Ito,P2,open,Webhook retries,Retries seen after 09:00 UTC.,2026-09-15 01:05:00

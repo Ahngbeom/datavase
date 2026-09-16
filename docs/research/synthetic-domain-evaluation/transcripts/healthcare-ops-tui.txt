@@ -1,0 +1,55 @@
+# Synthetic healthcare-ops TUI transcript (sanitized)
+# Persona: fictional healthcare SRE/database operator; no real people or patient data.
+# Input lines are prefixed `>`. This file is a reconstruction from observations made
+# during one real approved PTY process after terminal-control sequences were removed;
+# it is not raw PTY output and the individual UI observations below were not timed.
+# No password was displayed or recorded.
+
+[attempt 1: sandboxed PTY, exit 1]
+completion disabled: preparing the catalog cache: unable to open database file (14)
+open /dev/tty: operation not permitted
+
+[approved PTY process: exit 0; duration not retained]
+TOP BAR: healthcare-ops-eval @healthcare_ops evaluator@127.0.0.1:13318 read-only
+SCHEMA TREE: healthcare_ops (current schema)
+FOOTER: server 11.4.12-MariaDB-ubu2404
+
+> SELECT job_key, status, started_at, finished_at, error_code FROM scheduler_job_runs WHERE job_key='JOB-2042';
+job_key | status | started_at          | finished_at         | error_code
+JOB-2042| failed | 2026-03-08 07:00:00 | 2026-03-08 07:00:19 | DST_WINDOW_COLLISION
+1 row; LIMIT 1000 added
+
+> SELECT c.slug, a.public_id, a.status, a.scheduled_local, a.scheduled_utc FROM appointments a JOIN clinics c ON c.id=a.clinic_id WHERE c.slug IN ('central-care', 'central-care-east') ORDER BY a.scheduled_utc;
+11 rows; first two rows were central-care/APT-3001/scheduled/2026-03-08 01:30:00/2026-03-08 06:30:00 and central-care/APT-3002/cancelled/2026-03-08 03:30:00/2026-03-08 07:30:00. Both central-care and central-care-east were visibly distinct.
+
+> SELECT action, object_type, occurred_at FROM access_audit_events ORDER BY occurred_at DESC LIMIT 5;
+view   | clinic     | 2026-03-08 07:20:00
+scan   | access_log | 2026-03-08 07:15:00
+export | job_run    | 2026-03-08 07:10:00
+view   | job_run    | 2026-03-08 07:05:00
+update | schedule   | 2026-03-08 07:00:19
+5 rows
+
+> SELECT public_id, completed_at, note FROM appointments WHERE public_id IN ('APT-3001','APT-3003') ORDER BY public_id;
+APT-3001 | NULL                | DST 이전
+APT-3003 | 2026-03-08 08:42:00 | follow-up ✓
+2 rows; NULL and UTF-8 were rendered distinctly.
+
+> SELECT @@session.transaction_read_only;
+1
+> SELECT @@session.tx_read_only;
+1
+
+> INSERT INTO scheduler_job_runs (id, job_key, status, started_at) VALUES (99, 'JOB-2099', 'queued', '2026-03-08 09:00:00');
+write refused: read_only is set on this datasource
+# The UI did not display a database error code. Any error_code claim is therefore null.
+
+> F3, c, save path entry
+1 row written to docs/pilot/synthetic-domain-evaluation/exports/healthcare-ops.csv
+
+> F10
+TUI exited 0.
+
+# Not exercised: expanding individual tables/columns in the schema tree. The current
+# schema node and similarly named clinic values were observed, but table navigation
+# itself was not completed and receives no score.

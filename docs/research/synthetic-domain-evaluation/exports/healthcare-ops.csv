@@ -1,0 +1,2 @@
+job_key,status,started_at,finished_at,error_code
+JOB-2042,failed,2026-03-08 07:00:00,2026-03-08 07:00:19,DST_WINDOW_COLLISION

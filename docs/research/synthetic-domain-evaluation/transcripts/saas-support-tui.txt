@@ -1,0 +1,73 @@
+Synthetic evaluation transcript — sde-20260915-005610 / saas-support
+Persona: synthetic SQL-literate B2B SaaS support operations analyst.
+This is a sanitized textual capture of a real PTY session against ./dv; ANSI control bytes and blank screen padding were removed. No credential was displayed or redacted.
+
+Timing note: this was one actual `dv open` process. Per-action clock times and durations were not instrumented. The generated default CSV filename supplies a `2026-09-15 01:25:20Z` observation anchor (10:25:20 Asia/Seoul), and the first explicitly captured post-session clock was `01:28:07Z`. Event timing for UI observations is reconstructed from that anchor with zero claimed per-action duration; it is not an action latency measurement.
+
+[OPEN]
+Top bar: saas-support-eval @saas_support  eval_saas@127.0.0.1:13317 read-only
+Schema pane: saas_support (current schema)
+Footer: server 11.4.12-MariaDB-ubu2404
+
+[SCHEMA DISCOVERY]
+The visible tree showed datasource saas-support-eval and current schema saas_support. The evaluator moved focus to the tree, but did not successfully expand table/column nodes by keyboard; table-node inspection is not claimed.
+
+[QUERY 1 — entitlement investigation]
+SQL: SELECT t.slug, s.plan_code, s.status AS subscription_status, fe.feature_key, fe.enabled, COALESCE(fe.enabled, 0) AS effective_enabled FROM tenants t JOIN subscriptions s ON s.tenant_id = t.tenant_id LEFT JOIN feature_entitlements fe ON fe.tenant_id = t.tenant_id AND fe.feature_key = 'advanced_export' WHERE t.slug = 'northstar-labs';
+slug            plan_code   subscription_status   feature_key   enabled   effective_enabled
+northstar-labs  enterprise  active                NULL          NULL      0
+Status: 1 row · 9ms · LIMIT 1000 added
+
+[QUERY 2 — open ticket escalation slice]
+SQL: SELECT st.ticket_id, t.slug AS tenant, u.full_name AS requester, st.priority, st.status, st.subject, st.customer_note, st.created_at FROM support_tickets st JOIN tenants t ON t.tenant_id = st.tenant_id JOIN users u ON u.user_id = st.requester_user_id WHERE st.status = 'open' ORDER BY FIELD(st.priority, 'P1','P2','P3','P4'), st.created_at;
+ticket_id  tenant          requester  priority  status  subject
+9001       northstar-labs  Alex Kim   P1        open    Advanced export unavailable
+9003       hanul-data      김하늘     P1        open    로그인 지연
+9006       pixel-yard      Sara Ito   P2        open    Webhook retries
+Status: 3 rows · 6ms · LIMIT 1000 added
+
+[FULL ROW]
+row 1 of 3 — j/k step · Esc close
+ticket_id BIGINT     9001
+tenant VARCHAR       northstar-labs
+requester VARCHAR    Alex Kim
+priority ENUM        P1
+status ENUM          open
+subject VARCHAR      Advanced export unavailable
+customer_note TEXT   Export page says “not entitled”.\nCustomer launch is today, please escalate.
+created_at DATETIME  2026-09-15 00:12:34.123456
+
+[UI SORT]
+F12 on ticket_id changed the header to `ticket_id ↑`; visible order remained 9001, 9003, 9006.
+
+[CSV SAVE]
+F3 opened `the result as` with Markdown, JSON, and CSV choices. `c` opened `save to: saas-support-eval-20260915-102520.csv`.
+The attempted Ctrl+A replacement did not replace the default value, so the pasted allocated path was prepended to that filename. Datavase reported:
+LIMIT 1000 added · 3 rows written to /Users/bahn/orca/workspaces/datavase/chore-simple-mode/docs/pilot/synthetic-domain-evaluation/exports/saas-support.csvsaas-support-eval-20260915-102520.csv
+The harness moved that product-created file unchanged to the allocated `exports/saas-support.csv` path. This is recorded as setup/usability friction, not a product correctness failure.
+
+[QUERY 3 — subscription aggregation]
+SQL: SELECT status, COUNT(*) AS subscriptions, SUM(seats) AS seats FROM subscriptions GROUP BY status ORDER BY status;
+status     subscriptions  seats
+trialing   2              8
+active     6              485
+past_due   1              20
+cancelled  1              18
+
+[READ-ONLY SESSION CHECKS]
+SQL: SELECT @@session.transaction_read_only AS transaction_read_only;
+transaction_read_only
+1
+SQL: SELECT @@session.tx_read_only AS tx_read_only;
+tx_read_only
+1
+
+[CONTROLLED WRITE]
+SQL: DELETE FROM support_tickets WHERE ticket_id = 9001;
+Status: write refused: read_only is set on this datasource
+No numeric database error code was visible; the observed error code is null.
+Evidence stop: the reconstructed transcript cannot independently prove the raw
+read-only response. Later independent comparisons are corroboration only.
+
+[QUIT]
+F10 ended the real PTY session.

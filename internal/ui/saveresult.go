@@ -72,9 +72,14 @@ const pageSavePath = "save-path"
 // promptSavePath asks where the CSV goes, offering a name that will not
 // collide, and writes on Enter.
 func (a *App) promptSavePath() {
-	input := tview.NewInputField().SetLabel("save to: ").
-		SetText(defaultResultPath(a.conn.DataSource().Name, time.Now()))
-	input.SetBorder(true).SetTitle(" the result as a CSV file ")
+	// A placeholder rather than text in the field. A field arriving with a
+	// name already in it puts the caret after that name, so the first thing
+	// anyone types extends it — and two names concatenate into a filename
+	// that is perfectly valid and nobody chose. Empty, the suggestion is
+	// still on screen and Enter still takes it.
+	suggested := defaultResultPath(a.conn.DataSource().Name, time.Now())
+	input := tview.NewInputField().SetLabel("save to: ").SetPlaceholder(suggested)
+	input.SetBorder(true).SetTitle(" the result as a CSV file · ↩ for the name shown ")
 
 	closePrompt := func() {
 		a.pages.RemovePage(pageSavePath)
@@ -85,12 +90,8 @@ func (a *App) promptSavePath() {
 			closePrompt()
 			return
 		}
-		path := strings.TrimSpace(input.GetText())
-		if path == "" {
-			return
-		}
 		closePrompt()
-		a.saveResult(path)
+		a.saveResult(chosenPath(input.GetText(), suggested))
 	})
 
 	a.pages.AddPage(pageSavePath, centred(input, 64, 3), true, true)
@@ -109,4 +110,13 @@ func (a *App) saveResult(path string) {
 		return
 	}
 	a.notice(saveSummary(a.buf.RowCount(), path, len(text), a.buf.AtCapacity()))
+}
+
+// chosenPath is what to write to: what was typed, or the name the prompt
+// suggested when nothing was.
+func chosenPath(typed, suggested string) string {
+	if p := strings.TrimSpace(typed); p != "" {
+		return p
+	}
+	return suggested
 }

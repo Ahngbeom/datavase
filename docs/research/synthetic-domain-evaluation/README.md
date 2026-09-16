@@ -84,7 +84,7 @@ evidence:
   "stderr": "",
   "transcript": {
     "applicable": true,
-    "path": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+    "path": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
     "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     "size_bytes": 3
   },
@@ -108,7 +108,7 @@ evidence:
     },
     "artifacts": [
       {
-        "path": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+        "path": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
         "kind": "file",
         "creator": "harness_created",
         "state": "present",
@@ -133,11 +133,11 @@ evidence:
       "write_refused": true,
       "error_code": 1792,
       "error_message": "write refused: read_only is set on this datasource",
-      "result_ref": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt"
+      "result_ref": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt"
     },
     "artifacts": [
       {
-        "path": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+        "path": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
         "kind": "file",
         "creator": "harness_created",
         "state": "present",
@@ -149,7 +149,7 @@ evidence:
   "artifacts": {
     "before": [
       {
-        "path": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+        "path": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
         "kind": "file",
         "creator": "harness_created",
         "state": "absent",
@@ -159,7 +159,7 @@ evidence:
     ],
     "after": [
       {
-        "path": "docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
+        "path": "docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt",
         "kind": "file",
         "creator": "harness_created",
         "state": "present",
@@ -232,13 +232,34 @@ alias. The top bar must also show the assigned datasource, database, and
 `read-only`.
 
 The write is a pass only when all criteria agree: the TUI reports exactly
-`write refused: read_only is set on this datasource` (the product emits this
-only after classifying MariaDB error 1792, `READ ONLY`);
-`observed.query.error_code` is `1792` and `write_refused` is true; and an
-independent MariaDB read confirms the target row count/value did not change.
+`write refused: read_only is set on this datasource`; `write_refused` is true;
+and an independent MariaDB read confirms the target row count/value did not
+change.
+
+**`observed.query.error_code` is not among them, and an earlier version of
+this contract was wrong to require it.** On a `read_only` datasource the
+product replaces the server's sentence with the normalized one before the
+interface shows it, so no run can observe the number through the TUI — which
+is why every scenario in this evaluation recorded `null` and then failed
+itself for it. Seeing the exact wording is what establishes the classification,
+because the product emits it only after matching MariaDB error 1792, and the
+product's own tests pin that mapping. A rerun that wants the raw number must
+take it from a channel that does not normalize: the MariaDB CLI on the same
+session, or a datasource that is not marked `read_only`.
 Any successful write, other error, state value other than `1`, or unverifiable
 post-state is a critical stop. Session read-only is an accidental-write guard,
 not a substitute for database privileges.
+
+## Where these files live
+
+This evaluation sits under `docs/research/` beside the persona interviews,
+because it is synthetic and produced no pilot day. `docs/pilot/` is for the
+run with real people, and nothing here belongs to it.
+
+It was carried out while the tree was under `docs/pilot/`, so the event logs,
+the terminal transcripts and the dated execution plan still name that path.
+Those files record what was run and are left as they were; the paths in this
+file, in `manifest.json` and in `summary.md` are the current ones.
 
 ## Reproduce
 
@@ -250,7 +271,7 @@ make build
 shasum -a 256 ./dv
 file ./dv
 go test ./internal/cli ./internal/config ./internal/db ./internal/export ./internal/result ./internal/ui
-jq -e '.schema_version == "1.0" and .synthetic == true and (.scenarios | length == 3)' docs/pilot/synthetic-domain-evaluation/manifest.json
+jq -e '.schema_version == "1.0" and .synthetic == true and (.scenarios | length == 3)' docs/research/synthetic-domain-evaluation/manifest.json
 ```
 
 Then, for one scenario at a time, use its exact allocation from the isolation
@@ -305,10 +326,11 @@ is the portable export criterion.
 
 ## Cleanup status
 
-Final evidence review classifies all three scenarios as **INCONCLUSIVE /
-EVIDENCE STOP** because the retained product evidence does not include the raw
-numeric MariaDB error code `1792`. This is not a confirmed product critical
-defect. See [summary.md](summary.md) for the completion matrix, cross-domain
+Final evidence review classifies all three scenarios as **INCONCLUSIVE**,
+because two of three transcripts are reconstructions rather than raw product
+output and every domain's export lineage is unverified. The numeric error code
+the contract above once required is not among the reasons: it was asking the
+interface for something the product removes. See [summary.md](summary.md) for the completion matrix, cross-domain
 findings, and evidence-quality limitations. In particular, the SaaS event log
 was reconstructed after accidental truncation of the prior untracked JSONL and
 does not claim byte identity with that lost file.

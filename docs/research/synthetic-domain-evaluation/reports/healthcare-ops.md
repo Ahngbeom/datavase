@@ -13,9 +13,11 @@ TUI workflow. The only TUI transcript is a sanitized reconstruction created
 after the session; raw PTY bytes, per-action boundaries, duration, and the
 numeric database error code were not retained. The reconstructed session says
 the write was refused with the expected normalized wording, and a later
-independent query found zero target rows, but `1792` was never observed in raw
-evidence. The README requires all three signals. The controlled-write result
-is therefore inconclusive and is the retrospective evaluation stop.
+independent query found zero target rows. `1792` was not observed, and on a
+`read_only` datasource it cannot be: the product replaces the server's
+sentence before the interface shows it. The controlled-write result is
+inconclusive here because the transcript is a reconstruction, not because that
+number is missing.
 
 The original run did not create the shared STOP signal because this evidence
 gap was recognized only during review. Events `healthcare-ops-003` through
@@ -33,7 +35,7 @@ validation and are excluded from scenario-completion scoring.
 | Failed-job query | post-stop corroboration | `healthcare-ops-003` contains exact MariaDB batch stdout for `JOB-2042 / failed / DST_WINDOW_COLLISION`. It corroborates fixture state but does not validate the reconstructed TUI display. |
 | Similar clinic names and times | post-stop corroboration | `healthcare-ops-004` contains the exact 11-row MariaDB batch output. It does not establish TUI navigation or rendering. |
 | Audit boundary | post-stop corroboration | `healthcare-ops-005` contains five action/type/time rows and does not select `details`. It does not establish the earlier TUI result. |
-| Read-only guard | inconclusive / stop | The reconstructed transcript records both session variables as `1` and the normalized refusal wording; `healthcare-ops-006` later reports zero `JOB-2099` rows. No raw observed `1792` exists, so the canonical refusal contract does not pass. |
+| Read-only guard | inconclusive | The reconstructed transcript records both session variables as `1` and the normalized refusal wording; `healthcare-ops-006` later reports zero `JOB-2099` rows. The contract's numeric `1792` is unobtainable through the interface by design, and the transcript is a reconstruction, so this is not scored. |
 | CSV artifact | integrity only; lineage unverified | `healthcare-ops-007` is an exact rerunnable `shasum` command and confirms the current 126-byte file digest. Because creation is supported only by the reconstructed transcript, the event classifies the file as `pre_existing` and makes no product-created or independent-equality claim. |
 | Generic credential scan | partial | `healthcare-ops-008` records the exact generic-pattern `rg` invocation over the five healthcare repository artifacts; exit `1` with empty stdout means that pattern found no match. The original generated password is unavailable, so exact-value absence is unverified. |
 
@@ -56,7 +58,8 @@ and a trustworthy product-created export lineage were not established.
   integer placeholder because the historical check duration was not retained.
   Neither value is suitable for latency analysis.
 - The evaluator datasource password is unavailable. A fresh authenticated
-  `dv open`, raw 1792 capture, and exact password-value artifact scan could not
+  `dv open`, a raw numeric code from a channel the product does not normalize,
+  and an exact password-value artifact scan could not
   be performed. Reproduction requires a new password, datasource, and seed.
 - The generic scan is only a pattern scan. A separate final workspace check
   found the deliberate canary only in fixture line 90, but no canonical event

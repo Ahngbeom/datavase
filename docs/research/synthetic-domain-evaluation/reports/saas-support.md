@@ -2,9 +2,9 @@
 
 ## Classification
 
-**INCONCLUSIVE / EVIDENCE STOP.** This is a synthetic-agent evaluation, not a real-user pilot. It contributes zero qualifying pilot days.
+**INCONCLUSIVE.** This is a synthetic-agent evaluation, not a real-user pilot. It contributes zero qualifying pilot days.
 
-One real `dv open` PTY process reached `saas-support-eval @saas_support` and its sanitized transcript records three reads, full-row/sort interaction, CSV save, two session read-only values of `1`, and the visible refusal `write refused: read_only is set on this datasource` (`saas-support-007`). The UI did not expose a numeric database error code; the observed code is therefore `null`. Because the retained PTY is a reconstructed textual capture rather than raw terminal bytes, the read-only result is conservatively inconclusive and is the evidence stop. Later independent checks are retained only as corroboration and excluded from scored product-success conclusions.
+One real `dv open` PTY process reached `saas-support-eval @saas_support` and its sanitized transcript records three reads, full-row/sort interaction, CSV save, two session read-only values of `1`, and the visible refusal `write refused: read_only is set on this datasource` (`saas-support-007`). The UI did not expose a numeric database error code, and on a `read_only` datasource it never does: the product replaces the server's sentence before the interface shows it, so the observed code is `null` in any run of this scenario. The read-only result is conservatively inconclusive because the retained PTY is a reconstructed textual capture rather than raw terminal bytes. Later independent checks are retained only as corroboration and excluded from scored product-success conclusions.
 
 ## Evidence
 

@@ -5,16 +5,36 @@
 The evaluated `dv` binary made actual connections to three isolated local
 MariaDB databases and executed representative SQL. The retained evidence shows
 useful results for commerce incident response, SaaS support investigation, and
-healthcare operations. It does **not** satisfy the predeclared controlled-write
-pass contract in any domain: none of the retained product evidence includes the
-raw numeric MariaDB error code `1792` alongside the normalized refusal and an
-independent unchanged-row check.
+healthcare operations.
 
-All three scenarios are therefore **INCONCLUSIVE / EVIDENCE STOP**. This is an
-evidence-quality outcome, not a confirmed product critical defect. The visible
-refusal wording and later database state are consistent with writes being
-blocked, but the missing raw numeric signal prevents a pass. Post-stop
-independent reads are retained as corroboration only and do not restore scenario
+All three scenarios are **INCONCLUSIVE**, for two different reasons that were
+first reported as one.
+
+**The controlled-write criterion was mis-specified and cannot be met through
+the interface.** It asked for the raw numeric MariaDB error code `1792` in
+retained product evidence. On a `read_only` datasource the product never emits
+it: `readOnlyRefusal` in `internal/ui/transport.go` replaces the server's
+sentence with `write refused: read_only is set on this datasource`, which the
+contract in `README.md` describes correctly and then contradicts by demanding
+the number the replacement removed. What each scenario did retain — the exact
+refusal wording, both session variables at `1`, and an independent read showing
+the row unchanged — is what the contract's own text says that wording proves.
+This is a defect in the criterion, found by running it, and not a product
+defect or a loss of evidence.
+
+The raw code is already pinned where it can be: `TestIsReadOnlyRefusalKnows
+TheServersNumber` in `internal/db` asserts the number, and the read-only
+integration test asserts the server's own `READ ONLY` refusal. A future rerun
+that wants the raw signal has to take it from a channel the product does not
+normalize — the MariaDB CLI on the same session, or a datasource that is not
+marked `read_only`.
+
+**The scenarios remain inconclusive on their own evidence**, which is the
+reason the disposition does not change. Two of three transcripts are
+reconstructions rather than raw product output, one event log was rebuilt
+after the original was truncated, healthcare retained no PTY process artifact
+at all, and CSV lineage is unverified in every domain. Post-stop independent
+reads are retained as corroboration only and do not restore scenario
 completion.
 
 This was a synthetic-agent evaluation. It produced zero qualifying pilot days
@@ -49,7 +69,7 @@ removed after final inspection.
 | Exact independent values | Exact post-stop MariaDB outputs for all three reads | Exact post-stop MariaDB outputs for all three reads | Exact post-stop MariaDB outputs for three operational reads |
 | Datasource/schema/read-only cue | Visible in raw PTY | Recorded in reconstructed transcript | Recorded only in reconstructed transcript |
 | Session read-only variables | Both spellings displayed as `1` | Both spellings recorded as `1` in reconstruction | Both spellings recorded as `1` in reconstruction |
-| Controlled write | Normalized refusal; row unchanged; raw `1792` absent | Normalized refusal in reconstruction; later row count unchanged; raw `1792` absent | Normalized refusal in reconstruction; later row count unchanged; raw `1792` absent |
+| Controlled write | Normalized refusal; row unchanged; criterion's raw `1792` unobtainable through the interface | Normalized refusal in reconstruction; later row count unchanged; same criterion defect | Normalized refusal in reconstruction; later row count unchanged; same criterion defect |
 | CSV | Partial; product save required harness rename | Partial; product save required harness `mv` | Integrity only; product lineage unverified |
 | Credential check | Generic pattern scan only; exact password unavailable | Not scored; no surviving reproducible scan | Generic pattern scan only; exact password unavailable |
 | Final disposition | **INCONCLUSIVE / STOP** | **INCONCLUSIVE / STOP** | **INCONCLUSIVE / STOP** |
@@ -59,15 +79,23 @@ read-only proof, and fully verified artifact boundaries were not met.
 
 ## Critical findings
 
-1. **No scenario retained the complete read-only proof required for a pass.**
-   The contract requires both session variables to equal `1`, the exact visible
-   refusal, observed numeric error code `1792`, and an independent unchanged-row
-   result. The numeric code is absent in all three domains. This is the common
-   stop condition.
-2. **No wrong result, wrong datasource/schema indicator, successful controlled
-   write, or credential disclosure was confirmed.** The evidence gaps prevent a
-   pass, but they do not establish a product defect.
-3. **The shared STOP file was not created during the original work.** The gap was
+1. **The read-only criterion asks the interface for something it is built to
+   remove.** The contract requires both session variables to equal `1`, the
+   exact visible refusal, the numeric error code `1792`, and an independent
+   unchanged-row result. The first, second and fourth were obtained in every
+   domain. The third cannot be: the product replaces the server's sentence,
+   which the contract states and then asks to see through anyway. Rewrite the
+   criterion before the next run rather than treating this as a finding about
+   the product.
+2. **One product defect was confirmed: the CSV save prompt appends what is
+   typed to the name it suggested.** Two of three scenarios saved to a
+   concatenated filename nobody chose and had to rename the file afterwards.
+   An absolute path fails loudly; a relative one succeeds quietly at the wrong
+   name. Filed as issue #105. It appears again under cross-domain UX below.
+3. **No wrong result, wrong datasource/schema indicator, successful controlled
+   write, or credential disclosure was confirmed.** The remaining evidence gaps
+   prevent a pass, but they do not establish a further product defect.
+4. **The shared STOP file was not created during the original work.** The gap was
    identified retrospectively while reviewing evidence. Each report therefore
    marks later comparisons as post-stop corroboration and excludes them from
    completion scoring.
@@ -124,7 +152,9 @@ claim:
 - SaaS support has no surviving reproducible credential scan and is not scored;
 - the healthcare canary is deliberate fixture content, and no canonical event
   proves a complete exact-value boundary scan;
-- temporary config/state directories and all three containers remain present.
+- the temporary config/state root and all three containers were removed after
+  the final inspection, which an earlier draft of this section denied while the
+  environment section above recorded it correctly.
 
 The retained CSV provenance differs by domain. Commerce records the final file
 as harness-created after a product save to an unintended filename. SaaS records
@@ -160,38 +190,38 @@ as equivalent to raw product output.
 
 Shared contract and allocation:
 
-- `docs/pilot/synthetic-domain-evaluation/README.md`
-- `docs/pilot/synthetic-domain-evaluation/manifest.json`
+- `docs/research/synthetic-domain-evaluation/README.md`
+- `docs/research/synthetic-domain-evaluation/manifest.json`
 - `docs/superpowers/specs/2026-09-15-synthetic-domain-evaluation-design.md`
 - `docs/superpowers/plans/2026-09-15-synthetic-domain-evaluation.md`
 
 Commerce:
 
-- Fixture: `docs/pilot/synthetic-domain-evaluation/fixtures/commerce.sql`
-- Events: `docs/pilot/synthetic-domain-evaluation/events/commerce.jsonl`
+- Fixture: `docs/research/synthetic-domain-evaluation/fixtures/commerce.sql`
+- Events: `docs/research/synthetic-domain-evaluation/events/commerce.jsonl`
   (`commerce-001` through `commerce-018`)
-- Transcript: `docs/pilot/synthetic-domain-evaluation/transcripts/commerce-tui.txt`
-- Export: `docs/pilot/synthetic-domain-evaluation/exports/commerce.csv`
-- Report: `docs/pilot/synthetic-domain-evaluation/reports/commerce.md`
+- Transcript: `docs/research/synthetic-domain-evaluation/transcripts/commerce-tui.txt`
+- Export: `docs/research/synthetic-domain-evaluation/exports/commerce.csv`
+- Report: `docs/research/synthetic-domain-evaluation/reports/commerce.md`
 
 SaaS support:
 
-- Fixture: `docs/pilot/synthetic-domain-evaluation/fixtures/saas-support.sql`
-- Events: `docs/pilot/synthetic-domain-evaluation/events/saas-support.jsonl`
+- Fixture: `docs/research/synthetic-domain-evaluation/fixtures/saas-support.sql`
+- Events: `docs/research/synthetic-domain-evaluation/events/saas-support.jsonl`
   (`saas-support-006`, `saas-support-007`, `saas-support-011`, and
   `saas-support-017` through `saas-support-021`)
-- Transcript: `docs/pilot/synthetic-domain-evaluation/transcripts/saas-support-tui.txt`
-- Export: `docs/pilot/synthetic-domain-evaluation/exports/saas-support.csv`
-- Report: `docs/pilot/synthetic-domain-evaluation/reports/saas-support.md`
+- Transcript: `docs/research/synthetic-domain-evaluation/transcripts/saas-support-tui.txt`
+- Export: `docs/research/synthetic-domain-evaluation/exports/saas-support.csv`
+- Report: `docs/research/synthetic-domain-evaluation/reports/saas-support.md`
 
 Healthcare operations:
 
-- Fixture: `docs/pilot/synthetic-domain-evaluation/fixtures/healthcare-ops.sql`
-- Events: `docs/pilot/synthetic-domain-evaluation/events/healthcare-ops.jsonl`
+- Fixture: `docs/research/synthetic-domain-evaluation/fixtures/healthcare-ops.sql`
+- Events: `docs/research/synthetic-domain-evaluation/events/healthcare-ops.jsonl`
   (`healthcare-ops-001` through `healthcare-ops-009`)
-- Transcript: `docs/pilot/synthetic-domain-evaluation/transcripts/healthcare-ops-tui.txt`
-- Export: `docs/pilot/synthetic-domain-evaluation/exports/healthcare-ops.csv`
-- Report: `docs/pilot/synthetic-domain-evaluation/reports/healthcare-ops.md`
+- Transcript: `docs/research/synthetic-domain-evaluation/transcripts/healthcare-ops-tui.txt`
+- Export: `docs/research/synthetic-domain-evaluation/exports/healthcare-ops.csv`
+- Report: `docs/research/synthetic-domain-evaluation/reports/healthcare-ops.md`
 
 ## Limitations
 
@@ -206,8 +236,12 @@ UI status notices.
 ## Conclusion
 
 Datavase demonstrably connected to local MariaDB targets and supported useful
-read workflows. The run cannot support a release-quality read-only safety pass
-or a completed synthetic-domain evaluation because the predeclared numeric
-error-code evidence was not retained. A future rerun should preserve raw PTY
-bytes, exact action timestamps, independent seed checks, the raw `1792` signal,
-exact generated-password scans, and direct product export paths from the start.
+read workflows. It cannot support a completed synthetic-domain evaluation,
+because two of three scenarios rest on reconstructed transcripts and every
+domain's export lineage is unverified. It found one real defect, in CSV export,
+and one defect in its own contract.
+
+A future rerun should preserve raw PTY bytes, exact action timestamps,
+independent seed checks, exact generated-password scans, and direct product
+export paths from the start — and should take the raw `1792` from the MariaDB
+CLI rather than asking the interface for a number it exists to replace.

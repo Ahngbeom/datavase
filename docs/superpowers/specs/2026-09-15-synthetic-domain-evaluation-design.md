@@ -76,7 +76,7 @@ record or Markdown report.
 
 ## Evidence contract
 
-Artifacts live under `docs/pilot/synthetic-domain-evaluation/`:
+Artifacts live under `docs/research/synthetic-domain-evaluation/`:
 
 - `README.md`: method, limitations, environment, and reproduction steps;
 - `fixtures/<domain>.sql`: reviewed schema and deterministic seed data;

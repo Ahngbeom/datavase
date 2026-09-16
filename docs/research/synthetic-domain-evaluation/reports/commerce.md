@@ -11,9 +11,12 @@ Overall result: **INCONCLUSIVE — evaluation stopped at the controlled-write
 contract**. Connection, investigation, result inspection, sorting, and the two
 session read-only checks produced usable evidence. The controlled write showed
 the expected normalized refusal and the independent post-check found no data
-change, but the captured product evidence did not expose MariaDB error code
-`1792`. The current evidence contract requires that numeric code, so the write
-cannot be scored as a pass. CSV export was also only partial because the
+change. It cannot be scored against the contract as written, which also
+requires the numeric MariaDB code `1792` to be observed: on a `read_only`
+datasource the product replaces the server's sentence with the normalized one,
+so that number never reaches the interface. `observed.query.error_code` is
+`null` here because the harness declined to write an inferred value into an
+observed field, which is the right call. The criterion is what needs fixing. CSV export was also only partial because the
 save-path field retained its generated default filename; the evaluator renamed
 the product-created file to the manifest path afterward.
 
@@ -49,7 +52,7 @@ the product-created file to the manifest path afterward.
 | Client-side sort | pass | `commerce-008` | F12 sorted status ascending and displayed the sort indicator and notice. |
 | CSV export | partial | `commerce-009` | Six sorted rows were correctly encoded, but typed absolute path was prepended to the retained default filename. The evaluator renamed that output to `exports/commerce.csv`; this is therefore not a clean pass for direct product creation at the manifest path. |
 | Server-confirmed read-only state | pass | `commerce-011`, `commerce-012` | Both `@@session.transaction_read_only` and `@@session.tx_read_only` returned `1`. |
-| Controlled UPDATE refusal | inconclusive / stop | `commerce-013`, `commerce-014` | UI showed exactly `write refused: read_only is set on this datasource`, and the immediate independent post-check kept `ORD-1007` at `PENDING`. However, `observed.query.error_code` is necessarily `null`: no raw numeric `1792` evidence was captured and the current password is unavailable for a faithful rerun. This fails the canonical pass contract and stops completion scoring. |
+| Controlled UPDATE refusal | inconclusive / stop | `commerce-013`, `commerce-014` | UI showed exactly `write refused: read_only is set on this datasource`, and the immediate independent post-check kept `ORD-1007` at `PENDING`. However, `observed.query.error_code` is necessarily `null`: the product removes the numeric code before the interface sees it, so no run of this scenario can supply it, and the current password is unavailable for a faithful rerun. The criterion cannot be met as written; the refusal and unchanged row were observed. |
 | Credential-pattern scan | partial | `commerce-018` | Sanitized `rg` invocation lists the exact commerce fixture, event log, transcript, report, and export paths; exit 1 with empty stdout means the generic pattern found no matches. The unavailable original password prevents the stronger exact-value scan. |
 
 Under the current contract, `commerce-013` is the evaluation stop: the three

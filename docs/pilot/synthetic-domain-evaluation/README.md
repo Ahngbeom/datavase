@@ -305,8 +305,21 @@ is the portable export criterion.
 
 ## Cleanup status
 
-Baseline setup created no evaluation containers. Scenario containers and their
-private temporary config/state directories are pending creation by their
-assigned evaluators. Final synthesis must update this section with the exact
-container and temporary-directory cleanup outcome; repository evidence files
-are retained intentionally.
+Final evidence review classifies all three scenarios as **INCONCLUSIVE /
+EVIDENCE STOP** because the retained product evidence does not include the raw
+numeric MariaDB error code `1792`. This is not a confirmed product critical
+defect. See [summary.md](summary.md) for the completion matrix, cross-domain
+findings, and evidence-quality limitations. In particular, the SaaS event log
+was reconstructed after accidental truncation of the prior untracked JSONL and
+does not claim byte identity with that lost file.
+
+Cleanup completed on 2026-09-16 after the final evidence inventory:
+
+- `datavase-eval-commerce`, `datavase-eval-saas`, and
+  `datavase-eval-health` were removed;
+- the dedicated temporary evaluation root
+  `/private/tmp/datavase-sde-20260915-005610/`, including all scenario config
+  and state directories, was removed;
+- the shared `STOP` path was absent because the evidence gaps were recognized
+  retrospectively rather than signaled during the original workflows; and
+- repository evidence files were retained intentionally.

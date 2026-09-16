@@ -5,6 +5,22 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## Unreleased
+
+### Fixed
+
+**Typing a path into the save prompt replaces the name it suggested instead
+of extending it.** The suggested name was text in the field, so the caret sat
+after it and the first thing anyone typed ran onto the end. An absolute path
+then failed loudly. A relative one did not: the two names concatenate into a
+filename that is perfectly valid, so the file was written, the status line
+said so, and it was somewhere nobody chose. The name is now shown as a
+placeholder in an empty field — still on screen, still what `↩` alone takes,
+and impossible to type onto the end of.
+
+Found by the synthetic domain evaluation in `docs/research/`, which hit it in
+two of three scenarios and renamed the file each time.
+
 ## v0.11.0 — 2026-09-14
 
 **Nothing to do before upgrading,** unless you have a `read_only` datasource

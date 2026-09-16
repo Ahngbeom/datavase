@@ -121,3 +121,43 @@ func TestARefusedWriteSaysTheDataSourceIsReadOnly(t *testing.T) {
 		t.Errorf("the failure does not point at the read_only setting:\n%s", h.text())
 	}
 }
+
+// The prompt arrives with a name already in it, and anyone who wants a
+// different one types theirs. Extending the suggestion instead of replacing
+// it wrote a file to a name nobody chose — silently, when what was typed was
+// a relative one, because the two names concatenate into a valid filename.
+func TestTypingAPathDoesNotExtendTheOneThatWasSuggested(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	path := filepath.Join(t.TempDir(), "chosen.csv")
+
+	h.typeSQL("SELECT 1 AS a")
+	h.do(keymap.ActionRun)
+	h.waitFor("a result", func(a *App) bool { return a.status.phase == phaseDone })
+
+	h.do(keymap.ActionCopyResult)
+	h.waitFor("the format chooser", func(a *App) bool { return a.pages.HasPage(pageCopyFormat) })
+	h.typeRunes("c")
+	h.waitFor("the path prompt", func(a *App) bool { return a.pages.HasPage(pageSavePath) })
+
+	// No clearing first. Nothing on screen says the field needs it, and a
+	// field with a name in it does not look like one that does.
+	h.typeRunes(path)
+	h.press(tcell.KeyEnter)
+
+	h.waitFor("the notice", func(a *App) bool { return strings.Contains(a.status.message, "written to") })
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("nothing was written to the path that was typed: %v\nnotice: %s",
+			err, h.inspectString(func(a *App) string { return a.status.message }))
+	}
+}
+
+// inspectString reads a string off the interface's own goroutine.
+func (h *harness) inspectString(read func(*App) string) string {
+	h.t.Helper()
+	var out string
+	h.inspect(func(a *App) bool {
+		out = read(a)
+		return true
+	})
+	return out
+}

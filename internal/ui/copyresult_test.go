@@ -113,3 +113,17 @@ func TestSaveSummaryNamesTheFile(t *testing.T) {
 		}
 	}
 }
+
+// Enter on an empty field still means the name the prompt suggested, which is
+// what makes leaving it empty safe to offer.
+func TestAnEmptyPathMeansTheSuggestedOne(t *testing.T) {
+	if got := chosenPath("", "suggested.csv"); got != "suggested.csv" {
+		t.Errorf("chosenPath() = %q, want the suggestion", got)
+	}
+	if got := chosenPath("   ", "suggested.csv"); got != "suggested.csv" {
+		t.Errorf("chosenPath() = %q, want whitespace to read as empty", got)
+	}
+	if got := chosenPath("  mine.csv  ", "suggested.csv"); got != "mine.csv" {
+		t.Errorf("chosenPath() = %q, want what was typed", got)
+	}
+}

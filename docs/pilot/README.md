@@ -26,9 +26,13 @@ recommend it, not what they would pay. Those come after a yes.
 
 ## Ship it before you start
 
-The pilot runs on **v0.11.0 or later**. Do not start it on v0.10.x: the
-release before this one would drop a session without saying so, which is the
-exact failure the churned-user interview named as the moment retention died.
+The pilot runs on **v0.11.1 or later**. Do not start it on v0.10.x or on
+v0.11.0: the release before v0.11 would drop a session without saying so,
+which is the exact failure the churned-user interview named as the moment
+retention died, and v0.11.0 itself shipped with a save-prompt defect
+(fixed in v0.11.1, see issue #105) where a typed path could concatenate onto
+the suggested filename and save silently at the wrong location — exactly the
+kind of failure the stop conditions below exist to catch.
 
 ## Who to recruit
 

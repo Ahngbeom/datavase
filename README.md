@@ -343,11 +343,12 @@ does anywhere else.
 **Copying** goes two ways at once. The terminal is asked to take the text —
 the only route that reaches your own clipboard when `dv` is running over SSH —
 and a local session also hands it to `pbcopy` on macOS, `clip` on Windows, or
-`wl-copy`/`xclip` on Linux, whichever applies. That second route is there
-because the first is a request the terminal may refuse: Ghostty asks before
-allowing it, iTerm2 keeps it off until "Applications in terminal may access
-clipboard" is ticked, tmux drops it without `set -g set-clipboard on`, and
-Terminal.app has never implemented it.
+`wl-copy`/`xclip` on Linux, whichever of those is actually installed; without
+one, only the terminal route is tried. That second route is there because the
+first is a request the terminal may refuse: Ghostty asks before allowing it,
+iTerm2 keeps it off until "Applications in terminal may access clipboard" is
+ticked, tmux drops it without `set -g set-clipboard on`, and Terminal.app has
+never implemented it.
 
 WSL runs the Linux binary, so it takes the Linux route above — `wl-copy` or
 `xclip`, which need a Wayland or X11 session to find. A plain WSL2 shell has

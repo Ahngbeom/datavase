@@ -405,6 +405,19 @@ func (c *Conn) startTransaction() string {
 //
 // An empty answer is never called stale: it carries nothing to repeat, and
 // treating repeated silence as significant would gain nothing.
+//
+// This is content equality standing in for statement identity, and the two
+// are not the same thing: two different statements that happen to raise the
+// same Level, Code and Message back to back — the same truncating INSERT run
+// twice with nothing else in between, say — will have the second call read
+// as a repeat of the first and go unreported. The wire protocol's OK packet
+// carries a warning count that would settle this per statement rather than
+// per connection, but the driver in use (go-sql-driver/mysql) parses past
+// those bytes without keeping them, so there is nothing more precise to ask
+// for without forking it. What this trades away is narrow — a warning that
+// already reached the bar once, verbatim, immediately reasserting itself —
+// against what the pre-existing behaviour traded away, which was every
+// unrelated statement afterwards inheriting one that was never theirs.
 func (c *Conn) staleWarnings(connID uint64, found []Warning) bool {
 	c.lastWarningsMu.Lock()
 	defer c.lastWarningsMu.Unlock()

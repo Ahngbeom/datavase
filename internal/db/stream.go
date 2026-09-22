@@ -297,6 +297,14 @@ func (s *Stream) readWarnings(conn *sql.Conn, stmtErr error) {
 		return
 	}
 
+	// SHOW WARNINGS is not cleared for every statement on this server — a
+	// plain SELECT or a SET that raised nothing of its own can still get
+	// back an earlier statement's answer. Reporting that again would name
+	// this statement responsible for something it did not do.
+	if s.conn.staleWarnings(s.connID, found) {
+		return
+	}
+
 	s.mu.Lock()
 	s.warnings = found
 	s.mu.Unlock()

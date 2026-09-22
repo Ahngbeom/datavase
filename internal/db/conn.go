@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -69,6 +70,16 @@ type Conn struct {
 	// the interface reports, so that the marker on screen cannot outlive the
 	// protection it describes.
 	readOnlyConfirmed bool
+
+	// lastWarningsMu guards lastWarnings.
+	lastWarningsMu sync.Mutex
+	// lastWarnings remembers, per server connection id, the warnings SHOW
+	// WARNINGS last answered with. MariaDB does not clear that answer for
+	// every statement — a plain SELECT or a SET that raises nothing of its
+	// own still gets back whatever an earlier statement on the same
+	// connection left there — so an unchanged answer is a stale one, not a
+	// second occurrence, and is not reported again.
+	lastWarnings map[uint64][]Warning
 
 	version string
 }
@@ -386,4 +397,26 @@ func (c *Conn) startTransaction() string {
 		return "START TRANSACTION READ ONLY"
 	}
 	return "START TRANSACTION"
+}
+
+// staleWarnings reports whether found is the same answer SHOW WARNINGS gave
+// the last time it was asked on connID, and remembers found either way, so
+// the next call has this one to compare against.
+//
+// An empty answer is never called stale: it carries nothing to repeat, and
+// treating repeated silence as significant would gain nothing.
+func (c *Conn) staleWarnings(connID uint64, found []Warning) bool {
+	c.lastWarningsMu.Lock()
+	defer c.lastWarningsMu.Unlock()
+
+	if c.lastWarnings == nil {
+		c.lastWarnings = make(map[uint64][]Warning)
+	}
+	stale := len(found) > 0 && slices.EqualFunc(c.lastWarnings[connID], found, equalWarning)
+	c.lastWarnings[connID] = found
+	return stale
+}
+
+func equalWarning(a, b Warning) bool {
+	return a.Level == b.Level && a.Code == b.Code && a.Message == b.Message
 }

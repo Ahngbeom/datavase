@@ -182,6 +182,10 @@ release:
     xattr -dr com.apple.quarantine ./dv
     ```
 
+    The Windows `.zip` is not code-signed, so SmartScreen may warn about it on
+    first run — there is no publisher certificate for it to check against yet.
+    `gh attestation verify` below is how to check what actually built it instead.
+
     Every archive and package above is signed by the workflow that built it. To check one:
 
     ```sh

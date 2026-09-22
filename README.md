@@ -146,7 +146,8 @@ It is still a guard against a slip rather than a boundary:
 `SET SESSION TRANSACTION READ WRITE` lifts it for the session, and whoever
 types that has decided to. The next statement puts it back.
 
-Passwords never go in this file. Store them in the OS keychain:
+Passwords never go in this file. Store them in the OS keychain — macOS
+Keychain, Windows Credential Manager, or Secret Service on Linux:
 
 ```sh
 dv auth app               # prompts, echo off
@@ -154,8 +155,9 @@ dv auth -rm app           # remove
 ```
 
 **On a machine with no keychain** — a headless Linux server runs no D-Bus
-Secret Service, so there is nothing for `dv auth` to write to — pass the
-password in the environment instead:
+Secret Service, so there is nothing for `dv auth` to write to, and a plain
+WSL2 shell is in the same position unless it has a desktop session to reach
+one — pass the password in the environment instead:
 
 ```sh
 export DATAVASE_PASSWORD_APP=...
@@ -340,11 +342,18 @@ does anywhere else.
 
 **Copying** goes two ways at once. The terminal is asked to take the text —
 the only route that reaches your own clipboard when `dv` is running over SSH —
-and a local session also hands it to `pbcopy`, `wl-copy` or `xclip`, whichever
-is installed. That second route is there because the first is a request the
-terminal may refuse: Ghostty asks before allowing it, iTerm2 keeps it off until
-"Applications in terminal may access clipboard" is ticked, tmux drops it
-without `set -g set-clipboard on`, and Terminal.app has never implemented it.
+and a local session also hands it to `pbcopy` on macOS, `clip` on Windows, or
+`wl-copy`/`xclip` on Linux, whichever applies. That second route is there
+because the first is a request the terminal may refuse: Ghostty asks before
+allowing it, iTerm2 keeps it off until "Applications in terminal may access
+clipboard" is ticked, tmux drops it without `set -g set-clipboard on`, and
+Terminal.app has never implemented it.
+
+WSL runs the Linux binary, so it takes the Linux route above — `wl-copy` or
+`xclip`, which need a Wayland or X11 session to find. A plain WSL2 shell has
+neither unless WSLg (GUI app support) is set up, which leaves only the
+terminal route; check whether the terminal on the Windows side honours OSC 52
+before relying on copy inside one.
 
 Over SSH only the terminal route is used. Running a helper on the far end would
 put the text on a clipboard nobody is sitting at, so if the terminal refuses
@@ -368,10 +377,15 @@ is on the key table above.
 | Schema cache | the same directory, `datavase.db` |
 | Passwords | the OS keychain, or `DATAVASE_PASSWORD_<NAME>` in the environment |
 
+These paths are the same on every platform dv builds for, including native
+Windows: home directory plus `.config`/`.local/state`, never `%APPDATA%`.
+There is no separate Windows convention to look for.
+
 The two databases live in a directory created `0700`, which is what protects
-them; the files inside it are `0644`. Deleting either is safe at any time —
-the cache is rebuilt on the next reload, costing completion and the tables
-tab until then, and the history is simply gone.
+them; the files inside it are `0644` — Windows has no such permission bits,
+so this protection is macOS/Linux/WSL only. Deleting either is safe at any
+time — the cache is rebuilt on the next reload, costing completion and the
+tables tab until then, and the history is simply gone.
 
 **`history: false` under `defaults` stops statements being written at all,**
 and the file is never created. Reach for it where the statements themselves

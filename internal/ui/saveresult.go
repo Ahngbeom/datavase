@@ -20,13 +20,18 @@ func defaultResultPath(dsName string, at time.Time) string {
 }
 
 // writeResultFile creates path with text in it, and refuses a path that is
-// already a file.
+// already a file. It returns the absolute path actually written to, since a
+// relative one only meant something relative to a working directory the
+// caller may not have in mind.
 //
 // Refusing rather than replacing: the offered name carries the second, so
 // a collision is never two saves of the same result — it is a typed path
 // that already meant something to someone.
-func writeResultFile(path, text string) error {
+func writeResultFile(path, text string) (string, error) {
 	path = expandHome(path)
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -34,15 +39,18 @@ func writeResultFile(path, text string) error {
 			// goes before the driver's words: a path is long, the status bar
 			// truncates from the right, and the reason is the half that says
 			// whether to pick another name.
-			return fmt.Errorf("already exists, not replaced: %s", path)
+			return "", fmt.Errorf("already exists, not replaced: %s", path)
 		}
-		return err
+		return "", err
 	}
 	if _, err := f.WriteString(text); err != nil {
 		f.Close()
-		return err
+		return "", err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // expandHome turns a leading ~ into the home directory. The shell would
@@ -56,9 +64,10 @@ func expandHome(path string) string {
 	return path
 }
 
-// saveSummary is the notice after a save. The path is repeated because a
-// relative one resolved against a working directory the user may not have
-// in mind.
+// saveSummary is the notice after a save. path is the absolute path
+// writeResultFile actually used, not what was typed, since a relative name
+// only meant something relative to a working directory the user may not
+// have had in mind.
 func saveSummary(rows int, path string, size int, truncated bool) string {
 	s := fmt.Sprintf("%s written to %s (%s)", plural(rows, "row"), path, humanBytes(size))
 	if truncated {
@@ -105,11 +114,12 @@ func (a *App) saveResult(path string) {
 		a.notice("save failed: " + err.Error())
 		return
 	}
-	if err := writeResultFile(path, text); err != nil {
+	written, err := writeResultFile(path, text)
+	if err != nil {
 		a.notice("save failed: " + err.Error())
 		return
 	}
-	a.notice(saveSummary(a.buf.RowCount(), path, len(text), a.buf.AtCapacity()))
+	a.notice(saveSummary(a.buf.RowCount(), written, len(text), a.buf.AtCapacity()))
 }
 
 // chosenPath is what to write to: what was typed, or the name the prompt

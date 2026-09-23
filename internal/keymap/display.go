@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -25,6 +26,30 @@ func (m *Map) DisplayBindings(a Action) []Binding {
 		out = append(out, b)
 	}
 	return out
+}
+
+// PreferredBinding is the one to put in front of someone when there is room
+// for exactly one, and whether the action has any.
+//
+// Where the Apple glyphs are in use, that is whatever the map ranks first —
+// ⌘, the key a Mac user reaches for. Where they are not, a ⌘ binding is
+// spelled "Super", and a Mac inside tmux gets told to press a key its
+// keyboard does not have and tmux would not forward anyway. So the Ctrl
+// twin is preferred there: on that Mac it is the half of the pair that can
+// arrive, and on Linux it is the half the terminal is likelier to deliver.
+func (m *Map) PreferredBinding(a Action, mac bool) (Binding, bool) {
+	bindings := m.DisplayBindings(a)
+	if len(bindings) == 0 {
+		return Binding{}, false
+	}
+	if !mac {
+		for _, b := range bindings {
+			if b.Mods&tcell.ModCtrl != 0 {
+				return b, true
+			}
+		}
+	}
+	return bindings[0], true
 }
 
 // labelWidth is how many terminal cells a key label occupies.

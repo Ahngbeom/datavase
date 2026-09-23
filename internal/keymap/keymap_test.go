@@ -339,3 +339,46 @@ func TestCopyRowIsBoundToCommandShiftR(t *testing.T) {
 		t.Errorf("⌘R = %v, want ActionRefreshSchema", got)
 	}
 }
+
+// README promises that inside tmux the interface shows the Ctrl spelling
+// even on a Mac, because tmux does not forward ⌘ at all. Labelling the ⌘
+// binding without the Apple glyphs spells it "Super", which is a key no Mac
+// keyboard has and no part of this program's documentation mentions — the
+// hint then teaches a key that cannot be pressed.
+func TestTheOneKeyWorthShowingIsOneThatCanArrive(t *testing.T) {
+	m := Default()
+
+	withGlyphs, ok := m.PreferredBinding(ActionRun, true)
+	if !ok {
+		t.Fatal("PreferredBinding(mac) found nothing for ActionRun")
+	}
+	if got := withGlyphs.Label(true); got != "⌘↩" {
+		t.Errorf("PreferredBinding(mac).Label(mac) = %q, want the key a Mac user reaches for", got)
+	}
+
+	spelledOut, ok := m.PreferredBinding(ActionRun, false)
+	if !ok {
+		t.Fatal("PreferredBinding(other) found nothing for ActionRun")
+	}
+	if got := spelledOut.Label(false); got != "Ctrl+↩" {
+		t.Errorf("PreferredBinding(other).Label(other) = %q, want the Ctrl spelling", got)
+	}
+}
+
+// An action bound to no Ctrl key at all still has to offer something.
+func TestAnActionWithNoCtrlKeyStillOffersItsFirstBinding(t *testing.T) {
+	m := &Map{
+		byBinding: make(map[Binding]Action),
+		byAction:  make(map[Action][]Binding),
+	}
+	m.bind(ActionRun, Binding{Key: tcell.KeyF5})
+
+	b, ok := m.PreferredBinding(ActionRun, false)
+	if !ok || b.Label(false) != "F5" {
+		t.Errorf("PreferredBinding() = %q, %v, want F5", b.Label(false), ok)
+	}
+
+	if _, ok := m.PreferredBinding(ActionQuit, false); ok {
+		t.Error("PreferredBinding() found a binding for an action that has none")
+	}
+}

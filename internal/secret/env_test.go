@@ -32,6 +32,21 @@ func TestEnvVarName(t *testing.T) {
 	}
 }
 
+// Env is what a caller predicting which password a connection will use asks
+// instead of reaching for the variable itself. "Set to nothing" and "not set"
+// are different answers, and a caller that could not tell them apart would
+// fall through to a keychain the variable was meant to override.
+func TestEnvSeparatesAnEmptyPasswordFromNoPasswordAtAll(t *testing.T) {
+	t.Setenv("DATAVASE_PASSWORD_LOCAL", "")
+	if pw, ok := Env("local"); !ok || pw != "" {
+		t.Errorf("Env(%q) = %q, %v, want an empty password that is set", "local", pw, ok)
+	}
+
+	if pw, ok := Env("never-set-anywhere"); ok || pw != "" {
+		t.Errorf("Env(%q) = %q, %v, want nothing at all", "never-set-anywhere", pw, ok)
+	}
+}
+
 // A machine with no keychain is the whole reason this exists: without it the
 // password cannot be supplied at all and the datasource is unusable.
 func TestEnvSuppliesThePasswordWhenTheKeychainRefuses(t *testing.T) {

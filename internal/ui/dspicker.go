@@ -206,6 +206,42 @@ func (e *savedWithoutPassword) Error() string {
 
 func (e *savedWithoutPassword) Unwrap() error { return e.err }
 
+// probePassword is what Test connects with: what was typed, or — for the
+// blank field that README's DATAVASE_PASSWORD_<NAME> instructions leave
+// behind — the password the saved datasource would go on to use.
+//
+// That is what makes the order what it is. An environment variable for the
+// name being saved wins wherever it is set, as it will after the save. Then
+// the name being renamed from, because commit moves that password to the new
+// name and overwrites anything already filed there — testing the entry about
+// to be overwritten would answer about a credential nothing ends up using.
+// Only when there is nothing to move does what is already under the new name
+// stand, which is also what commit leaves behind.
+//
+// Asking about the name being edited alone, as this once did, left a new
+// datasource — which has no name being edited — testing with no password at
+// all, however plainly one was set in the environment.
+func (p *dsPicker) probePassword(editing, typed string, candidate config.DataSource) string {
+	if typed != "" {
+		return typed
+	}
+	if pw, ok := secret.Env(candidate.Name); ok {
+		return pw
+	}
+	if p.deps.secrets == nil {
+		return ""
+	}
+	if editing != "" && editing != candidate.Name {
+		if pw, err := p.deps.secrets.Get(editing); err == nil {
+			return pw
+		}
+	}
+	if pw, err := p.deps.secrets.Get(candidate.Name); err == nil {
+		return pw
+	}
+	return ""
+}
+
 // commit validates candidate, applies it under editing (empty for a new
 // entry) and saves. A failed save is rolled back to the snapshot taken
 // before the mutation, so the in-memory list matches the file on disk and a
@@ -315,10 +351,7 @@ func (p *dsPicker) showForm(ds *config.DataSource) {
 			say(tag(colourDanger, err.Error()))
 			return
 		}
-		pw := password
-		if pw == "" && p.deps.secrets != nil && editing != "" {
-			pw, _ = p.deps.secrets.Get(editing)
-		}
+		pw := p.probePassword(editing, password, candidate)
 		say("testing…")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)

@@ -122,6 +122,128 @@ func TestPickerEditWithABlankPasswordLeavesTheStoredPasswordUnchanged(t *testing
 	}
 }
 
+// Leaving the password field blank is how README says to rely on
+// DATAVASE_PASSWORD_<NAME>, and Test is the first thing anyone presses
+// after filling the form in. Looking the name up only for an entry that
+// already exists made a new datasource's first Test report "Access denied"
+// for a password that was sitting in the environment the whole time.
+func TestTestingANewDatasourceFindsThePasswordInTheEnvironment(t *testing.T) {
+	t.Setenv(secret.EnvVarName("prod-ro"), "from-env")
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil },
+		secrets: secret.WithEnv(secret.NewMemory()),
+	})
+
+	candidate := config.DataSource{Name: "prod-ro", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("", "", candidate); got != "from-env" {
+		t.Errorf("probePassword() = %q, want the environment's password", got)
+	}
+}
+
+// Until the save moves it, a renamed entry's password is still filed under
+// the name it is being renamed from — so Test, which runs before any save,
+// has to look there too.
+func TestTestingARenameFindsThePasswordStillFiledUnderTheOldName(t *testing.T) {
+	secrets := secret.NewMemory()
+	if err := secrets.Set("old", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "hunter2" {
+		t.Errorf("probePassword() = %q, want the password filed under the old name", got)
+	}
+}
+
+// An environment variable for the name being saved is what the connection
+// will use once saved, whatever is filed in the keychain, so it beats the
+// password the rename is about to move.
+func TestTestingARenameProfersAnEnvironmentPasswordForTheNewName(t *testing.T) {
+	t.Setenv(secret.EnvVarName("new"), "for-the-new-name")
+	secrets := secret.WithEnv(secret.NewMemory())
+	if err := secrets.Set("old", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "for-the-new-name" {
+		t.Errorf("probePassword() = %q, want the password for the name being saved", got)
+	}
+}
+
+// A keychain entry can already be sitting under the name being renamed to —
+// a delete that failed and was ignored leaves one behind. commit overwrites
+// it with the password it moves from the old name, so that is what the saved
+// datasource will connect with, and testing the one about to be overwritten
+// would answer about a credential nothing ends up using.
+func TestTestingARenameUsesThePasswordThatWillBeMovedRatherThanOneAlreadyThere(t *testing.T) {
+	secrets := secret.NewMemory()
+	for name, pw := range map[string]string{"old": "moved", "new": "stale"} {
+		if err := secrets.Set(name, pw); err != nil {
+			t.Fatalf("Set(%q) error = %v", name, err)
+		}
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "moved" {
+		t.Errorf("probePassword() = %q, want the password commit will move to the new name", got)
+	}
+}
+
+// With nothing filed under the old name there is nothing for commit to move,
+// so whatever is already under the new name is what stays and connects.
+func TestTestingARenameKeepsTheDestinationPasswordWhenThereIsNothingToMove(t *testing.T) {
+	secrets := secret.NewMemory()
+	if err := secrets.Set("new", "already-there"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "already-there" {
+		t.Errorf("probePassword() = %q, want the password the rename leaves in place", got)
+	}
+}
+
+// The machine with no keychain is the reason the variable exists at all, and
+// it is the machine where Test is the only way to find out whether anything
+// is going to work.
+func TestTestingWithNoKeychainAtAllStillFindsTheEnvironmentPassword(t *testing.T) {
+	t.Setenv(secret.EnvVarName("headless"), "from-env")
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: nil,
+	})
+
+	candidate := config.DataSource{Name: "headless", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("", "", candidate); got != "from-env" {
+		t.Errorf("probePassword() = %q, want the environment's password", got)
+	}
+}
+
+func TestATypedPasswordIsTheOneTested(t *testing.T) {
+	t.Setenv(secret.EnvVarName("a"), "from-env")
+	secrets := secret.WithEnv(secret.NewMemory())
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "a", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("a", "typed", candidate); got != "typed" {
+		t.Errorf("probePassword() = %q, want what was typed into the form", got)
+	}
+}
+
 func TestPickerRenameWithABlankPasswordMovesThePasswordToTheNewName(t *testing.T) {
 	cfg := &config.Config{DataSources: []config.DataSource{{Name: "a", Host: "h", User: "u", Port: config.DefaultPort}}}
 	secrets := secret.NewMemory()

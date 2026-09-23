@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"testing"
 
@@ -40,12 +41,12 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("config.Parse() error = %v", err)
 	}
 
+	clearPasswordEnv(t, cfg)
+
 	h := &harness{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	h.app = &App{
-		Config: cfg,
-		// Wrapped as cmd/dv wraps it, so what these tests exercise is the
-		// store the binary actually runs with rather than half of it.
-		Secrets: secret.WithEnv(secret.NewMemory()),
+		Config:  cfg,
+		Secrets: secret.NewMemory(),
 		Out:     h.out,
 		Err:     h.err,
 		ReadPassword: func(string) (string, error) {
@@ -53,6 +54,30 @@ func newHarness(t *testing.T) *harness {
 		},
 	}
 	return h
+}
+
+// clearPasswordEnv takes any ambient DATAVASE_PASSWORD_* for these
+// datasources out of the way, restoring it afterwards.
+//
+// The commands read the environment for real, as the binary does. Without
+// this, a developer who happens to export one for a datasource of their own
+// called "local" would have these tests answer about their machine rather
+// than about the store the test set up — and the ones that check a password
+// is *absent* would be the ones to go quietly wrong.
+func clearPasswordEnv(t *testing.T, cfg *config.Config) {
+	t.Helper()
+
+	for i := range cfg.DataSources {
+		name := secret.EnvVarName(cfg.DataSources[i].Name)
+		was, had := os.LookupEnv(name)
+		if !had {
+			continue
+		}
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("unsetting %s: %v", name, err)
+		}
+		t.Cleanup(func() { os.Setenv(name, was) })
+	}
 }
 
 // Without a stored password the fix is always the same command, so the

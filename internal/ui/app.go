@@ -326,11 +326,11 @@ func (a *App) helpKeyLabel() string {
 
 // keyLabel names an action's key.
 func (a *App) keyLabel(action keymap.Action) string {
-	bindings := a.keys.DisplayBindings(action)
-	if len(bindings) == 0 {
+	b, ok := a.keys.PreferredBinding(action, onMac)
+	if !ok {
 		return action.String()
 	}
-	return bindings[0].Label(onMac)
+	return b.Label(onMac)
 }
 
 // editorPlaceholder is what an empty editor offers.

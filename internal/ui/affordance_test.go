@@ -166,6 +166,24 @@ func TestANarrowHeaderNamesTheShorterKeys(t *testing.T) {
 	}
 }
 
+// Inside tmux on a Mac the glyphs go away, and the run hint used to become
+// "Super+↩" — a key that keyboard does not have, that tmux would not forward
+// if it did, and that appears nowhere in this program's own key table. The
+// hint the interface has room for has to be one that can actually arrive.
+func TestTheHintNamesAKeyThatExistsWhenTheGlyphsAreOff(t *testing.T) {
+	was := onMac
+	defer func() { onMac = was }()
+	onMac = false
+
+	k := liveKeys(t)
+	if strings.Contains(k.run, "Super") {
+		t.Errorf("run hint = %q, want a key spelled the way this program documents it", k.run)
+	}
+	if k.run != "Ctrl+↩" {
+		t.Errorf("run hint = %q, want %q", k.run, "Ctrl+↩")
+	}
+}
+
 // Whatever the labels look like on this machine, both regions' hints fit the
 // header they are drawn in.
 func TestTheHintsFitOnEitherLabelStyle(t *testing.T) {
@@ -197,8 +215,8 @@ func liveKeys(t *testing.T) affordanceKeys {
 
 	m := keymap.Default()
 	first := func(a keymap.Action) string {
-		if b := m.DisplayBindings(a); len(b) > 0 {
-			return b[0].Label(onMac)
+		if b, ok := m.PreferredBinding(a, onMac); ok {
+			return b.Label(onMac)
 		}
 		return ""
 	}

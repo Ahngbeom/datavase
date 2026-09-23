@@ -749,14 +749,34 @@ func TestSyntaxErrorIsReportedOnTheStatusBar(t *testing.T) {
 }
 
 // An unbounded SELECT must run, and the added LIMIT must be disclosed.
+//
+// It reads a table, because that is what makes a SELECT unbounded. "SELECT 1"
+// stood here once and returns one row however many are in the database, so it
+// never needed the limit it was checking for.
 func TestUnboundedSelectRunsWithADisclosedLimit(t *testing.T) {
 	h := newHarness(t, config.EnvProd)
-	h.typeSQL("SELECT 1")
+	seedRows(t, h, 5)
+	h.typeSQL("SELECT * FROM dv_ui")
 
 	h.do(keymap.ActionRun)
 
 	if !h.waitForScreen("LIMIT 1000 added") {
 		t.Errorf("the injected LIMIT was not disclosed:\n%s", h.text())
+	}
+}
+
+// The other half of the same promise: a statement that was not rewritten
+// must not say it was. Someone reading "LIMIT 1000 added" against a one-row
+// answer has to wonder whether the answer was cut short.
+func TestASelectThatReadsNoTableIsNotReportedAsLimited(t *testing.T) {
+	h := newHarness(t, config.EnvProd)
+	h.typeSQL("SELECT DATABASE()")
+
+	h.do(keymap.ActionRun)
+
+	h.waitFor("the statement to finish", func(a *App) bool { return a.status.phase == phaseDone })
+	if h.inspect(func(a *App) bool { return a.status.limitInjected != 0 }) {
+		t.Errorf("a SELECT with nothing to limit was reported as limited:\n%s", h.text())
 	}
 }
 

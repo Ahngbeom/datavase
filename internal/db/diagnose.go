@@ -14,8 +14,9 @@ import (
 //
 // The driver reports all of them the same way — a connection that did not
 // happen — and the difference is who can do something about it. A name, a
-// port, a VPN, a certificate, a password and an absent database are six
-// different mornings.
+// port, a VPN, a certificate, a password, an absent database, a database
+// this account was never granted and a server that turns this machine away
+// are eight different mornings.
 type Fault int
 
 const (
@@ -37,6 +38,15 @@ const (
 	FaultCredentials
 	// FaultNoSuchDatabase is a server reached and a database that is not on it.
 	FaultNoSuchDatabase
+	// FaultDatabaseDenied is a password the server accepted and a database it
+	// then refused. MySQL answers "does not exist" and "you have no grant on
+	// it" with this one number on purpose, so that an account cannot learn
+	// which databases exist by reading the refusals; the hint has to carry
+	// both possibilities for the same reason.
+	FaultDatabaseDenied
+	// FaultHostNotAllowed is the server turning this machine away before any
+	// password was asked for.
+	FaultHostNotAllowed
 )
 
 // errNoTLS is the driver's own sentinel for a server that cannot do TLS,
@@ -65,10 +75,12 @@ func Diagnose(err error) Fault {
 
 	switch {
 	case isMySQLError(err, erAccessDenied),
-		isMySQLError(err, erAccessDeniedNoPass),
-		isMySQLError(err, erDBAccessDenied),
-		isMySQLError(err, erHostNotPrivileged):
+		isMySQLError(err, erAccessDeniedNoPass):
 		return FaultCredentials
+	case isMySQLError(err, erDBAccessDenied):
+		return FaultDatabaseDenied
+	case isMySQLError(err, erHostNotPrivileged):
+		return FaultHostNotAllowed
 	case isMySQLError(err, erBadDB):
 		return FaultNoSuchDatabase
 	}
@@ -117,6 +129,10 @@ func (f Fault) Hint() string {
 		return "the server refused the credentials — check user, and the stored password with dv auth"
 	case FaultNoSuchDatabase:
 		return "the server has no such database — check database for this datasource"
+	case FaultDatabaseDenied:
+		return "the credentials were accepted and the database was not — check database for this datasource, and whether this user is granted it"
+	case FaultHostNotAllowed:
+		return "the server refuses connections from this machine — check which host this user is granted, and which one you are reaching it from"
 	}
 	return ""
 }
@@ -138,6 +154,10 @@ func (f Fault) String() string {
 		return "credentials"
 	case FaultNoSuchDatabase:
 		return "no such database"
+	case FaultDatabaseDenied:
+		return "database denied"
+	case FaultHostNotAllowed:
+		return "host not allowed"
 	}
 	return "unknown"
 }

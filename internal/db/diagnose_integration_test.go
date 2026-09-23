@@ -56,3 +56,37 @@ func TestRealFailuresAreClassifiedTheWayTheUnitTestSaysTheyAre(t *testing.T) {
 		})
 	}
 }
+
+// The other refusal about a database, and the one the unit test cannot
+// produce from a number alone: the password was accepted and the database
+// was not. Reading it as a credential failure sends the reader to dv auth
+// to re-enter a password the server had already taken.
+func TestADatabaseTheAccountMayNotUseIsNotReadAsARefusedPassword(t *testing.T) {
+	const account = "'dv_denied'@'%'"
+
+	root := openTestConn(t)
+	mustExec(t, root, "DROP USER IF EXISTS "+account)
+	// No password: an account with one would have to survive both servers'
+	// default authentication plugins, which differ, and the grant is the
+	// only part of this that the test is about.
+	mustExec(t, root, "CREATE USER "+account)
+	t.Cleanup(func() { mustExec(t, root, "DROP USER IF EXISTS "+account) })
+
+	ds, _ := testmysql.DataSource(t)
+	ds.User = "dv_denied"
+	// A database that is on every server and that an account with no grants
+	// cannot open, so the refusal is about the grant rather than the name.
+	ds.Database = "mysql"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := Open(ctx, ds, "", "")
+	if err == nil {
+		conn.Close()
+		t.Fatal("an account with no grants opened the mysql database")
+	}
+	if got := Diagnose(err); got != FaultDatabaseDenied {
+		t.Errorf("Diagnose(%v) = %v, want %v", err, got, FaultDatabaseDenied)
+	}
+}

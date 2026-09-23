@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -49,12 +50,15 @@ func TestDiagnoseTellsTheHopsApart(t *testing.T) {
 		{"credentials the server refused",
 			fmt.Errorf("opening: %w", mysqlErrorNumber(1045)),
 			FaultCredentials},
+		{"a password the server refused before it was asked for one",
+			fmt.Errorf("opening: %w", mysqlErrorNumber(1698)),
+			FaultCredentials},
 		{"a user with no rights to that database",
 			fmt.Errorf("opening: %w", mysqlErrorNumber(1044)),
-			FaultCredentials},
+			FaultDatabaseDenied},
 		{"a host the server does not accept at all",
 			fmt.Errorf("opening: %w", mysqlErrorNumber(1130)),
-			FaultCredentials},
+			FaultHostNotAllowed},
 		{"a database that is not there",
 			fmt.Errorf("opening: %w", mysqlErrorNumber(1049)),
 			FaultNoSuchDatabase},
@@ -78,7 +82,8 @@ func TestDiagnoseTellsTheHopsApart(t *testing.T) {
 func TestEveryNamedFaultSaysSomethingDifferentToCheck(t *testing.T) {
 	seen := map[string]Fault{}
 	for _, f := range []Fault{FaultUnresolved, FaultRefused, FaultUnreachable,
-		FaultTLS, FaultCredentials, FaultNoSuchDatabase} {
+		FaultTLS, FaultCredentials, FaultNoSuchDatabase, FaultDatabaseDenied,
+		FaultHostNotAllowed} {
 		hint := f.Hint()
 		if hint == "" {
 			t.Errorf("%v has nothing to check", f)
@@ -94,6 +99,32 @@ func TestEveryNamedFaultSaysSomethingDifferentToCheck(t *testing.T) {
 		if f.Hint() != "" {
 			t.Errorf("%v invented something to check: %q", f, f.Hint())
 		}
+	}
+}
+
+// The server refuses a database and a client host with their own numbers,
+// having already accepted the password. Sending either one to dv auth costs
+// the reader the time it takes to re-enter a password that was never wrong,
+// and leaves them no closer to the grant or the database name that was.
+func TestARefusalThatIsNotAboutThePasswordDoesNotSendAnyoneToIt(t *testing.T) {
+	for _, tt := range []struct {
+		fault Fault
+		names string
+	}{
+		{FaultDatabaseDenied, "database"},
+		{FaultHostNotAllowed, "host"},
+	} {
+		t.Run(tt.fault.String(), func(t *testing.T) {
+			hint := tt.fault.Hint()
+			for _, wrong := range []string{"dv auth", "password"} {
+				if strings.Contains(hint, wrong) {
+					t.Errorf("%v says %q, which sends the reader to %q", tt.fault, hint, wrong)
+				}
+			}
+			if !strings.Contains(hint, tt.names) {
+				t.Errorf("%v says %q, which never names %q", tt.fault, hint, tt.names)
+			}
+		})
 	}
 }
 

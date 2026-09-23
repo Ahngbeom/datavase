@@ -32,6 +32,18 @@ func EnvVarName(account string) string {
 	return b.String()
 }
 
+// Env returns the password the environment supplies for account, and whether
+// it supplies one at all.
+//
+// Exported because a caller that has to predict which password a connection
+// will use — rather than simply take it — needs to tell an environment
+// override apart from a stored one, and must not reimplement "is it set" to
+// do it: LookupEnv rather than Getenv is the whole of the distinction
+// between a database with no password and a database with no variable.
+func Env(account string) (string, bool) {
+	return os.LookupEnv(EnvVarName(account))
+}
+
 // envStore answers Get from the environment before asking the keychain.
 type envStore struct{ inner Store }
 
@@ -55,9 +67,7 @@ type envStore struct{ inner Store }
 func WithEnv(inner Store) Store { return &envStore{inner: inner} }
 
 func (e *envStore) Get(account string) (string, error) {
-	// LookupEnv rather than Getenv: a database with no password is a real
-	// configuration, and an empty variable is how it is stated.
-	if pw, ok := os.LookupEnv(EnvVarName(account)); ok {
+	if pw, ok := Env(account); ok {
 		return pw, nil
 	}
 	return e.inner.Get(account)

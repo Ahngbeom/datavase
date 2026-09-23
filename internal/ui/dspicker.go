@@ -208,25 +208,36 @@ func (e *savedWithoutPassword) Unwrap() error { return e.err }
 
 // probePassword is what Test connects with: what was typed, or — for the
 // blank field that README's DATAVASE_PASSWORD_<NAME> instructions leave
-// behind — whatever the store answers with.
+// behind — the password the saved datasource would go on to use.
 //
-// The candidate's own name is asked first, because that is the name the
-// environment variable is derived from and the name the entry is about to
-// be saved under, so it is the password the connection will actually use.
-// Only then the name being renamed from, where an existing keychain entry
-// sits until commit moves it. Asking about the old name alone left a new
-// datasource — which has no old name — testing with no password at all.
+// That is what makes the order what it is. An environment variable for the
+// name being saved wins wherever it is set, as it will after the save. Then
+// the name being renamed from, because commit moves that password to the new
+// name and overwrites anything already filed there — testing the entry about
+// to be overwritten would answer about a credential nothing ends up using.
+// Only when there is nothing to move does what is already under the new name
+// stand, which is also what commit leaves behind.
+//
+// Asking about the name being edited alone, as this once did, left a new
+// datasource — which has no name being edited — testing with no password at
+// all, however plainly one was set in the environment.
 func (p *dsPicker) probePassword(editing, typed string, candidate config.DataSource) string {
-	if typed != "" || p.deps.secrets == nil {
+	if typed != "" {
 		return typed
 	}
-	if pw, err := p.deps.secrets.Get(candidate.Name); err == nil {
+	if pw, ok := secret.Env(candidate.Name); ok {
 		return pw
+	}
+	if p.deps.secrets == nil {
+		return ""
 	}
 	if editing != "" && editing != candidate.Name {
 		if pw, err := p.deps.secrets.Get(editing); err == nil {
 			return pw
 		}
+	}
+	if pw, err := p.deps.secrets.Get(candidate.Name); err == nil {
+		return pw
 	}
 	return ""
 }

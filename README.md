@@ -174,12 +174,15 @@ It is also how you supply a password in CI or a container. When it is set it
 takes precedence over the keychain, so the same command does the same thing on
 every machine.
 
+`dv ls` says which of the two answered, naming the variable where one did.
+The difference is whether the password outlives the shell.
+
 ## Use
 
 ```sh
 dv                    # the datasource list, unless exactly one is configured
 dv open app           # open a named datasource
-dv ls                 # list datasources and whether a password is stored
+dv ls                 # list datasources and where each password comes from
 dv auth app           # store a password in the keychain
 dv check app          # verify reachability, then exit
 dv version            # print the version

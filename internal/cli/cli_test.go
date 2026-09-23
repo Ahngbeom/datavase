@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"testing"
 
@@ -40,6 +41,8 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("config.Parse() error = %v", err)
 	}
 
+	clearPasswordEnv(t, cfg)
+
 	h := &harness{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	h.app = &App{
 		Config:  cfg,
@@ -51,6 +54,30 @@ func newHarness(t *testing.T) *harness {
 		},
 	}
 	return h
+}
+
+// clearPasswordEnv takes any ambient DATAVASE_PASSWORD_* for these
+// datasources out of the way, restoring it afterwards.
+//
+// The commands read the environment for real, as the binary does. Without
+// this, a developer who happens to export one for a datasource of their own
+// called "local" would have these tests answer about their machine rather
+// than about the store the test set up — and the ones that check a password
+// is *absent* would be the ones to go quietly wrong.
+func clearPasswordEnv(t *testing.T, cfg *config.Config) {
+	t.Helper()
+
+	for i := range cfg.DataSources {
+		name := secret.EnvVarName(cfg.DataSources[i].Name)
+		was, had := os.LookupEnv(name)
+		if !had {
+			continue
+		}
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("unsetting %s: %v", name, err)
+		}
+		t.Cleanup(func() { os.Setenv(name, was) })
+	}
 }
 
 // Without a stored password the fix is always the same command, so the
@@ -118,6 +145,59 @@ func TestListShowsEveryDataSource(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("ls output = %q, want it to contain %q", out, want)
 		}
+	}
+}
+
+// lineFor returns the ls line for one datasource, so a claim about one entry
+// cannot be satisfied by what is written about another.
+func lineFor(t *testing.T, out, name string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, name+" ") {
+			return line
+		}
+	}
+	t.Fatalf("ls output = %q, want a line for %q", out, name)
+	return ""
+}
+
+// "stored" is a promise the environment never made: an exported variable is
+// gone when the shell closes, and someone exporting a short-lived token per
+// session read that word as the keychain holding onto it.
+func TestListNamesTheVariableAPasswordCameFrom(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv(secret.EnvVarName("prod-app"), "from-env")
+
+	if code := h.app.Run([]string{"ls"}); code != 0 {
+		t.Fatalf("Run(ls) = %d, want 0; stderr = %q", code, h.err)
+	}
+
+	line := lineFor(t, h.out.String(), "prod-app")
+	if !strings.Contains(line, secret.EnvVarName("prod-app")) {
+		t.Errorf("ls line = %q, want it to name the variable the password came from", line)
+	}
+	if strings.Contains(line, "keychain") {
+		t.Errorf("ls line = %q, want it not to credit the keychain for an exported password", line)
+	}
+}
+
+func TestListSaysWhenThePasswordIsInTheKeychain(t *testing.T) {
+	h := newHarness(t)
+	if err := h.app.Secrets.Set("local", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	if code := h.app.Run([]string{"ls"}); code != 0 {
+		t.Fatalf("Run(ls) = %d, want 0; stderr = %q", code, h.err)
+	}
+
+	out := h.out.String()
+	if line := lineFor(t, out, "local"); !strings.Contains(line, "keychain") {
+		t.Errorf("ls line = %q, want it to say where the password is", line)
+	}
+	if line := lineFor(t, out, "prod-app"); !strings.Contains(line, "no password") {
+		t.Errorf("ls line = %q, want an entry with no password to say so", line)
 	}
 }
 

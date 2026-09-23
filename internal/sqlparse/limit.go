@@ -8,19 +8,30 @@ import "strings"
 // inside a subquery bounds nothing about the outer result, which is why the
 // check is HasTopLevelLimit rather than a search for the keyword.
 //
-// A SELECT with no top-level FROM is left alone too. It reads no table, so
-// it returns one row per branch of the statement in front of you and cannot
-// run away — and a limit reported against "SELECT DATABASE()" reads as a
-// result that might have been cut short, which is the one thing the
-// disclosure exists to say truthfully.
+// A SELECT that names nothing to read from is left alone too. It returns one
+// row per branch of the statement in front of you and cannot run away — and a
+// limit reported against "SELECT DATABASE()" reads as a result that might
+// have been cut short, which is the one thing the disclosure exists to say
+// truthfully.
 func AutoLimit(stmt Statement, n int) int {
 	if n <= 0 || stmt.IsEmpty() || stmt.Kind() != StmtSelect || stmt.HasTopLevelLimit() {
 		return 0
 	}
-	if !stmt.hasTopLevelKeyword("FROM") {
+	if !readsATable(stmt) {
 		return 0
 	}
 	return n
+}
+
+// readsATable reports whether stmt names something to read rows out of at its
+// own level.
+//
+// TABLE counts alongside FROM: "TABLE users" is MySQL's spelling of
+// "SELECT * FROM users", parses as a SELECT, and names no FROM at all — so
+// reading the absence of FROM as "this cannot return many rows" would take
+// the limit off the one shape that most needs it.
+func readsATable(stmt Statement) bool {
+	return stmt.hasTopLevelKeyword("FROM") || stmt.hasTopLevelKeyword("TABLE")
 }
 
 // AppendLimit returns stmt's SQL with "LIMIT n" inserted, or the SQL

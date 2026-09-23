@@ -179,6 +179,8 @@ func TestAutoLimitLeavesASelectWithNothingToLimitAlone(t *testing.T) {
 		"SELECT DATABASE(), CURRENT_USER()",
 		"SELECT @@session.tx_read_only",
 		"SELECT (SELECT COUNT(*) FROM users)",
+		// Literal rows, however many are written out.
+		"VALUES ROW(1, 2), ROW(3, 4)",
 	} {
 		if got := AutoLimit(Parse(sql), 1000); got != 0 {
 			t.Errorf("AutoLimit(%q) = %d, want 0; it returns one row whatever happens", sql, got)
@@ -191,6 +193,10 @@ func TestAutoLimitStillBoundsASelectThatReadsATable(t *testing.T) {
 		"SELECT * FROM users",
 		"SELECT 1 UNION SELECT id FROM users",
 		"SELECT * FROM DUAL",
+		// MySQL's shorthand for SELECT * FROM users. It names no FROM and
+		// reads the whole table, which is the case the limit exists for.
+		"TABLE users",
+		"SELECT 1 UNION TABLE users",
 	} {
 		if got := AutoLimit(Parse(sql), 1000); got != 1000 {
 			t.Errorf("AutoLimit(%q) = %d, want 1000", sql, got)

@@ -118,8 +118,11 @@ defaults:
   fetch_chunk: 500        # rows per batch while streaming
   buffer_max: 50000       # rows held in memory before truncating
   mouse: true             # false turns off clicks; see "The screen"
-  history: false          # do not write finished statements to disk
+  history: true           # false stops statements reaching disk at all
 ```
+
+Every value above is the default, so a key left out behaves as the line
+shows it.
 
 The datasource dialog writes this file, so comments in it do not survive a
 save. Editing it by hand still works; unknown keys are rejected rather than
@@ -389,9 +392,9 @@ so this protection is macOS/Linux/WSL only. Deleting either is safe at any
 time — the cache is rebuilt on the next reload, costing completion and the
 tables tab until then, and the history is simply gone.
 
-**`history: false` under `defaults` stops statements being written at all,**
-and the file is never created. Reach for it where the statements themselves
-are the sensitive thing. Nothing else is recorded: there is no telemetry, no
+Statements are written unless you say otherwise: **`history: false` under
+`defaults` stops them being written at all,** and the file is never created.
+Reach for it where the statements themselves are the sensitive thing. Nothing else is recorded: there is no telemetry, no
 update check and no crash reporting, so the only things `dv` connects to are
 your database and the bastion in front of it.
 

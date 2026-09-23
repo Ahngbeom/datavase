@@ -394,9 +394,10 @@ tables tab until then, and the history is simply gone.
 
 Statements are written unless you say otherwise: **`history: false` under
 `defaults` stops them being written at all,** and the file is never created.
-Reach for it where the statements themselves are the sensitive thing. Nothing else is recorded: there is no telemetry, no
-update check and no crash reporting, so the only things `dv` connects to are
-your database and the bastion in front of it.
+Reach for it where the statements themselves are the sensitive thing.
+Nothing else is recorded: there is no telemetry, no update check and no
+crash reporting, so the only things `dv` connects to are your database and
+the bastion in front of it.
 
 Going back a version is downloading an older one; no release writes state an
 earlier one cannot read. The install script takes `DV_VERSION` for that, and

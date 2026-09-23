@@ -121,8 +121,10 @@ defaults:
   history: true           # false stops statements reaching disk at all
 ```
 
-Every value above is the default, so a key left out behaves as the line
-shows it.
+Every value under `defaults:` is what that key means when it is left out.
+The datasource entries above are not defaults: `name`, `host` and `user`
+have to be there, and `read_only` and `tls` are shown turned up from what an
+absent key gives you.
 
 The datasource dialog writes this file, so comments in it do not survive a
 save. Editing it by hand still works; unknown keys are rejected rather than

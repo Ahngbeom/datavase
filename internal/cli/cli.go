@@ -117,14 +117,31 @@ usage:
 func (a *App) list() int {
 	for i := range a.Config.DataSources {
 		ds := &a.Config.DataSources[i]
-		stored := "no password"
-		if _, err := a.Secrets.Get(ds.Name); err == nil {
-			stored = "password stored"
-		}
 		fmt.Fprintf(a.Out, "%-16s %s:%d/%s  (%s)\n",
-			ds.Name, ds.Host, ds.Port, ds.Database, stored)
+			ds.Name, ds.Host, ds.Port, ds.Database, a.passwordSource(ds.Name))
 	}
 	return exitOK
+}
+
+// passwordSource says where this datasource's password comes from, rather
+// than only that one was found.
+//
+// "stored" was a promise the environment never made. An exported variable
+// is gone when the shell closes and a keychain entry is not, so someone
+// supplying a short-lived token per session — the case the variable exists
+// for — was told the opposite of what was true, with no way to tell from
+// here which of the two they were looking at.
+//
+// The environment is asked first because that is the order secret.WithEnv
+// answers in, and cmd/dv builds the store that way.
+func (a *App) passwordSource(name string) string {
+	if _, ok := secret.Env(name); ok {
+		return "password from " + secret.EnvVarName(name)
+	}
+	if _, err := a.Secrets.Get(name); err == nil {
+		return "password in the keychain"
+	}
+	return "no password"
 }
 
 // CheckTimeout bounds how long `dv check` waits before giving up.

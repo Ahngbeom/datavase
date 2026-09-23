@@ -42,8 +42,10 @@ func newHarness(t *testing.T) *harness {
 
 	h := &harness{out: &bytes.Buffer{}, err: &bytes.Buffer{}}
 	h.app = &App{
-		Config:  cfg,
-		Secrets: secret.NewMemory(),
+		Config: cfg,
+		// Wrapped as cmd/dv wraps it, so what these tests exercise is the
+		// store the binary actually runs with rather than half of it.
+		Secrets: secret.WithEnv(secret.NewMemory()),
 		Out:     h.out,
 		Err:     h.err,
 		ReadPassword: func(string) (string, error) {
@@ -118,6 +120,59 @@ func TestListShowsEveryDataSource(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("ls output = %q, want it to contain %q", out, want)
 		}
+	}
+}
+
+// lineFor returns the ls line for one datasource, so a claim about one entry
+// cannot be satisfied by what is written about another.
+func lineFor(t *testing.T, out, name string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, name+" ") {
+			return line
+		}
+	}
+	t.Fatalf("ls output = %q, want a line for %q", out, name)
+	return ""
+}
+
+// "stored" is a promise the environment never made: an exported variable is
+// gone when the shell closes, and someone exporting a short-lived token per
+// session read that word as the keychain holding onto it.
+func TestListNamesTheVariableAPasswordCameFrom(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv(secret.EnvVarName("prod-app"), "from-env")
+
+	if code := h.app.Run([]string{"ls"}); code != 0 {
+		t.Fatalf("Run(ls) = %d, want 0; stderr = %q", code, h.err)
+	}
+
+	line := lineFor(t, h.out.String(), "prod-app")
+	if !strings.Contains(line, secret.EnvVarName("prod-app")) {
+		t.Errorf("ls line = %q, want it to name the variable the password came from", line)
+	}
+	if strings.Contains(line, "keychain") {
+		t.Errorf("ls line = %q, want it not to credit the keychain for an exported password", line)
+	}
+}
+
+func TestListSaysWhenThePasswordIsInTheKeychain(t *testing.T) {
+	h := newHarness(t)
+	if err := h.app.Secrets.Set("local", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	if code := h.app.Run([]string{"ls"}); code != 0 {
+		t.Fatalf("Run(ls) = %d, want 0; stderr = %q", code, h.err)
+	}
+
+	out := h.out.String()
+	if line := lineFor(t, out, "local"); !strings.Contains(line, "keychain") {
+		t.Errorf("ls line = %q, want it to say where the password is", line)
+	}
+	if line := lineFor(t, out, "prod-app"); !strings.Contains(line, "no password") {
+		t.Errorf("ls line = %q, want an entry with no password to say so", line)
 	}
 }
 

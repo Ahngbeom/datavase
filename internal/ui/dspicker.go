@@ -206,6 +206,31 @@ func (e *savedWithoutPassword) Error() string {
 
 func (e *savedWithoutPassword) Unwrap() error { return e.err }
 
+// probePassword is what Test connects with: what was typed, or — for the
+// blank field that README's DATAVASE_PASSWORD_<NAME> instructions leave
+// behind — whatever the store answers with.
+//
+// The candidate's own name is asked first, because that is the name the
+// environment variable is derived from and the name the entry is about to
+// be saved under, so it is the password the connection will actually use.
+// Only then the name being renamed from, where an existing keychain entry
+// sits until commit moves it. Asking about the old name alone left a new
+// datasource — which has no old name — testing with no password at all.
+func (p *dsPicker) probePassword(editing, typed string, candidate config.DataSource) string {
+	if typed != "" || p.deps.secrets == nil {
+		return typed
+	}
+	if pw, err := p.deps.secrets.Get(candidate.Name); err == nil {
+		return pw
+	}
+	if editing != "" && editing != candidate.Name {
+		if pw, err := p.deps.secrets.Get(editing); err == nil {
+			return pw
+		}
+	}
+	return ""
+}
+
 // commit validates candidate, applies it under editing (empty for a new
 // entry) and saves. A failed save is rolled back to the snapshot taken
 // before the mutation, so the in-memory list matches the file on disk and a
@@ -315,10 +340,7 @@ func (p *dsPicker) showForm(ds *config.DataSource) {
 			say(tag(colourDanger, err.Error()))
 			return
 		}
-		pw := password
-		if pw == "" && p.deps.secrets != nil && editing != "" {
-			pw, _ = p.deps.secrets.Get(editing)
-		}
+		pw := p.probePassword(editing, password, candidate)
 		say("testing…")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)

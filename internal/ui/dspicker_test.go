@@ -122,6 +122,74 @@ func TestPickerEditWithABlankPasswordLeavesTheStoredPasswordUnchanged(t *testing
 	}
 }
 
+// Leaving the password field blank is how README says to rely on
+// DATAVASE_PASSWORD_<NAME>, and Test is the first thing anyone presses
+// after filling the form in. Looking the name up only for an entry that
+// already exists made a new datasource's first Test report "Access denied"
+// for a password that was sitting in the environment the whole time.
+func TestTestingANewDatasourceFindsThePasswordInTheEnvironment(t *testing.T) {
+	t.Setenv(secret.EnvVarName("prod-ro"), "from-env")
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil },
+		secrets: secret.WithEnv(secret.NewMemory()),
+	})
+
+	candidate := config.DataSource{Name: "prod-ro", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("", "", candidate); got != "from-env" {
+		t.Errorf("probePassword() = %q, want the environment's password", got)
+	}
+}
+
+// Until the save moves it, a renamed entry's password is still filed under
+// the name it is being renamed from — so Test, which runs before any save,
+// has to look there too.
+func TestTestingARenameFindsThePasswordStillFiledUnderTheOldName(t *testing.T) {
+	secrets := secret.NewMemory()
+	if err := secrets.Set("old", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "hunter2" {
+		t.Errorf("probePassword() = %q, want the password filed under the old name", got)
+	}
+}
+
+// The name the entry is about to be saved under is the one its environment
+// variable is named for, so that is the password the connection will use
+// once saved — and therefore the one Test has to try first.
+func TestTestingARenameProfersThePasswordForTheNameBeingSaved(t *testing.T) {
+	t.Setenv(secret.EnvVarName("new"), "for-the-new-name")
+	secrets := secret.WithEnv(secret.NewMemory())
+	if err := secrets.Set("old", "hunter2"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "new", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("old", "", candidate); got != "for-the-new-name" {
+		t.Errorf("probePassword() = %q, want the password for the name being saved", got)
+	}
+}
+
+func TestATypedPasswordIsTheOneTested(t *testing.T) {
+	t.Setenv(secret.EnvVarName("a"), "from-env")
+	secrets := secret.WithEnv(secret.NewMemory())
+	p := newDSPicker(tview.NewApplication(), pickerDeps{
+		cfg: &config.Config{}, save: func() error { return nil }, secrets: secrets,
+	})
+
+	candidate := config.DataSource{Name: "a", Host: "h", User: "u", Port: config.DefaultPort}
+	if got := p.probePassword("a", "typed", candidate); got != "typed" {
+		t.Errorf("probePassword() = %q, want what was typed into the form", got)
+	}
+}
+
 func TestPickerRenameWithABlankPasswordMovesThePasswordToTheNewName(t *testing.T) {
 	cfg := &config.Config{DataSources: []config.DataSource{{Name: "a", Host: "h", User: "u", Port: config.DefaultPort}}}
 	secrets := secret.NewMemory()

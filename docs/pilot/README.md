@@ -46,11 +46,6 @@ SSH tunnel, at least one on Windows/WSL, at least one whose database account
 is already read-only. Avoid recruiting five people from one team — a single
 team's tooling habits will look like a finding.
 
-Everything after the screener happens on GitHub, so each of them needs an
-account there. That is a filter the condition above does not have — someone
-whose company lives on GitLab is likelier to drop out at it — so when anyone
-declines for that reason, note it.
-
 ### Screener
 
 Three questions. Send them with the invitation; do not interview to find out.
@@ -64,11 +59,10 @@ Three questions. Send them with the invitation; do not interview to find out.
 Question 1 must be 4 or more. Anyone else is a no, politely, with their name
 kept for later.
 
-The answers come back by email or a private message, not on GitHub. The
-screener runs before anyone has seen the repository, and it has to: sending
-an applicant there means sending them to the README, which is the pitch the
-invitation leaves out. Question 2 also says how someone reaches their
-production database, which is not something to ask them to answer in public.
+The answers come back by email, and the address they come from is the one
+the pilot uses from then on — everything after this is email too. Not as a
+public reply: question 2 says how someone reaches their production
+database, which is not something to ask them to answer in front of others.
 
 ### Invitation
 
@@ -81,9 +75,8 @@ reach for it, and a pitch contaminates that.
 
 운영이나 스테이징 DB에 터미널로 월 4회 이상 접속하신다면, 도구 하나를
 설치해 두고 평소처럼 일해 주시면 됩니다. 매주 5분짜리 기록 한 번과
-마지막 서면 질문 한 번이 전부이고, 모두 GitHub 비공개 저장소의 Issue로
-주고받습니다. 통화는 없습니다. 쓰지 않으신 주에는 "안 썼다"가 가장
-유용한 답입니다.
+마지막 서면 질문 한 번이 전부이고, 모두 메일로 주고받습니다. 통화는
+없습니다. 쓰지 않으신 주에는 "안 썼다"가 가장 유용한 답입니다.
 
 팔 것은 없고 무료입니다.
 ```
@@ -93,8 +86,9 @@ reach for it, and a pitch contaminates that.
 The same invitation, for a group of people who do not know who is asking. It
 gains a title, says who made the tool — most communities require that of
 anyone asking for their time on something of their own, and it describes
-nothing the tool does — and carries the screener, answered privately. It
-still names no product and links nowhere, for the reason above.
+nothing the tool does — and carries the screener, answered by email. It
+still names no product and links nowhere: a link leads to the README, which
+is the pitch the invitation leaves out.
 
 ```
 제목: [참여자 모집] 터미널로 MySQL/MariaDB를 보시는 분, 4주 사용 관찰에
@@ -109,15 +103,12 @@ still names no product and links nowhere, for the reason above.
   접속하신 분
 - 접속 방식은 상관없습니다 (직접, SSH 터널, bastion 경유, 클라우드 프록시,
   VPN 등)
-- GitHub 계정이 있으신 분 (진행은 모두 GitHub에서 합니다)
 
 ■ 하실 일
 - 도구를 설치해 두고 평소처럼 일하시면 됩니다. 쓰라고 권하지 않습니다.
   mysql이나 쓰시던 GUI를 계속 쓰셔도 되고, 그래야 관찰이 의미가 있습니다.
-- 참여하시는 분마다 본인과 저만 볼 수 있는 비공개 GitHub 저장소를 하나씩
-  만들어 드립니다. 주고받는 것은 모두 그 저장소의 Issue에서 합니다.
 - 매주 다섯 줄짜리 짧은 기록 한 번(5분 이내), 마지막에 서면 질문 한 번이
-  전부입니다. 통화는 없습니다.
+  전부입니다. 모두 메일로, 한 분씩 따로 주고받습니다. 통화는 없습니다.
 - 쓰지 않은 주에는 "안 썼다"가 가장 유용한 답입니다.
 
 ■ 요청하지 않는 것
@@ -127,8 +118,9 @@ still names no product and links nowhere, for the reason above.
 팔 것은 없고 무료입니다.
 
 ■ 참여 방법
-아래 세 문항에 답해 [연락처]로 보내 주세요. 2번 답에는 접속 경로가
-드러나니 댓글보다 개인 메시지로 받겠습니다.
+아래 세 문항에 답해 [메일 주소]로 보내 주세요. 2번 답에는 접속 경로가
+드러나니 댓글이 아니라 메일로 받겠습니다. 보내 주신 주소로 이후 연락을
+드립니다.
 
 1. 지난 한 달 동안 운영/스테이징 MySQL·MariaDB에 터미널로 몇 번
    접속하셨나요? (0 / 1–3 / 4–10 / 그 이상)
@@ -145,42 +137,43 @@ two read the same.
 
 ## What to hand them
 
-1. A private repository of their own, named for their participant ID
-   (`dv-pilot-p1` and so on), with them as its only collaborator. One each,
-   never one shared: five people reading each other's weeks would be
-   measuring each other, and "I did not use it" is hardest to write where the
-   others can see it. Its README says how the pilot runs and nothing about
-   `dv` — it is a mailbox, not a walkthrough.
-
-   Anything they want to tell you, a problem or a request, goes in an issue
-   there too. What reaches the public repository is yours to write, and only
-   sanitized: a participant filing on the public tracker under their own
-   account ties their name to a pilot the register keeps to IDs.
-
-   Its README also says the following from the first day, before there is
-   anything to report. The first report is the one most likely to be a
-   connection failure or a leaked password — exactly the material that must
-   not land there — and a warning that arrives with the reply arrives after
-   it.
-
-   ```
-   호스트명, datasource·스키마 이름, 비밀번호, 데이터, 실제 쿼리는 이
-   저장소를 포함해 GitHub 어디에도 붙이지 말아 주세요. 무슨 일이
-   있었는지만 적어 주시고, 자세한 내용은 가지고 계시면 됩니다.
-   ```
-
-2. The install line for their platform, from
+1. The install line for their platform, from
    [README](../../README.md#install). Nothing else — watch whether the
    README is enough, because for everyone after this pilot it will have to be.
-3. [SECURITY.md](../../SECURITY.md) if they ask what it writes to disk or
+2. [SECURITY.md](../../SECURITY.md) if they ask what it writes to disk or
    whether their security team will object. Do not send it unprompted; whether
    they ask is itself a finding.
-4. Nothing else. No walkthrough, no config written for them, no demo call.
+3. Nothing else. No walkthrough, no config written for them, no demo call.
    The first setup is the measurement.
 
-Say once, in writing, in that repository's README: **`mysql` is not being
-taken away.** Anyone who feels they must use `dv` will use it, and the whole
-measurement is gone.
+### By mail, one at a time
+
+Everything goes by email, to the address they answered the screener from,
+and to one participant at a time — never a group mail, never a visible CC.
+Five people reading each other's weeks would be measuring each other, and
+"I did not use it" is hardest to write where the others can see it. A mail
+that shows who else was sent it also undoes the register, which keeps
+participants to IDs.
+
+The first mail says how the pilot runs and nothing about `dv`. It says once,
+in writing: **`mysql` is not being taken away.** Anyone who feels they must
+use `dv` will use it, and the whole measurement is gone.
+
+It also says this, before there is anything to report. The first report is
+the one most likely to be a connection failure or a leaked password —
+exactly the material that must not travel — and a warning that arrives with
+the reply arrives after it.
+
+```
+호스트명, datasource·스키마 이름, 비밀번호, 데이터, 실제 쿼리는 메일을
+포함해 어디에도 붙이지 말아 주세요. 무슨 일이 있었는지만 적어 주시고,
+자세한 내용은 가지고 계시면 됩니다.
+```
+
+Problems and requests arrive as replies too. What reaches the public
+repository is yours to write, and only sanitized: a participant filing on
+the public tracker under their own account ties their name to a pilot the
+register keeps to IDs.
 
 ## What to measure
 
@@ -191,10 +184,10 @@ first two; the rest explain them.
 |---|---|
 | **Repeat use** — qualifying days, as defined below | weekly diary |
 | **Critical failures** — wrong value shown or exported, wrong read-only state, wrong datasource shown, credential exposed | diary line 3, which names every one of them every week |
-| Time to first successful query | ask in the first weekly issue, in minutes, and whether they opened the README |
+| Time to first successful query | ask in the first weekly mail, in minutes, and whether they opened the README |
 | Fallback moments | the diary line below |
 | Support minutes | count what you spend answering |
-| What they never found | the closing issue |
+| What they never found | the closing mail |
 
 ### How to count
 
@@ -228,11 +221,10 @@ and do not count it.
 
 ### The weekly diary
 
-Five lines, once a week: open an issue in their repository with the five
-lines as its body, mention them in it, and take whatever comes back as a
-comment. An issue left unanswered is a missing diary. Do not build a form — an
-issue form's required fields get filled in so that they are filled in, and a
-one-line answer is still an answer.
+Five lines, once a week, in a mail to each of them; take whatever comes back.
+A mail left unanswered is a missing diary. Do not build a form — required
+fields get filled in so that they are filled in, and a one-line reply is
+still an answer.
 
 ```
 1. 이번 주에 dv를 쓴 날: (며칠, 아니면 0)
@@ -251,12 +243,12 @@ password that goes unreported lets a run pass that should have stopped.
 Line 5 is the one that catches the failure mode nobody reports: they stopped
 using it and stopped thinking about it. A silent week is data, not a gap.
 
-### The closing issue
+### The closing mail
 
 There is no call. What one would have been for — finding out what they never
-found — goes in a last issue after T0+27, in writing.
+found — goes in a last mail after T0+27, in writing.
 
-That issue may do what the invitation may not: name what the tool does. The
+That mail may do what the invitation may not: name what the tool does. The
 measurement is over by then, so there is nothing left for a description to
 contaminate, and listing the capabilities is the only way to find out which
 of them went unnoticed; nobody writes about what they did not know was there.
@@ -274,7 +266,7 @@ time either changed.
 ```
 
 A call would have asked a follow-up the moment an answer was unclear. Here the
-follow-up is a comment, and it has to be asked rather than assumed: an answer
+follow-up is a reply, and it has to be asked rather than assumed: an answer
 that reads as "몰랐다" to something the diary shows them using is worth one
 more question, not a guess.
 
@@ -296,9 +288,8 @@ Treat every report that matches a stop condition as **suspected** and do this
 before deciding whether the product caused it:
 
 1. Ask all five participants to stop using `dv`; pause the whole cohort, not
-   only the person who reported it. Do it in an issue in each of their
-   repositories that mentions them by name: a mention notifies them whatever
-   they are watching, and a new issue on its own may not.
+   only the person who reported it. Do it by mail the same day, one to each,
+   as every other mail is.
 2. Mark the pilot `paused — suspected critical failure` and stop calculating
    the gate.
 3. Preserve the minimum evidence needed to reproduce it: version and binary
@@ -309,9 +300,8 @@ before deciding whether the product caused it:
    at all: whatever cannot be sanitized stays with the participant's own
    team, or in the maintainer's local notes if it is theirs to keep, and what
    reaches the tracking issue is the sanitized minimum plus a note that the
-   rest exists and where. The participant's private repository is GitHub
-   too, and being private does not change that; its README has said so from
-   the start (see **What to hand them**), and this is the moment to repeat it.
+   rest exists and where. Mail is no way round that: the first mail said so
+   (see **By mail, one at a time**), and this is the moment to repeat it.
 4. Classify the incident as `confirmed product defect`, `not reproduced`,
    `external cause`, or `inconclusive`.
 5. A confirmed product defect invalidates the run. Keep the earlier diary and
@@ -357,8 +347,8 @@ to who this is for before writing more code.
 **Do not ship features.** Fix critical failures and nothing else. A product
 that changes underneath a retention measurement has not been measured.
 
-Requests will arrive, in their repositories. Write them down, thank the
-person, and say they are for after the pilot. The ranked candidates already
+Requests will arrive, as replies. Write them down, thank the person, and say
+they are for after the pilot. The ranked candidates already
 waiting, from the research:
 
 | Candidate | Interviews that raised it |

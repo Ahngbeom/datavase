@@ -168,6 +168,36 @@ func TestAutoLimitIsOffWhenTheSettingIsZero(t *testing.T) {
 	}
 }
 
+// A SELECT with no FROM returns one row per branch of the statement itself,
+// so there is nothing for a LIMIT to bound. Adding one rewrote the statement
+// for no reason and then told the reader a limit had been imposed on
+// "SELECT DATABASE(), CURRENT_USER()", which reads as a result that might
+// have been cut short.
+func TestAutoLimitLeavesASelectWithNothingToLimitAlone(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT 1",
+		"SELECT DATABASE(), CURRENT_USER()",
+		"SELECT @@session.tx_read_only",
+		"SELECT (SELECT COUNT(*) FROM users)",
+	} {
+		if got := AutoLimit(Parse(sql), 1000); got != 0 {
+			t.Errorf("AutoLimit(%q) = %d, want 0; it returns one row whatever happens", sql, got)
+		}
+	}
+}
+
+func TestAutoLimitStillBoundsASelectThatReadsATable(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT * FROM users",
+		"SELECT 1 UNION SELECT id FROM users",
+		"SELECT * FROM DUAL",
+	} {
+		if got := AutoLimit(Parse(sql), 1000); got != 1000 {
+			t.Errorf("AutoLimit(%q) = %d, want 1000", sql, got)
+		}
+	}
+}
+
 func TestAutoLimitOnlyAppliesToSelect(t *testing.T) {
 	for _, sql := range []string{"SHOW TABLES", "DELETE FROM users", "INSERT INTO t VALUES (1)", ""} {
 		if got := AutoLimit(Parse(sql), 1000); got != 0 {

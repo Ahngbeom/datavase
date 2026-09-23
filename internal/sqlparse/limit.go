@@ -7,8 +7,17 @@ import "strings"
 // Only a SELECT with no LIMIT of its own at the top level gets one. A LIMIT
 // inside a subquery bounds nothing about the outer result, which is why the
 // check is HasTopLevelLimit rather than a search for the keyword.
+//
+// A SELECT with no top-level FROM is left alone too. It reads no table, so
+// it returns one row per branch of the statement in front of you and cannot
+// run away — and a limit reported against "SELECT DATABASE()" reads as a
+// result that might have been cut short, which is the one thing the
+// disclosure exists to say truthfully.
 func AutoLimit(stmt Statement, n int) int {
 	if n <= 0 || stmt.IsEmpty() || stmt.Kind() != StmtSelect || stmt.HasTopLevelLimit() {
+		return 0
+	}
+	if !stmt.hasTopLevelKeyword("FROM") {
 		return 0
 	}
 	return n

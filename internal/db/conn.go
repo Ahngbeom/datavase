@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -69,6 +70,16 @@ type Conn struct {
 	// the interface reports, so that the marker on screen cannot outlive the
 	// protection it describes.
 	readOnlyConfirmed bool
+
+	// lastWarningsMu guards lastWarnings.
+	lastWarningsMu sync.Mutex
+	// lastWarnings remembers, per server connection id, the warnings SHOW
+	// WARNINGS last answered with. MariaDB does not clear that answer for
+	// every statement — a plain SELECT or a SET that raises nothing of its
+	// own still gets back whatever an earlier statement on the same
+	// connection left there — so an unchanged answer is a stale one, not a
+	// second occurrence, and is not reported again.
+	lastWarnings map[uint64][]Warning
 
 	version string
 }
@@ -386,4 +397,39 @@ func (c *Conn) startTransaction() string {
 		return "START TRANSACTION READ ONLY"
 	}
 	return "START TRANSACTION"
+}
+
+// staleWarnings reports whether found is the same answer SHOW WARNINGS gave
+// the last time it was asked on connID, and remembers found either way, so
+// the next call has this one to compare against.
+//
+// An empty answer is never called stale: it carries nothing to repeat, and
+// treating repeated silence as significant would gain nothing.
+//
+// This is content equality standing in for statement identity, and the two
+// are not the same thing: two different statements that happen to raise the
+// same Level, Code and Message back to back — the same truncating INSERT run
+// twice with nothing else in between, say — will have the second call read
+// as a repeat of the first and go unreported. The wire protocol's OK packet
+// carries a warning count that would settle this per statement rather than
+// per connection, but the driver in use (go-sql-driver/mysql) parses past
+// those bytes without keeping them, so there is nothing more precise to ask
+// for without forking it. What this trades away is narrow — a warning that
+// already reached the bar once, verbatim, immediately reasserting itself —
+// against what the pre-existing behaviour traded away, which was every
+// unrelated statement afterwards inheriting one that was never theirs.
+func (c *Conn) staleWarnings(connID uint64, found []Warning) bool {
+	c.lastWarningsMu.Lock()
+	defer c.lastWarningsMu.Unlock()
+
+	if c.lastWarnings == nil {
+		c.lastWarnings = make(map[uint64][]Warning)
+	}
+	stale := len(found) > 0 && slices.EqualFunc(c.lastWarnings[connID], found, equalWarning)
+	c.lastWarnings[connID] = found
+	return stale
+}
+
+func equalWarning(a, b Warning) bool {
+	return a.Level == b.Level && a.Code == b.Code && a.Message == b.Message
 }

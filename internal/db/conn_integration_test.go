@@ -623,6 +623,37 @@ func TestAStatementWithNothingWrongReportsNoWarnings(t *testing.T) {
 	}
 }
 
+// MariaDB does not clear SHOW WARNINGS for every statement — a plain SELECT
+// that raises nothing of its own still answers with whatever the last
+// warning-raising statement on the connection left behind. Asking it again
+// after a clean statement must not repeat a warning that statement did not
+// raise.
+func TestAWarningDoesNotOutliveTheStatementThatRaisedIt(t *testing.T) {
+	conn := openTestConn(t)
+	mustExec(t, conn, "DROP TABLE IF EXISTS dv_warn_stale")
+	mustExec(t, conn, "CREATE TABLE dv_warn_stale (s VARCHAR(4))")
+	mustExec(t, conn, "SET SESSION sql_mode = ''")
+	t.Cleanup(func() { mustExec(t, conn, "DROP TABLE IF EXISTS dv_warn_stale") })
+
+	truncating := conn.Query(context.Background(),
+		"INSERT INTO dv_warn_stale (s) VALUES ('far too long')", Options{Exec: true})
+	if got := drain(t, truncating); got.err != nil {
+		t.Fatalf("stream error = %v, want nil", got.err)
+	}
+	if len(truncating.Warnings()) == 0 {
+		t.Fatal("the truncating INSERT reported no warning; nothing here to lose track of")
+	}
+
+	clean := conn.Query(context.Background(), "SELECT 1", Options{})
+	if got := drain(t, clean); got.err != nil {
+		t.Fatalf("stream error = %v, want nil", got.err)
+	}
+
+	if got := clean.Warnings(); len(got) != 0 {
+		t.Errorf("Warnings() = %v, want none — this SELECT raised nothing; %q is the previous statement's warning, still sitting in SHOW WARNINGS", got, got[0].Message)
+	}
+}
+
 // The point of a transaction is that the work is invisible until it is
 // committed and gone if it is not. Neither is true while each statement runs
 // on its own connection out of the pool, so this checks both from a second

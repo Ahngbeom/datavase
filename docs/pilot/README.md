@@ -156,6 +156,19 @@ two read the same.
    there too. What reaches the public repository is yours to write, and only
    sanitized: a participant filing on the public tracker under their own
    account ties their name to a pilot the register keeps to IDs.
+
+   Its README also says the following from the first day, before there is
+   anything to report. The first report is the one most likely to be a
+   connection failure or a leaked password — exactly the material that must
+   not land there — and a warning that arrives with the reply arrives after
+   it.
+
+   ```
+   호스트명, datasource·스키마 이름, 비밀번호, 데이터, 실제 쿼리는 이
+   저장소를 포함해 GitHub 어디에도 붙이지 말아 주세요. 무슨 일이
+   있었는지만 적어 주시고, 자세한 내용은 가지고 계시면 됩니다.
+   ```
+
 2. The install line for their platform, from
    [README](../../README.md#install). Nothing else — watch whether the
    README is enough, because for everyone after this pilot it will have to be.
@@ -177,7 +190,7 @@ first two; the rest explain them.
 | Measure | How |
 |---|---|
 | **Repeat use** — qualifying days, as defined below | weekly diary |
-| **Critical failures** — wrong value, wrong read-only state, wrong datasource shown, credential exposed | diary line 3, which asks it directly every week |
+| **Critical failures** — wrong value shown or exported, wrong read-only state, wrong datasource shown, credential exposed | diary line 3, which names every one of them every week |
 | Time to first successful query | ask in the first weekly issue, in minutes, and whether they opened the README |
 | Fallback moments | the diary line below |
 | Support minutes | count what you spend answering |
@@ -225,10 +238,15 @@ one-line answer is still an answer.
 1. 이번 주에 dv를 쓴 날: (며칠, 아니면 0)
 2. dv 대신 mysql이나 GUI로 돌아간 순간이 있었나요? 그 순간 무엇을
    하려던 중이었나요?
-3. 화면이 틀린 것을 보여준 적이 있나요? (값, 접속 대상, read-only 표시)
+3. 화면이나 내보낸 파일이 틀린 것을 보여준 적이 있나요? (값, 접속 대상,
+   read-only 표시) 비밀번호가 보이면 안 되는 곳에 보인 적은요?
 4. 막혔는데 물어보지 않고 넘어간 것이 있나요?
 5. 이번 주에 dv를 아예 안 썼다면, 그 주에 DB는 몇 번 보셨나요?
 ```
+
+Line 3 names every stop condition below, not only what is on screen. Nobody
+volunteers what they were never asked about, and a wrong export or a leaked
+password that goes unreported lets a run pass that should have stopped.
 
 Line 5 is the one that catches the failure mode nobody reports: they stopped
 using it and stopped thinking about it. A silent week is data, not a gap.
@@ -292,8 +310,8 @@ before deciding whether the product caused it:
    team, or in the maintainer's local notes if it is theirs to keep, and what
    reaches the tracking issue is the sanitized minimum plus a note that the
    rest exists and where. The participant's private repository is GitHub
-   too, and being private does not change that: it is where they will want
-   to paste the evidence, so say so before they do.
+   too, and being private does not change that; its README has said so from
+   the start (see **What to hand them**), and this is the moment to repeat it.
 4. Classify the incident as `confirmed product defect`, `not reproduced`,
    `external cause`, or `inconclusive`.
 5. A confirmed product defect invalidates the run. Keep the earlier diary and

@@ -46,6 +46,11 @@ SSH tunnel, at least one on Windows/WSL, at least one whose database account
 is already read-only. Avoid recruiting five people from one team — a single
 team's tooling habits will look like a finding.
 
+Everything after the screener happens on GitHub, so each of them needs an
+account there. That is a filter the condition above does not have — someone
+whose company lives on GitLab is likelier to drop out at it — so when anyone
+declines for that reason, note it.
+
 ### Screener
 
 Three questions. Send them with the invitation; do not interview to find out.
@@ -59,6 +64,12 @@ Three questions. Send them with the invitation; do not interview to find out.
 Question 1 must be 4 or more. Anyone else is a no, politely, with their name
 kept for later.
 
+The answers come back by email or a private message, not on GitHub. The
+screener runs before anyone has seen the repository, and it has to: sending
+an applicant there means sending them to the README, which is the pitch the
+invitation leaves out. Question 2 also says how someone reaches their
+production database, which is not something to ask them to answer in public.
+
 ### Invitation
 
 Send this. Do not describe features; the point is to find out whether they
@@ -70,25 +81,93 @@ reach for it, and a pitch contaminates that.
 
 운영이나 스테이징 DB에 터미널로 월 4회 이상 접속하신다면, 도구 하나를
 설치해 두고 평소처럼 일해 주시면 됩니다. 매주 5분짜리 기록 한 번과
-마지막에 20분 통화 한 번이 전부이고, 쓰지 않으신 주에는 "안 썼다"가
-가장 유용한 답입니다.
+마지막 서면 질문 한 번이 전부이고, 모두 GitHub 비공개 저장소의 Issue로
+주고받습니다. 통화는 없습니다. 쓰지 않으신 주에는 "안 썼다"가 가장
+유용한 답입니다.
 
 팔 것은 없고 무료입니다.
 ```
 
+### Posting it in a community
+
+The same invitation, for a group of people who do not know who is asking. It
+gains a title, says who made the tool — most communities require that of
+anyone asking for their time on something of their own, and it describes
+nothing the tool does — and carries the screener, answered privately. It
+still names no product and links nowhere, for the reason above.
+
+```
+제목: [참여자 모집] 터미널로 MySQL/MariaDB를 보시는 분, 4주 사용 관찰에
+함께해 주실 다섯 분을 찾습니다
+
+안녕하세요. 제가 만든 터미널용 도구가 실제 업무에서 쓰이게 되는지, 아니면
+안 쓰이게 되는지를 4주 동안 관찰하려고 합니다. 함께해 주실 분을 찾고
+있습니다.
+
+■ 이런 분을 찾습니다
+- 지난 한 달 동안 운영 또는 스테이징 MySQL/MariaDB에 터미널로 4번 이상
+  접속하신 분
+- 접속 방식은 상관없습니다 (직접, SSH 터널, bastion 경유, 클라우드 프록시,
+  VPN 등)
+- GitHub 계정이 있으신 분 (진행은 모두 GitHub에서 합니다)
+
+■ 하실 일
+- 도구를 설치해 두고 평소처럼 일하시면 됩니다. 쓰라고 권하지 않습니다.
+  mysql이나 쓰시던 GUI를 계속 쓰셔도 되고, 그래야 관찰이 의미가 있습니다.
+- 참여하시는 분마다 본인과 저만 볼 수 있는 비공개 GitHub 저장소를 하나씩
+  만들어 드립니다. 주고받는 것은 모두 그 저장소의 Issue에서 합니다.
+- 매주 다섯 줄짜리 짧은 기록 한 번(5분 이내), 마지막에 서면 질문 한 번이
+  전부입니다. 통화는 없습니다.
+- 쓰지 않은 주에는 "안 썼다"가 가장 유용한 답입니다.
+
+■ 요청하지 않는 것
+- 접속 정보, DB·스키마 이름, 실제 데이터는 요청하지 않습니다. 기록에서는
+  며칠 썼는지, 언제 다른 도구로 돌아갔는지 같은 사용 경험만 여쭙니다.
+
+팔 것은 없고 무료입니다.
+
+■ 참여 방법
+아래 세 문항에 답해 [연락처]로 보내 주세요. 2번 답에는 접속 경로가
+드러나니 댓글보다 개인 메시지로 받겠습니다.
+
+1. 지난 한 달 동안 운영/스테이징 MySQL·MariaDB에 터미널로 몇 번
+   접속하셨나요? (0 / 1–3 / 4–10 / 그 이상)
+2. 보통 어떻게 접속하시나요?
+   (직접 / SSH 터널 / bastion 경유 / 클라우드 프록시 / VPN만)
+3. 접속해서 주로 무엇을 하시나요? (한 줄)
+
+이번에는 다섯 분만 모십니다. 함께하지 못하게 된 분께도 따로 알려 드리고,
+원하시면 다음 기회에 먼저 연락드리겠습니다.
+```
+
+"다섯 분" rather than "5분": the post also says "5분 이내", and in Korean the
+two read the same.
+
 ## What to hand them
 
-1. The install line for their platform, from
+1. A private repository of their own, named for their participant ID
+   (`dv-pilot-p1` and so on), with them as its only collaborator. One each,
+   never one shared: five people reading each other's weeks would be
+   measuring each other, and "I did not use it" is hardest to write where the
+   others can see it. Its README says how the pilot runs and nothing about
+   `dv` — it is a mailbox, not a walkthrough.
+
+   Anything they want to tell you, a problem or a request, goes in an issue
+   there too. What reaches the public repository is yours to write, and only
+   sanitized: a participant filing on the public tracker under their own
+   account ties their name to a pilot the register keeps to IDs.
+2. The install line for their platform, from
    [README](../../README.md#install). Nothing else — watch whether the
    README is enough, because for everyone after this pilot it will have to be.
-2. [SECURITY.md](../../SECURITY.md) if they ask what it writes to disk or
+3. [SECURITY.md](../../SECURITY.md) if they ask what it writes to disk or
    whether their security team will object. Do not send it unprompted; whether
    they ask is itself a finding.
-3. Nothing else. No walkthrough, no config written for them, no demo call.
+4. Nothing else. No walkthrough, no config written for them, no demo call.
    The first setup is the measurement.
 
-Say once, in writing: **`mysql` is not being taken away.** Anyone who feels
-they must use `dv` will use it, and the whole measurement is gone.
+Say once, in writing, in that repository's README: **`mysql` is not being
+taken away.** Anyone who feels they must use `dv` will use it, and the whole
+measurement is gone.
 
 ## What to measure
 
@@ -98,11 +177,11 @@ first two; the rest explain them.
 | Measure | How |
 |---|---|
 | **Repeat use** — qualifying days, as defined below | weekly diary |
-| **Critical failures** — wrong value, wrong read-only state, wrong datasource shown, credential exposed | diary, and ask directly every week |
-| Time to first successful query | ask in week 1, in minutes, and whether they opened the README |
+| **Critical failures** — wrong value, wrong read-only state, wrong datasource shown, credential exposed | diary line 3, which asks it directly every week |
+| Time to first successful query | ask in the first weekly issue, in minutes, and whether they opened the README |
 | Fallback moments | the diary line below |
 | Support minutes | count what you spend answering |
-| What they never found | the end-of-pilot call |
+| What they never found | the closing issue |
 
 ### How to count
 
@@ -136,8 +215,11 @@ and do not count it.
 
 ### The weekly diary
 
-Five lines, once a week. Do not build a form; send the five lines and take
-whatever comes back.
+Five lines, once a week: open an issue in their repository with the five
+lines as its body, mention them in it, and take whatever comes back as a
+comment. An issue left unanswered is a missing diary. Do not build a form — an
+issue form's required fields get filled in so that they are filled in, and a
+one-line answer is still an answer.
 
 ```
 1. 이번 주에 dv를 쓴 날: (며칠, 아니면 0)
@@ -150,6 +232,33 @@ whatever comes back.
 
 Line 5 is the one that catches the failure mode nobody reports: they stopped
 using it and stopped thinking about it. A silent week is data, not a gap.
+
+### The closing issue
+
+There is no call. What one would have been for — finding out what they never
+found — goes in a last issue after T0+27, in writing.
+
+That issue may do what the invitation may not: name what the tool does. The
+measurement is over by then, so there is nothing left for a description to
+contaminate, and listing the capabilities is the only way to find out which
+of them went unnoticed; nobody writes about what they did not know was there.
+List what README's key table offers for the release they ran, rather than a
+list kept here — a copy in this file would stop matching the tool the first
+time either changed.
+
+```
+4주 동안 고생 많으셨습니다. 마지막으로 두 가지만 여쭙겠습니다.
+
+1. 아래 각각에 대해 써 봤다 / 알았지만 안 썼다 / 몰랐다 중 하나로 답해
+   주세요.
+   (README 키 표의 항목을 여기에 나열)
+2. 쓰다가 끝내 못 찾았거나, 찾다가 포기한 것이 있었나요?
+```
+
+A call would have asked a follow-up the moment an answer was unclear. Here the
+follow-up is a comment, and it has to be asked rather than assumed: an answer
+that reads as "몰랐다" to something the diary shows them using is worth one
+more question, not a guess.
 
 ### Stop the pilot immediately if
 
@@ -169,7 +278,9 @@ Treat every report that matches a stop condition as **suspected** and do this
 before deciding whether the product caused it:
 
 1. Ask all five participants to stop using `dv`; pause the whole cohort, not
-   only the person who reported it.
+   only the person who reported it. Do it in an issue in each of their
+   repositories that mentions them by name: a mention notifies them whatever
+   they are watching, and a new issue on its own may not.
 2. Mark the pilot `paused — suspected critical failure` and stop calculating
    the gate.
 3. Preserve the minimum evidence needed to reproduce it: version and binary
@@ -180,7 +291,9 @@ before deciding whether the product caused it:
    at all: whatever cannot be sanitized stays with the participant's own
    team, or in the maintainer's local notes if it is theirs to keep, and what
    reaches the tracking issue is the sanitized minimum plus a note that the
-   rest exists and where.
+   rest exists and where. The participant's private repository is GitHub
+   too, and being private does not change that: it is where they will want
+   to paste the evidence, so say so before they do.
 4. Classify the incident as `confirmed product defect`, `not reproduced`,
    `external cause`, or `inconclusive`.
 5. A confirmed product defect invalidates the run. Keep the earlier diary and
@@ -226,8 +339,9 @@ to who this is for before writing more code.
 **Do not ship features.** Fix critical failures and nothing else. A product
 that changes underneath a retention measurement has not been measured.
 
-Requests will arrive. Write them down, thank the person, and say they are for
-after the pilot. The ranked candidates already waiting, from the research:
+Requests will arrive, in their repositories. Write them down, thank the
+person, and say they are for after the pilot. The ranked candidates already
+waiting, from the research:
 
 | Candidate | Interviews that raised it |
 |---|---|
@@ -238,5 +352,5 @@ after the pilot. The ranked candidates already waiting, from the research:
 | PostgreSQL | 2, one of them the persona built to ask for it |
 
 A pilot participant asking for one of these is worth more than all twenty
-synthetic interviews put together. Record who asked and what they were trying
-to do at the time.
+synthetic interviews put together. Record who asked, by participant ID, and
+what they were trying to do at the time.

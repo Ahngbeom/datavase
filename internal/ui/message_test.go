@@ -30,10 +30,10 @@ func TestTheWayBackOutlastsTheDriversAccountOfTheFailure(t *testing.T) {
 // whether to try again or to pick another name.
 func TestTheReasonAFileWasRefusedOutlastsThePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), strings.Repeat("report-", 8)+"final.csv")
-	if err := writeResultFile(path, "first\n"); err != nil {
+	if _, err := writeResultFile(path, "first\n"); err != nil {
 		t.Fatal(err)
 	}
-	err := writeResultFile(path, "second\n")
+	_, err := writeResultFile(path, "second\n")
 	if err == nil {
 		t.Fatal("the second write replaced a file that was already there")
 	}

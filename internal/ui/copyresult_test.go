@@ -71,10 +71,10 @@ func TestResultTextAsCSVFollowsTheDisplayedOrder(t *testing.T) {
 
 func TestWritingAResultRefusesToOverwriteAFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.csv")
-	if err := writeResultFile(path, "first\n"); err != nil {
+	if _, err := writeResultFile(path, "first\n"); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
-	err := writeResultFile(path, "second\n")
+	_, err := writeResultFile(path, "second\n")
 	if err == nil {
 		t.Fatal("the second write replaced a file that was already there")
 	}
@@ -90,11 +90,30 @@ func TestWritingAResultRefusesToOverwriteAFile(t *testing.T) {
 func TestWritingAResultExpandsTheHomeDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if err := writeResultFile("~/out.csv", "x\n"); err != nil {
+	if _, err := writeResultFile("~/out.csv", "x\n"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(home, "out.csv")); err != nil {
 		t.Errorf("~ was not expanded: %v", err)
+	}
+}
+
+// A relative name is exactly what the confirmation screen shows before the
+// write, so the save notice built from it must say where that resolved to —
+// otherwise the two moments contradict each other about the same file.
+func TestWritingARelativePathReportsWhereItActuallyLanded(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	got, err := writeResultFile("out.csv", "x\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("writeResultFile() = %q, want an absolute path", got)
+	}
+	if want := filepath.Join(dir, "out.csv"); got != want {
+		t.Errorf("writeResultFile() = %q, want %q", got, want)
 	}
 }
 

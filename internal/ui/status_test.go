@@ -181,6 +181,18 @@ func TestStatusEscapesTagsInDynamicText(t *testing.T) {
 	}
 }
 
+// A saved file's path can hold consecutive spaces — a directory someone
+// named that way — and collapsing them would name a different, possibly
+// nonexistent location than the one the file actually went to.
+func TestStatusPreservesConsecutiveSpacesInAPath(t *testing.T) {
+	s := baseStatus()
+	s.message = "3 rows written to /tmp/client  data/out.csv (12 B)"
+
+	if got := s.render(); !strings.Contains(got, "/tmp/client  data/out.csv") {
+		t.Errorf("render() = %q, want the path's spacing unchanged", got)
+	}
+}
+
 // A batch that stopped part-way has left the database in a state nothing on
 // screen describes, and there is no transaction to unwind it. The count of
 // what actually ran is the only thing that tells the user where to look, so

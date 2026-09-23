@@ -341,8 +341,13 @@ func tag(colour fmt.Stringer, text string) string {
 
 // oneLine flattens a multi-line message; the status bar is one line by
 // contract, and a driver error with newlines would push the layout apart.
+//
+// Only line breaks and tabs are replaced. Collapsing runs of ordinary spaces
+// as well — strings.Fields' way of doing this — once corrupted a saved
+// path: a directory with two spaces in its name came back with one, naming a
+// location that was not where the file actually went.
 func oneLine(s string) string {
-	return strings.Join(strings.Fields(strings.ReplaceAll(s, "\n", " ")), " ")
+	return strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace(s)
 }
 
 // plural counts a thing without saying "1 rows", which reads as a bug in the

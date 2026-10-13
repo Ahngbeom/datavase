@@ -50,8 +50,8 @@ func highlights(sql string) []span {
 		case sqlparse.Comment:
 			r = roleComment
 		case sqlparse.Word:
-			afterDot := i > 0 && toks[i-1].Text == "."
-			if !afterDot && (sqlparse.IsReserved(tok.Text) || statementWords[strings.ToUpper(tok.Text)]) {
+			name := i > 0 && sqlparse.MakesAName(toks[i-1])
+			if !name && (sqlparse.IsReserved(tok.Text) || statementWords[strings.ToUpper(tok.Text)]) {
 				r = roleKeyword
 			}
 		}

@@ -231,7 +231,7 @@ func (a *App) formatQuery() {
 	caret := a.caretOffset(text)
 
 	before := text[from:to]
-	after, err := sqlformat.Format(before)
+	after, err := sqlformat.FormatRange(text, from, to)
 	switch {
 	case errors.Is(err, sqlformat.ErrVersionComment):
 		a.notice("not formatted: it holds a /*! */ comment, which formatting would unwrap")

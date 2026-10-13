@@ -163,3 +163,11 @@ func TestColoursLineUpAfterATab(t *testing.T) {
 		}
 	}
 }
+
+// After @ a word is a variable; colouring @where as a keyword would read as a
+// WHERE clause that is not there.
+func TestAVariableNamedLikeAKeywordIsNotAKeyword(t *testing.T) {
+	if got := roleAt(t, "select @where", "where"); got != roleNone {
+		t.Errorf("@where has role %v, want none", got)
+	}
+}

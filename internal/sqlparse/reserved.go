@@ -13,6 +13,13 @@ func IsReserved(word string) bool {
 	return reserved[strings.ToUpper(word)]
 }
 
+// MakesAName reports whether a word right after tok is a name whatever it
+// spells: after a dot it is a table or column, after @ a variable. Read as a
+// keyword it would invent a clause the statement does not have.
+func MakesAName(tok Token) bool {
+	return tok.Kind == Punct && (tok.Text == "." || tok.Text == "@")
+}
+
 var reserved = map[string]bool{}
 
 func init() {

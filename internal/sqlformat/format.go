@@ -21,17 +21,21 @@ var ErrVersionComment = errors.New("a /*! */ comment cannot be formatted without
 
 // errChanged means the self-check caught a layout that would alter the
 // statement. It indicates a bug here, and refusing is the only safe answer.
+// ErrSplitsToken is returned for a selection that starts or ends inside a
+// token, or starts on a word that what precedes it makes a name. Read on its
+// own, such a selection is formatted as something it is not.
+var ErrSplitsToken = errors.New("the selection cuts through a name, string or comment")
+
 var errChanged = errors.New("formatting would change the statement")
 
 const indentUnit = "    "
 
 // Format returns sql laid out by clause, with surrounding whitespace kept.
 func Format(sql string) (string, error) {
-	if strings.Contains(sql, "/*!") {
+	toks := sqlparse.Tokenize(sql)
+	if hasVersionComment(sql, toks) {
 		return "", ErrVersionComment
 	}
-
-	toks := sqlparse.Tokenize(sql)
 	if len(toks) == 0 {
 		return sql, nil
 	}
@@ -45,6 +49,46 @@ func Format(sql string) (string, error) {
 		return "", errChanged
 	}
 	return out, nil
+}
+
+// FormatRange returns sql[from:to] laid out, refusing a selection that
+// would not mean on its own what it means where it stands.
+func FormatRange(sql string, from, to int) (string, error) {
+	toks := sqlparse.Tokenize(sql)
+	for i, tok := range toks {
+		if within(from, tok) || within(to, tok) {
+			return "", ErrSplitsToken
+		}
+		if tok.Pos == from && i > 0 && sqlparse.MakesAName(toks[i-1]) {
+			return "", ErrSplitsToken
+		}
+	}
+	return Format(sql[from:to])
+}
+
+func within(at int, tok sqlparse.Token) bool { return at > tok.Pos && at < tok.End }
+
+// hasVersionComment reports whether sql holds a /*! the server would execute.
+// The tokenizer unwraps those, leaving their markers outside every token;
+// the same characters in a string or a comment lie inside one.
+func hasVersionComment(sql string, toks []sqlparse.Token) bool {
+	for at := 0; ; at += 3 {
+		i := strings.Index(sql[at:], "/*!")
+		if i < 0 {
+			return false
+		}
+		at += i
+		covered := false
+		for _, tok := range toks {
+			if at >= tok.Pos && at < tok.End {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return true
+		}
+	}
 }
 
 // Offset carries a byte offset in before to the same character in after,
@@ -134,7 +178,7 @@ func (f *formatter) token(tok sqlparse.Token, prev, next *sqlparse.Token) {
 	}
 
 	fr := f.top()
-	word := tok.Kind == sqlparse.Word && !(prev != nil && prev.Text == ".")
+	word := tok.Kind == sqlparse.Word && !(prev != nil && sqlparse.MakesAName(*prev))
 	upper := strings.ToUpper(tok.Text)
 	text := tok.Text
 

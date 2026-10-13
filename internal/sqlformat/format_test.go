@@ -1,6 +1,7 @@
 package sqlformat
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -224,5 +225,66 @@ func TestTheSelfCheckRejectsAnythingButWhitespaceAndCase(t *testing.T) {
 	}
 	if !sameStatement("select a\nfrom t", "SELECT a FROM t") {
 		t.Error("sameStatement() rejected a change of whitespace and case")
+	}
+}
+
+// A word right after @ is a variable name whatever it spells. Breaking the
+// line before it turned SELECT @where into SELECT @ and a WHERE clause, and
+// the self-check, which ignores whitespace, let that through.
+func TestAVariableNamedLikeAKeywordIsLeftAsAName(t *testing.T) {
+	got := format(t, "select @where, @@from from t")
+	want := lines(
+		"SELECT @where,",
+		"    @@from",
+		"FROM t",
+	)
+	if got != want {
+		t.Errorf("Format() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Only a /*! the server would execute is a reason to refuse; the same three
+// characters in a string or an ordinary comment are text.
+func TestVersionCommentMarkersInsideTextAreNotRefused(t *testing.T) {
+	got := format(t, "select '/*! x */' /* not /*! this */ from t")
+	want := lines(
+		"SELECT '/*! x */' /* not /*! this */",
+		"FROM t",
+	)
+	if got != want {
+		t.Errorf("Format() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A selection read on its own loses what surrounds it: the word where inside
+// 'where' would be upper-cased as a keyword, changing the string, and order
+// after db. would be upper-cased into a different table name.
+func TestASelectionThatCutsThroughANameStringOrCommentIsRefused(t *testing.T) {
+	tests := []struct{ name, sql, sel string }{
+		{name: "inside a string", sql: "select 'where' from t", sel: "where"},
+		{name: "inside a comment", sql: "select 1 /* from */", sel: "from"},
+		{name: "half a word", sql: "select abc from t", sel: "bc from"},
+		{name: "after a dot", sql: "select * from db.order", sel: "order"},
+		{name: "after an @", sql: "select @where", sel: "where"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			from := strings.LastIndex(tt.sql, tt.sel)
+			if _, err := FormatRange(tt.sql, from, from+len(tt.sel)); !errors.Is(err, ErrSplitsToken) {
+				t.Errorf("FormatRange(%q, %q) error = %v, want ErrSplitsToken", tt.sql, tt.sel, err)
+			}
+		})
+	}
+}
+
+func TestASelectionOfWholeTokensIsFormatted(t *testing.T) {
+	sql := "select 1 from a; select 2 from b"
+	from := strings.LastIndex(sql, "select")
+	got, err := FormatRange(sql, from, len(sql))
+	if err != nil {
+		t.Fatalf("FormatRange() error = %v", err)
+	}
+	if want := "SELECT 2\nFROM b"; got != want {
+		t.Errorf("FormatRange() = %q, want %q", got, want)
 	}
 }

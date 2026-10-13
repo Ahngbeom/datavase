@@ -69,6 +69,26 @@ func TestAQueryThatCannotBeFormattedSaysWhy(t *testing.T) {
 	}
 }
 
+// Formatted on its own, the word where selected inside 'where' was a
+// keyword, and the string the query would write came out upper-cased.
+func TestASelectionInsideAStringIsNotFormatted(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	sql := "insert into t values ('where')"
+	h.buffer(sql, 0)
+	h.inspect(func(a *App) bool {
+		at := strings.Index(sql, "where")
+		a.editor.Select(at, at+len("where"))
+		return true
+	})
+
+	h.do(keymap.ActionFormat)
+
+	h.waitFor("a notice saying why", func(a *App) bool { return strings.Contains(a.status.message, "selection") })
+	if got := h.editorText(); got != sql {
+		t.Errorf("the editor was changed to %q", got)
+	}
+}
+
 // A query copied on macOS arrives in a bracketed paste with LF line ends,
 // which tcell reports as Ctrl+J; the query used to land on one line.
 func TestAPastedQueryKeepsItsLines(t *testing.T) {

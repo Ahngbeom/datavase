@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"errors"
+
 	"github.com/Ahngbeom/datavase/internal/clipboard"
 	"github.com/Ahngbeom/datavase/internal/keymap"
+	"github.com/Ahngbeom/datavase/internal/sqlformat"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -60,6 +63,8 @@ func (a *App) editorAction(action keymap.Action) bool {
 		a.applyEdit(duplicateLines)
 	case keymap.ActionDeleteLine:
 		a.applyEdit(deleteLines)
+	case keymap.ActionFormat:
+		a.formatQuery()
 	default:
 		return false
 	}
@@ -211,6 +216,41 @@ func (a *App) paste() {
 		a.editor.Replace(from, to, text)
 		a.editor.Select(from+len(text), from+len(text))
 	}
+}
+
+// formatQuery lays out the selection, or the whole buffer when nothing is
+// selected, keeping the caret on the character it was on.
+//
+// Replace rather than SetText, so one undo takes the reformat back.
+func (a *App) formatQuery() {
+	text := a.editor.GetText()
+	from, to := 0, len(text)
+	if a.editor.HasSelection() {
+		_, from, to = a.editor.GetSelection()
+	}
+	caret := a.caretOffset(text)
+
+	before := text[from:to]
+	after, err := sqlformat.Format(before)
+	switch {
+	case errors.Is(err, sqlformat.ErrVersionComment):
+		a.notice("not formatted: it holds a /*! */ comment, which formatting would unwrap")
+		return
+	case err != nil:
+		a.notice("not formatted: " + err.Error())
+		return
+	case after == before:
+		return
+	}
+
+	a.editor.Replace(from, to, after)
+	a.clearAnchor()
+	if caret >= from && caret <= to {
+		caret = from + sqlformat.Offset(before, after, caret-from)
+	} else if caret > to {
+		caret += len(after) - len(before)
+	}
+	a.editor.Select(caret, caret)
 }
 
 // setClipboard writes to the system clipboard and to the session-local copy.

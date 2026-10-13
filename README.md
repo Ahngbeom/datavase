@@ -239,6 +239,7 @@ The editor's own keys are the ones every editor already uses:
 | Comment or uncomment | `⌘/` | `Ctrl+/` |
 | Duplicate the line | `⌘D` | `Ctrl+D` |
 | Delete the line | `⌘Y` | `Ctrl+Y` |
+| Format the selection, or the whole query | `⌘⌥L` · `⇧F8` | `Ctrl+Alt+L` · `Shift+F8` |
 | Move one word | `⌥←` `⌥→` | `Ctrl+←` `Ctrl+→` |
 | Extend the selection one word | `⌥⇧←` `⌥⇧→` | `Ctrl+Shift+←/→` |
 | Start / end of line | `⌘←` `⌘→` | `Home` `End` |
@@ -252,6 +253,11 @@ line while `⌥←` and `Ctrl+←` move by word.
 
 A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
 `_` and `id`, which is how a generic text editor would split it.
+
+Formatting puts each clause on its own line and upper-cases reserved words; it
+changes nothing but whitespace and that case, and the caret stays on the
+character it was on. A query holding a `/*! … */` comment is left alone, since
+rebuilding it would unwrap the comment. One `Ctrl+Z` takes a format back.
 
 Undo is `Ctrl+Z`. It belongs to the text widget rather than to the key map,
 which is why it has no `⌘` spelling.

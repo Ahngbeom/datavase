@@ -42,6 +42,8 @@ const (
 	ActionToggleComment
 	ActionDuplicateLine
 	ActionDeleteLine
+	// ActionFormat lays the selection, or the whole editor, out by clause.
+	ActionFormat
 
 	// Navigation and panes.
 	ActionNextPane
@@ -102,6 +104,7 @@ var actionNames = map[Action]string{
 	ActionToggleComment:     "toggle-comment",
 	ActionDuplicateLine:     "duplicate-line",
 	ActionDeleteLine:        "delete-line",
+	ActionFormat:            "format",
 	ActionNextPane:          "next-pane",
 	ActionPrevPane:          "prev-pane",
 	ActionToggleSidebar:     "toggle-sidebar",
@@ -145,6 +148,7 @@ var descriptions = map[Action]string{
 	ActionToggleComment:     "comment or uncomment the selected lines",
 	ActionDuplicateLine:     "duplicate the current line",
 	ActionDeleteLine:        "delete the current line",
+	ActionFormat:            "format the query or selection",
 	ActionNextPane:          "move to the next pane",
 	ActionPrevPane:          "move to the previous pane",
 	ActionToggleSidebar:     "show or hide the schema tree",
@@ -181,6 +185,7 @@ var order = []Action{
 	ActionDeleteWordLeft, ActionDeleteToLineStart,
 	ActionComplete, ActionCopyOrCancel, ActionCut, ActionPaste,
 	ActionSelectAll, ActionToggleComment, ActionDuplicateLine, ActionDeleteLine,
+	ActionFormat,
 	ActionFind, ActionFindNext, ActionFindPrev, ActionSearchHistory,
 	ActionInspect,
 	ActionSortColumn, ActionCopyRow, ActionCopyResult,

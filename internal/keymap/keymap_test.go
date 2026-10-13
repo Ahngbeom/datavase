@@ -20,6 +20,19 @@ func runeKey(r rune, mods tcell.ModMask) *tcell.EventKey {
 	return tcell.NewEventKey(tcell.KeyRune, r, mods)
 }
 
+// DataGrip reformats with ⌘⌥L; the Ctrl spelling is the same chord elsewhere.
+func TestFormatIsBoundToDataGripsReformatKey(t *testing.T) {
+	for _, ev := range []*tcell.EventKey{
+		runeKey('l', tcell.ModMeta|tcell.ModAlt),
+		runeKey('l', tcell.ModCtrl|tcell.ModAlt),
+		key(tcell.KeyF8, tcell.ModShift),
+	} {
+		if got := lookup(t, ev); got != ActionFormat {
+			t.Errorf("%v = %v, want ActionFormat", ev.Name(), got)
+		}
+	}
+}
+
 // The whole point of the rework: DataGrip's run key must work.
 func TestRunIsBoundToCtrlEnter(t *testing.T) {
 	if got := lookup(t, key(tcell.KeyEnter, tcell.ModCtrl)); got != ActionRun {
@@ -131,6 +144,13 @@ func TestLegacyAndExtendedEncodingsAgree(t *testing.T) {
 			extended: runeKey('d', tcell.ModCtrl),
 			legacy:   key(tcell.KeyCtrlD, tcell.ModCtrl),
 			want:     ActionDuplicateLine,
+		},
+		{
+			// A legacy terminal sends Ctrl+Alt+L as ESC then 0x0C.
+			name:     "ctrl+alt+l",
+			extended: runeKey('l', tcell.ModCtrl|tcell.ModAlt),
+			legacy:   key(tcell.KeyCtrlL, tcell.ModCtrl|tcell.ModAlt),
+			want:     ActionFormat,
 		},
 		{
 			name:     "ctrl+a",

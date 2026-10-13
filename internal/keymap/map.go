@@ -148,6 +148,11 @@ func baseMap() *Map {
 	m.bind(ActionToggleComment, ctrlAndCmdRune('/', 0)...)
 	m.bind(ActionDuplicateLine, ctrlAndCmdRune('d', 0)...)
 	m.bind(ActionDeleteLine, ctrlAndCmdRune('y', 0)...)
+	// DataGrip's Reformat Code. A Mac terminal that keeps ⌥ for typing
+	// accented letters delivers neither chord, hence Shift+F8.
+	m.bind(ActionFormat,
+		append(ctrlAndCmdRune('l', tcell.ModAlt),
+			Binding{Key: tcell.KeyF8, Mods: tcell.ModShift})...)
 
 	// Completion. Ctrl+Space is the one key DataGrip and VS Code share
 	// outright, so no Cmd variant is offered.

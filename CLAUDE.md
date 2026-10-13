@@ -70,6 +70,9 @@ what it deliberately does *not* know, and those boundaries are load-bearing:
 - `clipboard` — the machine's own clipboard, and nothing about terminals.
   `Copy` reports whether a helper existed rather than failing when none did:
   a headless box has no clipboard to write to, and OSC 52 has already gone.
+- `sqlformat` — clause-per-line layout over `sqlparse`'s tokens. It may
+  change only whitespace and the case of reserved words, and checks its own
+  output against the input before returning it.
 - `complete`, `result`, `export`, `config` — same pattern.
 
 `ui` is the largest package and is split by concern rather than by widget:

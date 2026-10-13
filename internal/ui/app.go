@@ -47,7 +47,7 @@ type App struct {
 	picker *dsPicker
 
 	tree      *tview.TreeView
-	editor    *tview.TextArea
+	editor    *highlightedEditor
 	grid      *tview.Table
 	topBar    *topBar
 	statusBar *statusBar
@@ -385,9 +385,9 @@ func (a *App) buildWidgets() {
 	a.tree.SetGraphics(true)
 	a.tree.SetSelectedFunc(a.onTreeSelect)
 
-	a.editor = tview.NewTextArea().
+	a.editor = &highlightedEditor{TextArea: tview.NewTextArea().
 		SetPlaceholder(a.editorPlaceholder()).
-		SetWrap(false)
+		SetWrap(false)}
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.content = newGridContent(a.buf)

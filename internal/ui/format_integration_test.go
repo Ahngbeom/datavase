@@ -96,3 +96,27 @@ func TestAPastedQueryKeepsItsLines(t *testing.T) {
 		return a.editor.GetText() == "SELECT a\nFROM t"
 	})
 }
+
+// The highlighter has to be what is on screen, not just a type that exists:
+// left out of the layout, it draws nothing and every test of it still passes.
+func TestTheEditorOnScreenColoursItsKeywords(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.buffer("select 1 from dual", 0)
+
+	h.waitFor("FROM drawn in the keyword colour", func(a *App) bool {
+		cells, width, height := h.screen.GetContents()
+		for row := 0; row < height; row++ {
+			var line strings.Builder
+			for col := 0; col < width; col++ {
+				line.Write(cells[row*width+col].Bytes)
+			}
+			col := strings.Index(line.String(), "select 1 from dual")
+			if col < 0 {
+				continue
+			}
+			fg, _, _ := cells[row*width+col+len("select 1 ")].Style.Decompose()
+			return fg == colourKeyword
+		}
+		return false
+	})
+}

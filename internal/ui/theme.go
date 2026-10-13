@@ -27,6 +27,21 @@ const (
 	colourMuted = tcell.ColorGray
 )
 
+// Syntax colours in the editor. None of them is a role above: the editor is
+// where the focus, notice and danger colours would be most easily misread.
+// Keywords are bold as well, and comments italic, so the three still read
+// apart on a terminal without colour.
+const (
+	colourKeyword = tcell.ColorBlue
+	// colourLiteral covers strings and numbers alike: both are values the
+	// author typed, and telling them apart adds a colour without a question
+	// it answers.
+	colourLiteral = tcell.ColorGreen
+	// colourComment is colourMuted by another name: text the server ignores
+	// is trailing detail.
+	colourComment = colourMuted
+)
+
 // headingTag marks a line that names the lines beneath it — a group in the
 // key reference.
 //

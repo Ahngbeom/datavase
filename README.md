@@ -254,6 +254,10 @@ line while `⌥←` and `Ctrl+←` move by word.
 A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
 `_` and `id`, which is how a generic text editor would split it.
 
+The editor colours what it holds: keywords blue and bold, strings and numbers
+green, comments grey and italic. The colours are the terminal's own palette
+entries, and the bold and italic keep the three apart without colour.
+
 Formatting puts each clause on its own line and upper-cases reserved words; it
 changes nothing but whitespace and that case, and the caret stays on the
 character it was on. A query holding a `/*! … */` comment is left alone, since

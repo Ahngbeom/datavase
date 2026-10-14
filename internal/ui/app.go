@@ -47,7 +47,7 @@ type App struct {
 	picker *dsPicker
 
 	tree      *tview.TreeView
-	editor    *tview.TextArea
+	editor    *highlightedEditor
 	grid      *tview.Table
 	topBar    *topBar
 	statusBar *statusBar
@@ -79,6 +79,9 @@ type App struct {
 	// screen is captured during drawing. tview offers no accessor for it,
 	// but the clipboard needs it to reach the terminal over OSC 52.
 	screen tcell.Screen
+	// screenSet says SetScreen already supplied the terminal; otherwise Run
+	// makes one, since tview's own would skip pasteScreen.
+	screenSet bool
 	// clipboard is the session-local copy, used for pasting since OSC 52
 	// reads are asynchronous and usually refused.
 	clipboard string
@@ -349,6 +352,13 @@ func (a *App) editorPlaceholder() string {
 
 // Run starts the event loop and blocks until the user quits.
 func (a *App) Run() error {
+	if !a.screenSet {
+		screen, err := tcell.NewScreen()
+		if err != nil {
+			return err
+		}
+		a.SetScreen(screen)
+	}
 	return a.app.SetRoot(a.pages, true).EnableMouse(true).EnablePaste(true).Run()
 }
 
@@ -356,7 +366,8 @@ func (a *App) Run() error {
 // tcell simulation screen so the real interface — layout, key handling,
 // dialogs — can be exercised without a terminal.
 func (a *App) SetScreen(screen tcell.Screen) {
-	a.app.SetScreen(screen)
+	a.app.SetScreen(&pasteScreen{Screen: screen})
+	a.screenSet = true
 }
 
 // Stop ends the event loop.
@@ -374,9 +385,9 @@ func (a *App) buildWidgets() {
 	a.tree.SetGraphics(true)
 	a.tree.SetSelectedFunc(a.onTreeSelect)
 
-	a.editor = tview.NewTextArea().
+	a.editor = &highlightedEditor{TextArea: tview.NewTextArea().
 		SetPlaceholder(a.editorPlaceholder()).
-		SetWrap(false)
+		SetWrap(false)}
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
 	a.content = newGridContent(a.buf)

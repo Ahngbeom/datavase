@@ -97,6 +97,7 @@ var helpGroups = []struct {
 			keymap.ActionCopyOrCancel, keymap.ActionCut, keymap.ActionPaste,
 			keymap.ActionSelectAll, keymap.ActionToggleComment,
 			keymap.ActionDuplicateLine, keymap.ActionDeleteLine,
+			keymap.ActionFormat,
 			keymap.ActionDeleteWordLeft, keymap.ActionDeleteToLineStart,
 		},
 	},

@@ -5,6 +5,89 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.12.0 — 2026-10-14
+
+**Nothing to do before upgrading,** unless a script reads the output of
+`dv ls`: the `(password stored)` it printed beside a datasource now says
+where the password is. No configuration changed meaning and no key moved;
+the only new keys are the two that format.
+
+### Added
+
+**`⌘⌥L` / `Ctrl+Alt+L` formats the query.** With a selection it formats
+the selection; without one, the whole buffer. Each clause goes on its own
+line and reserved words are upper-cased, and nothing else changes: the
+formatter checks its own output against the input and refuses rather than
+return a statement that differs in more than whitespace and case. The caret
+stays on the character it was on, and one `Ctrl+Z` takes a format back.
+`⇧F8` / `Shift+F8` does the same where the modified key does not arrive.
+
+Two things are refused with a notice rather than formatted: a query holding
+a `/*! … */` comment, which MySQL executes and rebuilding would unwrap, and
+a selection that cuts through a string, a name or a comment. Formatted on
+its own, the word `where` selected inside `'where'` is a keyword, and the
+string the query would write would come out upper-cased.
+
+Only words reserved in both MySQL and MariaDB are upper-cased. A word
+reserved in just one can be a table name on the other, and table names are
+case sensitive on a case-sensitive file system.
+
+**The editor colours what it holds.** Keywords are blue and bold, strings
+and numbers green, comments grey and italic. None of these colours already
+meant something else on screen, and the bold and italic keep the three apart
+on a terminal without colour. A word after a dot or an `@` is a name, and is
+left uncoloured.
+
+### Changed
+
+**`dv ls` says where each password comes from.** It printed `(password
+stored)` whether the password was in the keychain or in a
+`DATAVASE_PASSWORD_*` variable exported into the shell, and those are fixed
+in different places. It now prints `(password from DATAVASE_PASSWORD_…)`,
+naming the variable to unset or re-export, `(password in the keychain)` or
+`(no password)`.
+
+### Fixed
+
+**A pasted query keeps its line breaks.** A query copied on macOS holds LF
+line ends, which arrive inside a paste as a key the editor did not keep, so
+in Ghostty, WezTerm and kitty the query landed on one line. Terminals that
+turn LF into CR on paste were never affected.
+
+**A warning no longer outlives the statement that raised it.** MariaDB does
+not clear its diagnostics for every statement, so a `SET` or a bare `SELECT`
+after a failed write reported the earlier statement's error as its own.
+
+**A saved result says where it landed.** The save prompt and the status line
+showed the path as typed, and a relative one was resolved against wherever
+`dv` was started. The status line now shows the absolute path written.
+
+**A refused database is not sent to `dv auth`.** `dv check` and connecting
+gave the same advice — check the user and the stored password — for a wrong
+password, a database the account may not use (1044), and a machine the
+server will not accept (1130). The last two arrive whatever the password is;
+each now says what actually decides it.
+
+**`Test` in the datasource form finds a password in the environment.** For a
+new datasource it tried no password at all, though saving and connecting
+read `DATAVASE_PASSWORD_<NAME>`. It now asks under the name being saved, and
+for a rename falls back to the name the keychain entry still sits under.
+
+**A statement that reads no table is not given a `LIMIT`.** `SELECT
+DATABASE(), CURRENT_USER()` was rewritten and then reported as limited,
+implying an answer that might have been cut short. `TABLE t`, which names no
+`FROM` but reads the whole table, keeps its limit.
+
+**Inside tmux the hints name the `Ctrl` key.** The Apple glyphs are dropped
+there, because tmux never forwards `⌘`, but the hint bar still named the `⌘`
+binding and spelled it `Super`, a key no Mac keyboard has.
+
+**README says what Windows and WSL get,** which clipboard helper and
+keychain each uses, and that the configuration lives under the home
+directory on every system. It also now says that statement history is kept
+unless the file says `history: false`; its example showed the opposite of
+the default.
+
 ## v0.11.1 — 2026-09-18
 
 **Nothing to do before upgrading.** No configuration changes and no keys

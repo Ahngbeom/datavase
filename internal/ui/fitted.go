@@ -111,6 +111,12 @@ func (f *fitted) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return f.content.InputHandler()
 }
 
+// PasteHandler must be forwarded like the keys: Box's own swallows the
+// paste, so every field inside a dialog silently refused pasted text.
+func (f *fitted) PasteHandler() func(string, func(tview.Primitive)) {
+	return f.content.PasteHandler()
+}
+
 func (f *fitted) Focus(delegate func(p tview.Primitive)) {
 	delegate(f.content)
 }

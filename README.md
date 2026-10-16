@@ -341,7 +341,9 @@ session. Nothing is re-run: the statement in the editor is yours to send
 again or not.
 
 **The editor** is an ordinary one: typing types, and there is no mode to leave
-first. **The grid** streams the result as it arrives, sorts on a column and
+first. Empty, it invites a query, offers the tree's double-click while the tree
+is showing, and names the key reference; the hint goes as soon as you type and
+is never part of what runs. **The grid** streams the result as it arrives, sorts on a column and
 opens one row down the page rather than across it.
 
 **Clicks mean something.** The datasource, the schema or `keys` in the top bar

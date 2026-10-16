@@ -342,12 +342,19 @@ func (a *App) keyLabel(action keymap.Action) string {
 // already says how to run, and repeating it wastes the one line a reader
 // looks at before they have typed anything. A table in the tree is the
 // fastest thing anyone new can do here, and nothing else on screen says the
-// gesture exists.
-func (a *App) editorPlaceholder() string {
-	if !a.sidebarVisible {
-		return "SELECT …"
+// gesture exists. The help key closes it because the status bar's mention
+// of it goes with the first thing that happens, and the editor is empty
+// again every time someone starts over.
+//
+// Terse because the editor beside the tree is forty-four cells wide on an
+// eighty-column terminal: past that the placeholder wraps, and the line it
+// breaks is the help key's.
+func editorPlaceholder(sidebarVisible bool, helpKey string) string {
+	start := "Type a query"
+	if sidebarVisible {
+		start += " or dbl-click a table"
 	}
-	return "SELECT … or double-click a table"
+	return start + " · " + helpKey + " keys"
 }
 
 // Run starts the event loop and blocks until the user quits.
@@ -386,7 +393,7 @@ func (a *App) buildWidgets() {
 	a.tree.SetSelectedFunc(a.onTreeSelect)
 
 	a.editor = &highlightedEditor{TextArea: tview.NewTextArea().
-		SetPlaceholder(a.editorPlaceholder()).
+		SetPlaceholder(editorPlaceholder(a.sidebarVisible, a.helpKeyLabel())).
 		SetWrap(false)}
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
@@ -664,6 +671,7 @@ func (a *App) focusVisibleSchemaTab() {
 func (a *App) toggleSidebar() {
 	a.sidebarVisible = !a.sidebarVisible
 	a.layoutBody()
+	a.editor.SetPlaceholder(editorPlaceholder(a.sidebarVisible, a.helpKeyLabel()))
 
 	// Focus cannot stay on a pane that is no longer on screen.
 	if !a.sidebarVisible && a.schemaHasFocus() {

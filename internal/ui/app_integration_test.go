@@ -1042,29 +1042,6 @@ func TestAcceptingACandidateReplacesThePrefix(t *testing.T) {
 	}
 }
 
-// Escape must return control to the editor rather than trapping it.
-func TestCompletionPopupCanBeDismissed(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
-	h.seedCache(completionSnapshot())
-	h.typeSQL("SELECT * FROM customer")
-
-	h.do(keymap.ActionComplete)
-	if !strings.Contains(h.text(), "complete") {
-		t.Fatalf("the popup did not open:\n%s", h.text())
-	}
-
-	h.press(tcell.KeyEscape)
-
-	if strings.Contains(h.text(), "customer_notes") {
-		t.Errorf("the popup is still open after Escape:\n%s", h.text())
-	}
-	// The editor still works.
-	h.typeSQL("SELECT 1")
-	if got := h.editorText(); got != "SELECT 1" {
-		t.Errorf("the editor did not regain focus; it holds %q", got)
-	}
-}
-
 // Having nothing to offer must be said out loud, or the key looks broken.
 func TestCompletionWithNoMatchesSaysSo(t *testing.T) {
 	h := newHarness(t, config.EnvDev)

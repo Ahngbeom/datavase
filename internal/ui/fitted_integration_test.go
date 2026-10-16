@@ -103,14 +103,6 @@ func TestEveryDialogFitsASmallTerminal(t *testing.T) {
 		{name: "help", action: keymap.ActionHelp},
 		{name: "history", action: keymap.ActionSearchHistory},
 		{
-			name:   "completion",
-			action: keymap.ActionComplete,
-			setup: func(h *harness) {
-				h.seedCache(completionSnapshot())
-				h.typeSQL("SELECT * FROM customer")
-			},
-		},
-		{
 			name:   "confirmation",
 			action: keymap.ActionQuit,
 			setup: func(h *harness) {

@@ -26,6 +26,9 @@ func (a *App) bindMouse() {
 		if ev == nil {
 			return ev, action
 		}
+		if a.menu.isOpen() && a.completionMouse(ev, action) {
+			return nil, action
+		}
 		// Off only stops dv claiming the click, so the zones go quiet and
 		// tview's own handling — a table's default row selection, for
 		// instance — is whatever is left underneath.

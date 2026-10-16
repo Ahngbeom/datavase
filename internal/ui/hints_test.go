@@ -55,3 +55,79 @@ func TestTheWelcomeListsTheKeysTheReferenceStartsWith(t *testing.T) {
 		t.Errorf("the welcome calls itself the help:\n%s", got)
 	}
 }
+
+// A tip that changed on every redraw, or that two sessions with the same
+// count disagreed on, could not be pinned down by anyone reporting it.
+// Consecutive sessions differ, so a returning user meets something new.
+func TestTheTipFollowsTheSessionCount(t *testing.T) {
+	km := keymap.Default()
+
+	if tipFor(3, km) != tipFor(3, km) {
+		t.Error("the same session count chose two different tips")
+	}
+	if tipFor(0, km) == tipFor(1, km) {
+		t.Errorf("two sessions in a row got the same tip: %q", tipFor(0, km))
+	}
+	if tipFor(0, km) != tipFor(len(tips), km) {
+		t.Error("the tips do not come round again once every one has been shown")
+	}
+}
+
+// A tip is worth showing only if the key it names is the one that works
+// here, so each one is spelled from the key map in force.
+func TestEveryTipNamesABoundKey(t *testing.T) {
+	km := keymap.Default()
+
+	for i, tip := range tips {
+		got := tipFor(i, km)
+		if !strings.HasPrefix(got, "Tip: ") {
+			t.Errorf("tip %d does not say it is one: %q", i, got)
+		}
+		if len(km.DisplayBindings(tip.action)) == 0 {
+			t.Errorf("tip %d advertises %s, which has no key", i, tip.action)
+		}
+		if !strings.Contains(got, tipKeyLabel(km, tip.action)) {
+			t.Errorf("tip %d does not name the key for %s: %q", i, tip.action, got)
+		}
+	}
+}
+
+// The tip is the least of what the bar has to say. Anything that actually
+// happened takes the line, and the tip does not come back over it.
+func TestATipGivesWayToAnythingThatHappened(t *testing.T) {
+	tip := tipFor(0, keymap.Default())
+	s := baseStatus()
+	s.hints = openingClauses(opening{helpKey: "F1", sidebarKey: "^B", tip: tip})
+
+	if got := s.renderWidth(200); !strings.Contains(got, tip) {
+		t.Fatalf("an idle bar does not show the tip: %q", got)
+	}
+
+	s.message = "nothing to run"
+	if got := s.renderWidth(200); strings.Contains(got, tip) {
+		t.Errorf("the tip is still competing with a real message: %q", got)
+	}
+}
+
+// Of everything on the opening line, the tip is what goes before the schema
+// tree and the help key do: those are how the rest is found.
+func TestTheTipIsShedBeforeTheWaysToFindEverythingElse(t *testing.T) {
+	tip := tipFor(0, keymap.Default())
+	s := baseStatus()
+	s.hints = openingClauses(opening{
+		serverVersion: "11.4.12-MariaDB-ubu2404",
+		helpKey:       "F1",
+		sidebarKey:    "^B",
+		tip:           tip,
+	})
+
+	got := s.renderWidth(40)
+	if strings.Contains(got, tip) {
+		t.Errorf("a narrow bar kept the tip: %q", got)
+	}
+	for _, want := range []string{"schema tree", "F1 for keys"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("a narrow bar dropped %q for something else: %q", want, got)
+		}
+	}
+}

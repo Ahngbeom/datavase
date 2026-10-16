@@ -313,6 +313,10 @@ datasource is filled rather than merely coloured, so which server this is
 survives a terminal of any width; the column down the left is the same fill
 continued, and it is the only thing on screen that ignores your terminal theme.
 
+Until something happens, the bottom line names the key reference and the key
+that hides the tree, plus one tip about a key nothing else on screen leads
+to — a different one each session. The first message or result replaces them.
+
 Regions are separated by a single rule rather than boxed. Each names itself
 once, on its own header line, and the one holding the keyboard is marked `▌`.
 

@@ -144,3 +144,24 @@ func TestAnUnwritableStateDirectoryDoesNotCostTheSession(t *testing.T) {
 		return a.status.phase == phaseDone && a.status.rows == 1
 	})
 }
+
+// A session opens with a tip on the bar, and loses it the moment the bar has
+// something real to say.
+func TestASessionOpensWithATipThatYieldsToTheFirstNotice(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	want := tipFor(0, keymap.Default())
+
+	if !h.inspect(func(a *App) bool {
+		return strings.Contains(a.currentStatus().renderWidth(200), want)
+	}) {
+		t.Fatalf("the opening bar carries no tip, want %q", want)
+	}
+
+	h.do(keymap.ActionRun)
+	h.waitFor("the empty editor to be reported", func(a *App) bool { return a.status.message != "" })
+	if h.inspect(func(a *App) bool {
+		return strings.Contains(a.currentStatus().renderWidth(200), want)
+	}) {
+		t.Error("the tip is still on the bar after a real notice")
+	}
+}

@@ -242,7 +242,13 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
 	}
-	a.status.hints = a.openingClauses(conn.ServerVersion())
+	// A failed write is ignored: it costs the memory of this session, which at
+	// worst brings the welcome back next time.
+	var sessionsBefore int
+	if deps.VisitsPath != "" {
+		sessionsBefore, _ = visits.Record(deps.VisitsPath)
+	}
+	a.status.hints = a.openingClauses(conn.ServerVersion(), sessionsBefore)
 
 	// Before any widget is built: tview copies its palette into each one as it
 	// is created, so a default claimed afterwards would reach nothing.
@@ -256,12 +262,8 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.captureScreen()
 	a.loadSchemas()
 
-	if deps.VisitsPath != "" {
-		// A failed write is ignored: it costs the memory of this session,
-		// which at worst brings the welcome back next time.
-		if seen, _ := visits.Record(deps.VisitsPath); seen == 0 {
-			a.showWelcome()
-		}
+	if deps.VisitsPath != "" && sessionsBefore == 0 {
+		a.showWelcome()
 	}
 
 	return a
@@ -283,11 +285,12 @@ func (a *App) captureScreen() {
 
 // openingMessage greets the user with what the first line of a session has to
 // say.
-func (a *App) openingClauses(serverVersion string) []string {
+func (a *App) openingClauses(serverVersion string, sessionsBefore int) []string {
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
+		tip:           tipFor(sessionsBefore, a.keys),
 	})
 }
 
@@ -296,6 +299,7 @@ type opening struct {
 	serverVersion string
 	helpKey       string
 	sidebarKey    string
+	tip           string
 }
 
 // openingClauses is the greeting, most actionable first.
@@ -309,10 +313,10 @@ type opening struct {
 // clause's position in this slice is its shedding priority, most protected
 // first. F1 comes first: it reaches the full reference, and every other key
 // with it. The schema tree follows — it is on screen, so this says how to
-// get the width back rather than that it exists. The server version brings
-// up the rear: it is a greeting rather than an instruction, and knowing
-// which MariaDB answered has never stood between anyone and their first
-// query.
+// get the width back rather than that it exists. The tip follows, since F1
+// lists what it says and more. The server version brings up the rear: it is
+// a greeting rather than an instruction, and knowing which MariaDB answered
+// has never stood between anyone and their first query.
 func openingClauses(o opening) []string {
 	var out []string
 
@@ -322,6 +326,9 @@ func openingClauses(o opening) []string {
 	// The tree is on screen; what is worth saying is how to put it away.
 	if o.sidebarKey != "" {
 		out = append(out, o.sidebarKey+" hides the schema tree")
+	}
+	if o.tip != "" {
+		out = append(out, o.tip)
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)

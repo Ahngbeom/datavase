@@ -159,13 +159,19 @@ func (a *App) helpText() string {
 // groups, so the two render one action's row identically instead of each
 // carrying its own closure that could drift from the other.
 func keyReferenceLine(km *keymap.Map, action keymap.Action) string {
+	return keyReferenceLineSaying(km, action, action.Describe())
+}
+
+// keyReferenceLineSaying is keyReferenceLine with the description replaced,
+// for a screen where the help's own wording would be wrong.
+func keyReferenceLineSaying(km *keymap.Map, action keymap.Action, description string) string {
 	labels := make([]string, 0, 3)
 	for _, binding := range km.DisplayBindings(action) {
 		labels = append(labels, binding.Label(onMac))
 	}
 	return fmt.Sprintf("  %s  %s\n",
 		keymap.PadLabel(strings.Join(labels, "  "), helpKeyColumn),
-		action.Describe())
+		description)
 }
 
 // helpReference renders every key group in full.

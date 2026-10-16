@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
@@ -124,6 +125,12 @@ func openSession(sess *session.Session, cfg *config.Config, path string) error {
 		}
 	}
 
+	// Beside the history, in the state directory it already resolves.
+	var visitsPath string
+	if p, err := history.DefaultPath(); err == nil {
+		visitsPath = filepath.Join(filepath.Dir(p), "visits")
+	}
+
 	return ui.New(sess, cfg, ui.Deps{
 		Cache:      cache,
 		History:    hist,
@@ -131,6 +138,7 @@ func openSession(sess *session.Session, cfg *config.Config, path string) error {
 		ConfigPath: path,
 		Secrets:    secrets(),
 		Probe:      probe,
+		VisitsPath: visitsPath,
 	}).Run()
 }
 

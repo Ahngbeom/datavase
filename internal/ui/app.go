@@ -22,6 +22,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
+	"github.com/Ahngbeom/datavase/internal/visits"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -206,6 +207,10 @@ type Deps struct {
 	Secrets secret.Store
 	// Probe answers the dialog's Test button.
 	Probe func(ctx context.Context, ds *config.DataSource, password string) (string, error)
+	// VisitsPath is where the sessions opened on this machine are counted,
+	// which decides whether this one opens with the welcome. Empty counts
+	// nothing and welcomes nobody.
+	VisitsPath string
 }
 
 // New builds the interface for an open session.
@@ -250,6 +255,14 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.bindEditor()
 	a.captureScreen()
 	a.loadSchemas()
+
+	if deps.VisitsPath != "" {
+		// A failed write is ignored: it costs the memory of this session,
+		// which at worst brings the welcome back next time.
+		if seen, _ := visits.Record(deps.VisitsPath); seen == 0 {
+			a.showWelcome()
+		}
+	}
 
 	return a
 }
@@ -690,6 +703,7 @@ const (
 	pageMain       = "main"
 	pageConfirm    = "confirm"
 	pageHelp       = "help"
+	pageWelcome    = "welcome"
 	pageComplete   = "complete"
 	pageHistory    = "history"
 	pageUseSchema  = "useschema"

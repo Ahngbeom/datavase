@@ -93,7 +93,7 @@ func newReadOnlyHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, nil)
 }
 
 // Whether a session can write is a fact about where you are, and the top

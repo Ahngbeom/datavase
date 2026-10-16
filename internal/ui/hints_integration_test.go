@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,4 +86,61 @@ func TestHidingTheTreeTakesThePreviewOutOfTheEmptyEditor(t *testing.T) {
 	if strings.Contains(h.text(), "dbl-click a table") {
 		t.Errorf("the empty editor still offers the hidden tree's preview; screen:\n%s", h.text())
 	}
+}
+
+func welcomeShowing(a *App) bool {
+	name, _ := a.pages.GetFrontPage()
+	return name == pageWelcome
+}
+
+// A newcomer is greeted once. A second session on the same machine opening
+// with the same dialog would be a nag, and the one place that cost lands is
+// on the people who use dv most.
+func TestTheWelcomeGreetsAMachineOnceAndThenNoMore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "datavase", "visits")
+
+	first := newHarnessCounting(t, path)
+	first.waitFor("the welcome", welcomeShowing)
+	first.press(tcell.KeyEnter)
+	first.waitFor("the welcome to give way to the editor", func(a *App) bool {
+		return !welcomeShowing(a) && a.app.GetFocus() == a.editor
+	})
+
+	second := newHarnessCounting(t, path)
+	if second.inspect(welcomeShowing) {
+		t.Error("the welcome opened again for a machine that has already seen it")
+	}
+}
+
+// Escape is what every other dialog here closes on, so it closes this one.
+func TestEscapeDismissesTheWelcome(t *testing.T) {
+	h := newHarnessCounting(t, filepath.Join(t.TempDir(), "visits"))
+
+	h.waitFor("the welcome", welcomeShowing)
+	h.press(tcell.KeyEscape)
+	h.waitFor("the welcome to close", func(a *App) bool { return !welcomeShowing(a) })
+}
+
+// Somewhere the count cannot be written costs the memory of the welcome and
+// nothing else: the session still opens and still runs statements.
+func TestAnUnwritableStateDirectoryDoesNotCostTheSession(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through directory permissions")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+
+	h := newHarnessCounting(t, filepath.Join(dir, "datavase", "visits"))
+	h.waitFor("the welcome", welcomeShowing)
+	h.press(tcell.KeyEscape)
+	h.waitFor("the welcome to close", func(a *App) bool { return !welcomeShowing(a) })
+
+	h.typeSQL("SELECT 1")
+	h.do(keymap.ActionRun)
+	h.waitFor("the statement to finish", func(a *App) bool {
+		return a.status.phase == phaseDone && a.status.rows == 1
+	})
 }

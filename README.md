@@ -91,6 +91,11 @@ The same list is `⌘⇧D` (`Ctrl+Shift+D`, or `F11`) once you are inside, where
 
 With exactly one datasource configured, `dv` opens it directly.
 
+The first session on a machine opens with a short welcome: what `dv` is for and
+the five keys to start with. `↩` or `Esc` closes it, and it does not come back
+— unless the state directory cannot be written, in which case it shows again
+next time and costs nothing else.
+
 ## Configure
 
 `~/.config/datavase/config.yaml` (or `$XDG_CONFIG_HOME/datavase/config.yaml`):
@@ -397,6 +402,7 @@ is on the key table above.
 | Datasources | `$XDG_CONFIG_HOME/datavase/config.yaml`, or `~/.config/datavase/config.yaml` |
 | Statement history | `$XDG_STATE_HOME/datavase/history.db`, or `~/.local/state/datavase/history.db` |
 | Schema cache | the same directory, `datavase.db` |
+| How many sessions have opened, for the first-run welcome | the same directory, `visits` |
 | Passwords | the OS keychain, or `DATAVASE_PASSWORD_<NAME>` in the environment |
 
 These paths are the same on every platform dv builds for, including native
@@ -407,7 +413,8 @@ The two databases live in a directory created `0700`, which is what protects
 them; the files inside it are `0644` — Windows has no such permission bits,
 so this protection is macOS/Linux/WSL only. Deleting either is safe at any
 time — the cache is rebuilt on the next reload, costing completion and the
-tables tab until then, and the history is simply gone.
+tables tab until then, and the history is simply gone. `visits` holds one
+number; deleting it brings the welcome back once.
 
 Statements are written unless you say otherwise: **`history: false` under
 `defaults` stops them being written at all,** and the file is never created.

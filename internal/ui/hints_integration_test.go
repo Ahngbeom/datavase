@@ -188,9 +188,7 @@ func TestASessionOpensWithATipThatYieldsToTheFirstNotice(t *testing.T) {
 	}
 }
 
-// The first session already has the welcome teaching keys, and on an
-// eighty-column bar a tip would push out the one line saying how to put the
-// tree away.
+// A tip in the first session crowded the tree key off an eighty-column bar.
 func TestTheFirstSessionOpensWithoutATip(t *testing.T) {
 	h := newHarnessCounting(t, filepath.Join(t.TempDir(), "visits"))
 	h.waitFor("the welcome", welcomeShowing)

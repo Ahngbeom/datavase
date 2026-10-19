@@ -268,13 +268,16 @@ func (a *App) drawCompletion(screen tcell.Screen) {
 		m.top = m.selected - rows + 1
 	}
 
-	plainStyle := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
+	// The spine's pair rather than the editor's black: with no border, rows
+	// drawn in the editor's own colours read as more of the query. spineText
+	// is the muted tone already chosen to be legible on spineColour.
+	plainStyle := tcell.StyleDefault.Background(spineColour).Foreground(tcell.ColorWhite)
 	for i := 0; i < rows; i++ {
 		at := m.top + i
 		if at >= len(m.candidates) {
 			break
 		}
-		style, detail := plainStyle, plainStyle.Foreground(colourMuted)
+		style, detail := plainStyle, plainStyle.Foreground(spineText)
 		if at == m.selected {
 			style = tcell.StyleDefault.Background(tcell.ColorWhite).Foreground(tcell.ColorBlack)
 			detail = style

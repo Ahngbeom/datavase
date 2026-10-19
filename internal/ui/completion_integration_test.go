@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -289,6 +290,33 @@ func TestPastingPastEveryCandidateClosesTheMenu(t *testing.T) {
 
 	if h.inspect(func(a *App) bool { return a.menu.isOpen() }) {
 		t.Errorf("the menu is still open after a paste nothing matches:\n%s", h.text())
+	}
+}
+
+// In a real terminal the rows that were not highlighted came out in exactly
+// the editor's own colours, with no border, so they read as more of the
+// query rather than as a list.
+func TestTheMenuIsDrawnOnASurfaceOfItsOwn(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	openCustomerCompletion(h)
+
+	var menuBg, editorBg tcell.Color
+	var where string
+	h.inspect(func(a *App) bool {
+		b := a.menu.box
+		// The row after the highlighted one, against the editor's own text
+		// directly above the menu: the word being completed.
+		row := b.y + 1
+		cells, width, _ := h.screen.GetContents()
+		_, menuBg, _ = cells[row*width+b.x].Style.Decompose()
+		_, editorBg, _ = cells[(b.y-1)*width+b.x].Style.Decompose()
+		where = fmt.Sprintf("column %d, rows %d and %d", b.x, row, b.y-1)
+		return true
+	})
+
+	if menuBg == editorBg {
+		t.Errorf("an unhighlighted menu row has the editor's background %v (%s):\n%s",
+			menuBg, where, h.text())
 	}
 }
 

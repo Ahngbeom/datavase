@@ -2,7 +2,7 @@ package keymap
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 )
 
 // DisplayBindings returns an action's bindings with duplicates collapsed,
@@ -57,7 +57,7 @@ func (m *Map) PreferredBinding(a Action, mac bool) (Binding, bool) {
 // Glyphs such as ⌘ and ⇥ are wider than one cell in most fonts, so counting
 // runes would leave the description column ragged.
 func labelWidth(label string) int {
-	return runewidth.StringWidth(label)
+	return uniseg.StringWidth(label)
 }
 
 // PadLabel right-pads a label to the given display width.

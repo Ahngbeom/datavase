@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/db"
@@ -69,6 +70,34 @@ func TestAddingADatasourceInSessionSavesTheFile(t *testing.T) {
 		return err == nil && len(saved.DataSources) == 2
 	})
 	h.waitFor("the list again", func(a *App) bool { return len(a.cfg.DataSources) == 2 && !a.picker.pages.HasPage(pickerForm) })
+}
+
+// A host copied from a cloud console and pasted into the add form vanished:
+// the terminal delivered the paste, and the dialog frame dropped it before
+// any field saw it.
+func TestAHostPastedIntoTheAddFormIsKept(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.do(keymap.ActionSwitchDataSource)
+	h.waitFor("the list", func(a *App) bool { return a.pages.HasPage(pageDataSource) })
+	h.inject(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
+	h.waitFor("the form", func(a *App) bool { return a.picker != nil && a.picker.pages.HasPage(pickerForm) })
+
+	const host = "db.example.internal"
+	events := []tcell.Event{tcell.NewEventPaste(true)}
+	for _, r := range host {
+		events = append(events, tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	events = append(events, tcell.NewEventPaste(false))
+	// The simulation's queue is short; a paste is longer than it.
+	for _, ev := range events {
+		for h.screen.PostEvent(ev) != nil {
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	if !h.waitForScreen(host) {
+		t.Errorf("the pasted host never appeared in the form; screen:\n%s", h.text())
+	}
 }
 
 // Deleting mid-session goes through the same picker flow a user takes: move

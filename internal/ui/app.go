@@ -125,9 +125,10 @@ type App struct {
 	// row can be mapped back to the table it stands for.
 	listedTables []catalog.Table
 
-	// completion is nil until the schema cache is available; the popup says
+	// completion is nil until the schema cache is available; the status bar says
 	// so rather than appearing broken.
 	completion *complete.Engine
+	menu       completionMenu
 	cache      *catalog.Cache
 	history    *history.Store
 
@@ -259,6 +260,7 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.bindKeys()
 	a.bindMouse()
 	a.bindEditor()
+	a.bindCompletion()
 	a.captureScreen()
 	a.loadSchemas()
 
@@ -720,7 +722,6 @@ const (
 	pageConfirm    = "confirm"
 	pageHelp       = "help"
 	pageWelcome    = "welcome"
-	pageComplete   = "complete"
 	pageHistory    = "history"
 	pageUseSchema  = "useschema"
 	pageSearch     = "search"
@@ -763,6 +764,9 @@ func (a *App) bindKeys() {
 			return ev
 		}
 
+		if a.menu.isOpen() && a.completionKey(ev) {
+			return nil
+		}
 		if a.dispatch(a.keys.Lookup(ev)) {
 			return nil
 		}

@@ -226,7 +226,7 @@ does not forward `⌘` to the program it hosts.
 | Hide or show the schema tree | `⌘B` | |
 | Move between panes | `⇥` / `⇧⇥` | a pane's name |
 | Switch tab in the focused pane | `Ctrl+⇥` · `F6` | a tab |
-| Complete the word at the cursor | `^Space` | |
+| Complete the word at the cursor | `^Space` | click a candidate |
 | Find in the editor or the results | `⌘F` | |
 | Next / previous match | `⌘G` / `⌘⇧G` | |
 | Search the query history | `⌘⇧F` · `F9` | |
@@ -262,6 +262,13 @@ A word here is a SQL identifier, so `user_id` moves as one — not as `user`,
 The editor colours what it holds: keywords blue and bold, strings and numbers
 green, comments grey and italic. The colours are the terminal's own palette
 entries, and the bold and italic keep the three apart without colour.
+
+Completion opens a list directly under the word being completed, and the
+editor keeps the keyboard: typing or `⌫` narrows the list as you go, `↑` `↓`
+(or `Ctrl+P` `Ctrl+N`) move through it, `↩` or `⇥` writes the highlighted name
+over the word, and `Esc` closes it without touching the text. Any other key —
+an arrow sideways, running the query — closes the list and then does what it
+always does. A word only one name matches is completed without a list.
 
 Formatting puts each clause on its own line and upper-cases reserved words; it
 changes nothing but whitespace and that case, and the caret stays on the

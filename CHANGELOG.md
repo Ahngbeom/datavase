@@ -5,6 +5,45 @@ What changed between releases, and what to do about it before upgrading.
 The generated release page lists every commit; this file is the shorter,
 edited account — and the place anything that needs action is written down.
 
+## v0.13.0 — 2026-10-19
+
+**Nothing to do before upgrading.** No configuration changed meaning and no
+key moved. One new file appears in the state directory, `visits`, holding
+the number of sessions opened; it is written even with `history: false`,
+because it records no statement, and deleting it brings the first-run
+welcome back once.
+
+### Added
+
+**The first session says what `dv` is for.** It opens with a short welcome
+naming the five keys to start with; `↩` or `Esc` closes it, and it does not
+come back. An empty editor says how to begin — type a query, or double-click
+a table — and where the key reference is. Until something happens, the
+bottom line names that reference and the key that hides the tree, and from
+the second session on it leads with a tip about a key nothing else on screen
+points to, a different one each session.
+
+### Changed
+
+**Completion opens under the word, and the editor keeps the keyboard.** It
+used to open as a dialog over the screen, hiding the query being completed.
+The list now drops from the word itself: typing or `⌫` narrows it, `↑` `↓`
+(or `Ctrl+P` `Ctrl+N`) move through it, `↩` or `⇥` writes the highlighted
+name, and `Esc` closes it without touching the text. Any other key closes
+the list and then does what it always does. It still opens only on `^Space`,
+never by itself.
+
+### Fixed
+
+**Pasting into a dialog works.** Text pasted into the datasource form — a
+host copied from a cloud console, a password from a manager — was dropped
+before any field saw it, so the only way in was to type it.
+
+**The bottom line fits under a Korean, Japanese or Chinese locale.** With
+`LANG` set to one of them, symbols such as `·` and `←` were counted two
+columns wide while the terminal drew them one, so hints were cut short and
+key labels lost their alignment, on a screen that had room for them.
+
 ## v0.12.0 — 2026-10-14
 
 **Nothing to do before upgrading,** unless a script reads the output of

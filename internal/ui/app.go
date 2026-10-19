@@ -285,12 +285,19 @@ func (a *App) captureScreen() {
 
 // openingMessage greets the user with what the first line of a session has to
 // say.
+//
+// The first session gets no tip: the welcome is already teaching keys, and
+// on an eighty-column bar the tip would push out how to put the tree away.
 func (a *App) openingClauses(serverVersion string, sessionsBefore int) []string {
+	var tip string
+	if sessionsBefore > 0 {
+		tip = tipFor(sessionsBefore-1, a.keys)
+	}
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
-		tip:           tipFor(sessionsBefore, a.keys),
+		tip:           tip,
 	})
 }
 

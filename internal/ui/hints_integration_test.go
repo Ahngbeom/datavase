@@ -5,6 +5,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -88,9 +89,19 @@ func TestHidingTheTreeTakesThePreviewOutOfTheEmptyEditor(t *testing.T) {
 	}
 }
 
+// returning opens a session on a machine that has seen this many before.
+func returning(t *testing.T, sessions int) *harness {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "visits")
+	if err := os.WriteFile(path, []byte(strconv.Itoa(sessions)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return newHarnessCounting(t, path)
+}
+
 // The tip has to reach a default-sized terminal, not only a wide one.
 func TestTheOpeningTipIsOnScreenAtEightyByTwentyFour(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
+	h := returning(t, 1)
 	h.resize(80, 24)
 
 	want := tipFor(0, keymap.Default())
@@ -159,7 +170,7 @@ func TestAnUnwritableStateDirectoryDoesNotCostTheSession(t *testing.T) {
 // A session opens with a tip on the bar, and loses it the moment the bar has
 // something real to say.
 func TestASessionOpensWithATipThatYieldsToTheFirstNotice(t *testing.T) {
-	h := newHarness(t, config.EnvDev)
+	h := returning(t, 1)
 	want := tipFor(0, keymap.Default())
 
 	if !h.inspect(func(a *App) bool {
@@ -174,5 +185,19 @@ func TestASessionOpensWithATipThatYieldsToTheFirstNotice(t *testing.T) {
 		return strings.Contains(a.currentStatus().renderWidth(200), want)
 	}) {
 		t.Error("the tip is still on the bar after a real notice")
+	}
+}
+
+// The first session already has the welcome teaching keys, and on an
+// eighty-column bar a tip would push out the one line saying how to put the
+// tree away.
+func TestTheFirstSessionOpensWithoutATip(t *testing.T) {
+	h := newHarnessCounting(t, filepath.Join(t.TempDir(), "visits"))
+	h.waitFor("the welcome", welcomeShowing)
+
+	if h.inspect(func(a *App) bool {
+		return strings.Contains(a.currentStatus().renderWidth(200), "Tip:")
+	}) {
+		t.Errorf("the first session's bar carries a tip; screen:\n%s", h.text())
 	}
 }

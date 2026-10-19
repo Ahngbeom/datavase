@@ -85,6 +85,20 @@ func (h *harness) waitForBackgroundRefresh(datasource string) {
 
 func newHarness(t *testing.T, env config.Env) *harness {
 	t.Helper()
+	return openHarness(t, env, nil)
+}
+
+// newHarnessCounting opens the interface with its sessions counted at path.
+//
+// Every other harness counts nowhere, which keeps the first-run welcome from
+// opening over the editor and swallowing the first key a test sends.
+func newHarnessCounting(t *testing.T, path string) *harness {
+	t.Helper()
+	return openHarness(t, config.EnvDev, func(d *Deps) { d.VisitsPath = path })
+}
+
+func openHarness(t *testing.T, env config.Env, adjust func(*Deps)) *harness {
+	t.Helper()
 
 	ds, password := testmysql.DataSource(t)
 	ds.Env = env
@@ -96,7 +110,7 @@ func newHarness(t *testing.T, env config.Env) *harness {
 	if err != nil {
 		t.Fatalf("db.Open() error = %v", err)
 	}
-	return harnessWith(t, &session.Session{Conn: conn}, ds)
+	return harnessWith(t, &session.Session{Conn: conn}, ds, adjust)
 }
 
 // harnessOver builds the interface over a session that is already open.
@@ -106,10 +120,10 @@ func newHarness(t *testing.T, env config.Env) *harness {
 // that bastion goes away.
 func harnessOver(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
 	t.Helper()
-	return harnessWith(t, sess, ds)
+	return harnessWith(t, sess, ds, nil)
 }
 
-func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *harness {
+func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource, adjust func(*Deps)) *harness {
 	t.Helper()
 
 	// Copying reaches the local clipboard through pbcopy and its equivalents,
@@ -145,7 +159,7 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 	}
 	t.Cleanup(func() { hist.Close() })
 
-	app := New(sess, cfg, Deps{
+	deps := Deps{
 		Cache:   cache,
 		History: hist,
 		Secrets: secret.NewMemory(),
@@ -158,7 +172,11 @@ func harnessWith(t *testing.T, sess *session.Session, ds *config.DataSource) *ha
 		Connect: func(context.Context, *config.DataSource) (*session.Session, error) {
 			return nil, errors.New("this harness does not connect by default")
 		},
-	})
+	}
+	if adjust != nil {
+		adjust(&deps)
+	}
+	app := New(sess, cfg, deps)
 	app.SetScreen(screen)
 
 	h := &harness{

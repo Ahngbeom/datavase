@@ -22,6 +22,7 @@ import (
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
 	"github.com/Ahngbeom/datavase/internal/sqlparse"
+	"github.com/Ahngbeom/datavase/internal/visits"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -207,6 +208,10 @@ type Deps struct {
 	Secrets secret.Store
 	// Probe answers the dialog's Test button.
 	Probe func(ctx context.Context, ds *config.DataSource, password string) (string, error)
+	// VisitsPath is where the sessions opened on this machine are counted,
+	// which decides whether this one opens with the welcome. Empty counts
+	// nothing and welcomes nobody.
+	VisitsPath string
 }
 
 // New builds the interface for an open session.
@@ -238,7 +243,13 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	if deps.Cache != nil {
 		a.completion = complete.New(deps.Cache.Names(), ds.Name, ds.Database)
 	}
-	a.status.hints = a.openingClauses(conn.ServerVersion())
+	// A failed write is ignored: it costs the memory of this session, which at
+	// worst brings the welcome back next time.
+	var sessionsBefore int
+	if deps.VisitsPath != "" {
+		sessionsBefore, _ = visits.Record(deps.VisitsPath)
+	}
+	a.status.hints = a.openingClauses(conn.ServerVersion(), sessionsBefore)
 
 	// Before any widget is built: tview copies its palette into each one as it
 	// is created, so a default claimed afterwards would reach nothing.
@@ -252,6 +263,10 @@ func New(sess *session.Session, cfg *config.Config, deps Deps) *App {
 	a.bindCompletion()
 	a.captureScreen()
 	a.loadSchemas()
+
+	if deps.VisitsPath != "" && sessionsBefore == 0 {
+		a.showWelcome()
+	}
 
 	return a
 }
@@ -272,11 +287,19 @@ func (a *App) captureScreen() {
 
 // openingMessage greets the user with what the first line of a session has to
 // say.
-func (a *App) openingClauses(serverVersion string) []string {
+//
+// The first session gets no tip: the welcome is already teaching keys, and
+// on an eighty-column bar the tip would push out how to put the tree away.
+func (a *App) openingClauses(serverVersion string, sessionsBefore int) []string {
+	var tip string
+	if sessionsBefore > 0 {
+		tip = tipFor(sessionsBefore-1, a.keys)
+	}
 	return openingClauses(opening{
 		serverVersion: serverVersion,
 		helpKey:       a.helpKeyLabel(),
 		sidebarKey:    a.keyLabel(keymap.ActionToggleSidebar),
+		tip:           tip,
 	})
 }
 
@@ -285,6 +308,7 @@ type opening struct {
 	serverVersion string
 	helpKey       string
 	sidebarKey    string
+	tip           string
 }
 
 // openingClauses is the greeting, most actionable first.
@@ -297,16 +321,21 @@ type opening struct {
 // The order decides what survives, and it is the whole of the ranking: a
 // clause's position in this slice is its shedding priority, most protected
 // first. F1 comes first: it reaches the full reference, and every other key
-// with it. The schema tree follows — it is on screen, so this says how to
-// get the width back rather than that it exists. The server version brings
-// up the rear: it is a greeting rather than an instruction, and knowing
-// which MariaDB answered has never stood between anyone and their first
-// query.
+// with it. The tip follows: it names a key nothing else on screen does, and
+// on an eighty-column terminal it and F1 are all the line has room for. The
+// schema tree comes after — its own header is on screen and the welcome named
+// its key, so this only says how to get the width back. The server version
+// brings up the rear: it is a greeting rather than an instruction, and
+// knowing which MariaDB answered has never stood between anyone and their
+// first query.
 func openingClauses(o opening) []string {
 	var out []string
 
 	if o.helpKey != "" {
 		out = append(out, o.helpKey+" for keys")
+	}
+	if o.tip != "" {
+		out = append(out, o.tip)
 	}
 	// The tree is on screen; what is worth saying is how to put it away.
 	if o.sidebarKey != "" {
@@ -344,12 +373,19 @@ func (a *App) keyLabel(action keymap.Action) string {
 // already says how to run, and repeating it wastes the one line a reader
 // looks at before they have typed anything. A table in the tree is the
 // fastest thing anyone new can do here, and nothing else on screen says the
-// gesture exists.
-func (a *App) editorPlaceholder() string {
-	if !a.sidebarVisible {
-		return "SELECT …"
+// gesture exists. The help key closes it because the status bar's mention
+// of it goes with the first thing that happens, and the editor is empty
+// again every time someone starts over.
+//
+// Terse because the editor beside the tree is forty-four cells wide on an
+// eighty-column terminal: past that the placeholder wraps, and the line it
+// breaks is the help key's.
+func editorPlaceholder(sidebarVisible bool, helpKey string) string {
+	start := "Type a query"
+	if sidebarVisible {
+		start += " or dbl-click a table"
 	}
-	return "SELECT … or double-click a table"
+	return start + " · " + helpKey + " keys"
 }
 
 // Run starts the event loop and blocks until the user quits.
@@ -388,7 +424,7 @@ func (a *App) buildWidgets() {
 	a.tree.SetSelectedFunc(a.onTreeSelect)
 
 	a.editor = &highlightedEditor{TextArea: tview.NewTextArea().
-		SetPlaceholder(a.editorPlaceholder()).
+		SetPlaceholder(editorPlaceholder(a.sidebarVisible, a.helpKeyLabel())).
 		SetWrap(false)}
 	a.editor.SetClipboard(a.setClipboard, a.readClipboard)
 
@@ -666,6 +702,7 @@ func (a *App) focusVisibleSchemaTab() {
 func (a *App) toggleSidebar() {
 	a.sidebarVisible = !a.sidebarVisible
 	a.layoutBody()
+	a.editor.SetPlaceholder(editorPlaceholder(a.sidebarVisible, a.helpKeyLabel()))
 
 	// Focus cannot stay on a pane that is no longer on screen.
 	if !a.sidebarVisible && a.schemaHasFocus() {
@@ -684,6 +721,7 @@ const (
 	pageMain       = "main"
 	pageConfirm    = "confirm"
 	pageHelp       = "help"
+	pageWelcome    = "welcome"
 	pageHistory    = "history"
 	pageUseSchema  = "useschema"
 	pageSearch     = "search"

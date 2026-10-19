@@ -91,6 +91,11 @@ The same list is `⌘⇧D` (`Ctrl+Shift+D`, or `F11`) once you are inside, where
 
 With exactly one datasource configured, `dv` opens it directly.
 
+The first session on a machine opens with a short welcome: what `dv` is for and
+the five keys to start with. `↩` or `Esc` closes it, and it does not come back
+— unless the state directory cannot be written, in which case it shows again
+next time and costs nothing else.
+
 ## Configure
 
 `~/.config/datavase/config.yaml` (or `$XDG_CONFIG_HOME/datavase/config.yaml`):
@@ -315,6 +320,12 @@ datasource is filled rather than merely coloured, so which server this is
 survives a terminal of any width; the column down the left is the same fill
 continued, and it is the only thing on screen that ignores your terminal theme.
 
+Until something happens, the bottom line names the key reference and the key
+that hides the tree. From the second session on, a tip about a key nothing
+else on screen leads to — a different one each session — comes before the
+tree key, which then shows only given the room. The first message or result
+replaces them.
+
 Regions are separated by a single rule rather than boxed. Each names itself
 once, on its own header line, and the one holding the keyboard is marked `▌`.
 
@@ -348,7 +359,9 @@ session. Nothing is re-run: the statement in the editor is yours to send
 again or not.
 
 **The editor** is an ordinary one: typing types, and there is no mode to leave
-first. **The grid** streams the result as it arrives, sorts on a column and
+first. Empty, it invites a query, offers the tree's double-click while the tree
+is showing, and names the key reference; the hint goes as soon as you type and
+is never part of what runs. **The grid** streams the result as it arrives, sorts on a column and
 opens one row down the page rather than across it.
 
 **Clicks mean something.** The datasource, the schema or `keys` in the top bar
@@ -402,6 +415,7 @@ is on the key table above.
 | Datasources | `$XDG_CONFIG_HOME/datavase/config.yaml`, or `~/.config/datavase/config.yaml` |
 | Statement history | `$XDG_STATE_HOME/datavase/history.db`, or `~/.local/state/datavase/history.db` |
 | Schema cache | the same directory, `datavase.db` |
+| How many sessions have opened, for the first-run welcome | the same directory, `visits` |
 | Passwords | the OS keychain, or `DATAVASE_PASSWORD_<NAME>` in the environment |
 
 These paths are the same on every platform dv builds for, including native
@@ -412,7 +426,8 @@ The two databases live in a directory created `0700`, which is what protects
 them; the files inside it are `0644` — Windows has no such permission bits,
 so this protection is macOS/Linux/WSL only. Deleting either is safe at any
 time — the cache is rebuilt on the next reload, costing completion and the
-tables tab until then, and the history is simply gone.
+tables tab until then, and the history is simply gone. `visits` holds one
+number; deleting it brings the welcome back once.
 
 Statements are written unless you say otherwise: **`history: false` under
 `defaults` stops them being written at all,** and the file is never created.

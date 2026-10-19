@@ -84,6 +84,35 @@ type highlightedEditor struct {
 	// unchanged — moving the caret, a redraw for the status bar — reuses them.
 	text  string
 	spans []span
+
+	// afterKey runs once the widget has handled a key or a paste, the first
+	// point at which both the text and the caret reflect it: TextArea's
+	// changed callback fires before the caret has moved.
+	afterKey func()
+}
+
+func (e *highlightedEditor) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	handle := e.TextArea.InputHandler()
+	return func(ev *tcell.EventKey, setFocus func(tview.Primitive)) {
+		handle(ev, setFocus)
+		e.keyHandled()
+	}
+}
+
+// PasteHandler is wrapped too: a bracketed paste never passes through the
+// key handler, so without this it would be the one edit afterKey missed.
+func (e *highlightedEditor) PasteHandler() func(string, func(tview.Primitive)) {
+	handle := e.TextArea.PasteHandler()
+	return func(text string, setFocus func(tview.Primitive)) {
+		handle(text, setFocus)
+		e.keyHandled()
+	}
+}
+
+func (e *highlightedEditor) keyHandled() {
+	if e.afterKey != nil {
+		e.afterKey()
+	}
 }
 
 func (e *highlightedEditor) Draw(screen tcell.Screen) {

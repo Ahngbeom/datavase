@@ -8,8 +8,8 @@ import (
 	"github.com/Ahngbeom/datavase/internal/db"
 	"github.com/Ahngbeom/datavase/internal/result"
 	"github.com/gdamore/tcell/v2"
-	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
+	"github.com/rivo/uniseg"
 )
 
 // runPhase is where the current statement stands.
@@ -98,10 +98,10 @@ func (s status) renderWidth(width int) string {
 	fields := s.fields()
 
 	separator := wideSeparator
-	if statusWidth(fields, runewidth.StringWidth(separator)) > width {
+	if statusWidth(fields, uniseg.StringWidth(separator)) > width {
 		separator = narrowSeparator
 	}
-	sepCost := runewidth.StringWidth(separator)
+	sepCost := uniseg.StringWidth(separator)
 
 	for statusWidth(fields, sepCost) > width && dropOne(&fields) {
 	}
@@ -301,7 +301,7 @@ const hintRank = 40
 
 // visibleCost is how many cells a field occupies, ignoring colour tags.
 func visibleCost(s string) int {
-	return runewidth.StringWidth(visibleText(s))
+	return uniseg.StringWidth(visibleText(s))
 }
 
 // visibleText is what the terminal shows, colour tags removed.

@@ -109,9 +109,9 @@ func TestATipGivesWayToAnythingThatHappened(t *testing.T) {
 	}
 }
 
-// Of everything on the opening line, the tip is what goes before the schema
-// tree and the help key do: those are how the rest is found.
-func TestTheTipIsShedBeforeTheWaysToFindEverythingElse(t *testing.T) {
+// The help key is how everything else is found, so it outlasts the tip when
+// the bar has room for only one of them.
+func TestTheHelpKeyOutlastsTheTip(t *testing.T) {
 	tip := tipFor(0, keymap.Default())
 	s := baseStatus()
 	s.hints = openingClauses(opening{
@@ -121,13 +121,41 @@ func TestTheTipIsShedBeforeTheWaysToFindEverythingElse(t *testing.T) {
 		tip:           tip,
 	})
 
-	got := s.renderWidth(40)
+	got := s.renderWidth(30)
 	if strings.Contains(got, tip) {
-		t.Errorf("a narrow bar kept the tip: %q", got)
+		t.Errorf("a bar too narrow for both kept the tip: %q", got)
 	}
-	for _, want := range []string{"schema tree", "F1 for keys"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("a narrow bar dropped %q for something else: %q", want, got)
+	if !strings.Contains(got, "F1 for keys") {
+		t.Errorf("a narrow bar dropped the help key for something else: %q", got)
+	}
+}
+
+// Eighty columns is where a default terminal starts, and a tip that only
+// appears from a hundred is a tip most people never see. Every tip has to
+// fit beside the help key there, spelled either way a key can be labelled.
+// The sidebar hint gives way to it: the tree's own header is on screen, and
+// the welcome has already named its key.
+func TestEveryTipFitsBesideTheHelpKeyAtEightyColumns(t *testing.T) {
+	saved := onMac
+	t.Cleanup(func() { onMac = saved })
+
+	for _, mac := range []bool{true, false} {
+		onMac = mac
+		km := keymap.Default()
+		for i := range tips {
+			tip := tipFor(i, km)
+			s := baseStatus()
+			s.hints = openingClauses(opening{
+				serverVersion: "11.4.12-MariaDB-ubu2404",
+				helpKey:       "F1",
+				sidebarKey:    tipKeyLabel(km, keymap.ActionToggleSidebar),
+				tip:           tip,
+			})
+
+			got := visibleText(s.renderWidth(80))
+			if !strings.Contains(got, tip) || !strings.Contains(got, "F1 for keys") {
+				t.Errorf("mac=%v: at eighty columns the bar is %q, want %q beside F1", mac, got, tip)
+			}
 		}
 	}
 }

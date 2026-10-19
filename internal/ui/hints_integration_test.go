@@ -88,6 +88,17 @@ func TestHidingTheTreeTakesThePreviewOutOfTheEmptyEditor(t *testing.T) {
 	}
 }
 
+// The tip has to reach a default-sized terminal, not only a wide one.
+func TestTheOpeningTipIsOnScreenAtEightyByTwentyFour(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+	h.resize(80, 24)
+
+	want := tipFor(0, keymap.Default())
+	if !h.waitForScreen(want) {
+		t.Errorf("the tip %q is not on an 80x24 screen:\n%s", want, h.text())
+	}
+}
+
 func welcomeShowing(a *App) bool {
 	name, _ := a.pages.GetFrontPage()
 	return name == pageWelcome

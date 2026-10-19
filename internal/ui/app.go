@@ -312,23 +312,25 @@ type opening struct {
 // The order decides what survives, and it is the whole of the ranking: a
 // clause's position in this slice is its shedding priority, most protected
 // first. F1 comes first: it reaches the full reference, and every other key
-// with it. The schema tree follows — it is on screen, so this says how to
-// get the width back rather than that it exists. The tip follows, since F1
-// lists what it says and more. The server version brings up the rear: it is
-// a greeting rather than an instruction, and knowing which MariaDB answered
-// has never stood between anyone and their first query.
+// with it. The tip follows: it names a key nothing else on screen does, and
+// on an eighty-column terminal it and F1 are all the line has room for. The
+// schema tree comes after — its own header is on screen and the welcome named
+// its key, so this only says how to get the width back. The server version
+// brings up the rear: it is a greeting rather than an instruction, and
+// knowing which MariaDB answered has never stood between anyone and their
+// first query.
 func openingClauses(o opening) []string {
 	var out []string
 
 	if o.helpKey != "" {
 		out = append(out, o.helpKey+" for keys")
 	}
+	if o.tip != "" {
+		out = append(out, o.tip)
+	}
 	// The tree is on screen; what is worth saying is how to put it away.
 	if o.sidebarKey != "" {
 		out = append(out, o.sidebarKey+" hides the schema tree")
-	}
-	if o.tip != "" {
-		out = append(out, o.tip)
 	}
 	if o.serverVersion != "" {
 		out = append(out, "server "+o.serverVersion)

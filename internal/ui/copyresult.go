@@ -38,17 +38,21 @@ func (a *App) showCopyFormats() {
 	}
 
 	list := tview.NewList().ShowSecondaryText(true)
+	// Added in copyFormat's order, so a format is also its row.
 	list.AddItem("Markdown", "a table, for a document or a chat", 'm', func() {
+		a.copyFormat = formatMarkdown
 		a.pages.RemovePage(pageCopyFormat)
 		a.app.SetFocus(a.grid)
 		a.copyResult(formatMarkdown)
 	})
 	list.AddItem("JSON", "an array of objects, for a script", 'j', func() {
+		a.copyFormat = formatJSON
 		a.pages.RemovePage(pageCopyFormat)
 		a.app.SetFocus(a.grid)
 		a.copyResult(formatJSON)
 	})
 	list.AddItem("CSV file", "written to disk, for a spreadsheet", 'c', func() {
+		a.copyFormat = formatCSV
 		a.pages.RemovePage(pageCopyFormat)
 		a.promptSavePath()
 	})
@@ -57,6 +61,7 @@ func (a *App) showCopyFormats() {
 		a.app.SetFocus(a.grid)
 	})
 	list.SetBorder(true).SetTitle(" the result as ")
+	list.SetCurrentItem(int(a.copyFormat))
 
 	a.pages.AddPage(pageCopyFormat, centred(list, 44, 10), true, true)
 	a.app.SetFocus(list)

@@ -374,8 +374,9 @@ the tree previews it.
 `⌘⇧R` takes that whole row, tab separated, so it lands in a spreadsheet as
 columns; `⌘⇧C` takes the entire result as Markdown or JSON, or writes it to a
 CSV file, which is where fifty thousand rows belong rather than on a
-clipboard. It shows a name made of the datasource and the moment, which `↩`
-takes and anything you type replaces, and refuses
+clipboard. The chooser opens on the format taken last, so `↩` alone
+repeats it. The file is offered a name made of the datasource and the
+moment, which `↩` takes and anything you type replaces, and refuses
 a path that is already a file. `⌘C` in the editor takes the selection, as it
 does anywhere else.
 

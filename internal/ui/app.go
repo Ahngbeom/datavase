@@ -86,6 +86,8 @@ type App struct {
 	// clipboard is the session-local copy, used for pasting since OSC 52
 	// reads are asynchronous and usually refused.
 	clipboard string
+	// copyFormat is where the format chooser opens: the last one taken.
+	copyFormat copyFormat
 
 	// mouseEnabled says whether a click means anything. config.Defaults.Mouse
 	// is a *bool so "not written" can be told apart from "written as false";

@@ -161,3 +161,29 @@ func (h *harness) inspectString(read func(*App) string) string {
 	})
 	return out
 }
+
+// Someone who saves every result as CSV pressed Enter on the chooser out of
+// habit and got Markdown on the clipboard instead, because Enter takes the
+// highlighted row and the highlight always started on the first one.
+func TestTheChooserOpensOnTheFormatChosenLastTime(t *testing.T) {
+	h := newHarness(t, config.EnvDev)
+
+	h.typeSQL("SELECT 1 AS a")
+	h.do(keymap.ActionRun)
+	h.waitFor("a result", func(a *App) bool { return a.status.phase == phaseDone })
+
+	h.do(keymap.ActionCopyResult)
+	h.waitFor("the format chooser", func(a *App) bool { return a.pages.HasPage(pageCopyFormat) })
+	h.typeRunes("c")
+	h.waitFor("the path prompt", func(a *App) bool { return a.pages.HasPage(pageSavePath) })
+	h.press(tcell.KeyEscape)
+	h.waitFor("the prompt closed", func(a *App) bool { return !a.pages.HasPage(pageSavePath) })
+
+	h.do(keymap.ActionCopyResult)
+	h.waitFor("the format chooser again", func(a *App) bool { return a.pages.HasPage(pageCopyFormat) })
+	h.press(tcell.KeyEnter)
+
+	if !h.waitForScreen("save to:") {
+		t.Errorf("Enter did not take CSV, the format chosen last time; screen:\n%s", h.text())
+	}
+}

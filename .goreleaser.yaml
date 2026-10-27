@@ -88,9 +88,9 @@ homebrew_casks:
     # first run.
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/dv"]
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/dv"]
           end
 
 # Linux packages, so a server can install this the same way it installs

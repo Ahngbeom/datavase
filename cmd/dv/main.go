@@ -2,10 +2,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,9 +15,11 @@ import (
 	"github.com/Ahngbeom/datavase/internal/catalog"
 	"github.com/Ahngbeom/datavase/internal/cli"
 	"github.com/Ahngbeom/datavase/internal/config"
+	"github.com/Ahngbeom/datavase/internal/headless"
 	"github.com/Ahngbeom/datavase/internal/history"
 	"github.com/Ahngbeom/datavase/internal/secret"
 	"github.com/Ahngbeom/datavase/internal/session"
+	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/ui"
 	"golang.org/x/term"
 )
@@ -61,10 +65,12 @@ func run() int {
 	app := &cli.App{
 		Config:       cfg,
 		Secrets:      secrets(),
+		In:           os.Stdin,
 		Out:          os.Stdout,
 		Err:          os.Stderr,
 		ReadPassword: readPassword,
 		Probe:        probe,
+		Query:        runQuery,
 		OpenUI: func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error {
 			return openUI(ctx, ds, password, cfg, path)
 		},
@@ -177,6 +183,30 @@ func probe(ctx context.Context, ds *config.DataSource, password string) (string,
 	defer sess.Close()
 
 	return sess.Conn.ServerVersion(), nil
+}
+
+// runQuery opens ds for `dv query` and runs the one statement it admitted.
+//
+// Neither the schema cache nor the history is opened: the statements a
+// program sends on someone's behalf are not that person's history, and the
+// machine running them is often one where no one has a home to keep it in.
+func runQuery(ctx context.Context, ds *config.DataSource, password string, stmt sqlparse.Statement, lim headless.Limits, w io.Writer) error {
+	connectCtx, cancel := context.WithTimeout(ctx, cli.CheckTimeout)
+	defer cancel()
+
+	sess, err := session.Open(connectCtx, ds, password)
+	if err != nil {
+		return err
+	}
+	defer sess.Close()
+
+	// One write per row would be one system call per row.
+	out := bufio.NewWriter(w)
+	err = headless.Run(ctx, sess.Conn, stmt, lim, out)
+	if flushErr := out.Flush(); err == nil {
+		err = flushErr
+	}
+	return err
 }
 
 // readPassword reads from the terminal with echo disabled so the password

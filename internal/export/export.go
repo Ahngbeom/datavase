@@ -82,7 +82,7 @@ func JSON(w io.Writer, columns []string, rows [][]any) error {
 		object := make(map[string]any, len(names))
 		for i, name := range names {
 			if i < len(row) {
-				object[name] = jsonValue(row[i])
+				object[name] = JSONValue(row[i])
 			} else {
 				object[name] = nil
 			}
@@ -115,9 +115,9 @@ func uniqueNames(columns []string) []string {
 	return out
 }
 
-// jsonValue converts a scanned value to something the encoder can render
+// JSONValue converts a scanned value to something the encoder can render
 // with its own type, so numbers stay numbers for jq and friends.
-func jsonValue(v any) any {
+func JSONValue(v any) any {
 	switch value := v.(type) {
 	case nil:
 		return nil

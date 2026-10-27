@@ -19,7 +19,8 @@ Four things, and no more:
 
 Also there, because the four need them: an SSH tunnel to a bastion, table and
 column completion, a searchable history of what you ran, passwords in the OS
-keychain, TLS.
+keychain, TLS. And `dv query`, which is the second and fourth without a
+terminal, for a program to call: see [For a program](#for-a-program).
 
 Not there, on purpose: a modal editor, a command palette, a production guard,
 an explain plan, the process list, sessions that outlive the terminal. v0.8.x
@@ -190,6 +191,7 @@ dv open app           # open a named datasource
 dv ls                 # list datasources and where each password comes from
 dv auth app           # store a password in the keychain
 dv check app          # verify reachability, then exit
+dv query app < q.sql  # run one read statement, JSON lines out (read_only only)
 dv version            # print the version
 dv help               # the same list, from the binary
 ```
@@ -204,6 +206,50 @@ outside this program that decides it. The same sentence appears on screen
 when connecting or reconnecting fails.
 
 `-c path/to/config.yaml` points any of them at another configuration file.
+
+### For a program
+
+`dv query` runs one statement read from stdin and writes the result to stdout
+as JSON lines: an object naming the columns and their types, one array per
+row, and an object saying how it ended.
+
+```sh
+echo "SELECT id, email FROM users WHERE id < 3" | dv query -max-rows 100 -timeout 10s app
+```
+
+```
+{"columns":["id","email"],"types":["BIGINT","VARCHAR"]}
+[1,"ada@example.com"]
+[2,null]
+{"rows":2,"truncated":false,"elapsed_ms":4}
+```
+
+**The last line is the only proof the result is whole.** It is written when
+the result was read to its end or to `-max-rows`, and `truncated` says which.
+Without it the rows above are a fragment, and stderr says why.
+
+**It runs only on a datasource with `read_only: true`,** and only a plain read:
+one `SELECT`, `SHOW`, `DESCRIBE` or `EXPLAIN`. Everything else is refused
+before anything is sent — a second statement, a write behind a `WITH`, `INTO`,
+a locking read, `ANALYZE`, an executable comment, and `SLEEP`, `BENCHMARK`,
+`GET_LOCK` and `LOAD_FILE`. These checks are a guard in front of the server's
+own refusal, as `read_only` is; the database account is the boundary.
+
+`-max-rows` defaults to `auto_limit` and stops at `buffer_max`. `-timeout`
+defaults to 30 seconds, and reaching it sends `KILL QUERY`, so the statement
+ends on the server rather than only in `dv`. Nothing is written to the
+history or the schema cache.
+
+| Exit | Meaning |
+|---|---|
+| `0` | the result, ending in its summary line |
+| `1` | the connection or the statement failed |
+| `2` | the command was used wrongly |
+| `3` | refused: not a read, or not a `read_only` datasource |
+
+Who may ask, and which columns they may see, is for whatever runs `dv` to
+decide. `dv query` holds no such policy, which is also why it can change
+without a release of this program.
 
 ### Keys
 

@@ -14,21 +14,27 @@ import (
 
 	"github.com/Ahngbeom/datavase/internal/config"
 	"github.com/Ahngbeom/datavase/internal/db"
+	"github.com/Ahngbeom/datavase/internal/headless"
 	"github.com/Ahngbeom/datavase/internal/secret"
+	"github.com/Ahngbeom/datavase/internal/sqlparse"
 	"github.com/Ahngbeom/datavase/internal/version"
 )
 
 // Exit codes. 2 is reserved for usage mistakes, matching the flag package.
+// 3 is a statement dv query would not run, kept apart from 1 so a program
+// running dv can tell "not allowed" from "the database could not be reached".
 const (
-	exitOK    = 0
-	exitError = 1
-	exitUsage = 2
+	exitOK      = 0
+	exitError   = 1
+	exitUsage   = 2
+	exitRefused = 3
 )
 
 // App holds everything the commands need.
 type App struct {
 	Config  *config.Config
 	Secrets secret.Store
+	In      io.Reader
 	Out     io.Writer
 	Err     io.Writer
 
@@ -43,6 +49,10 @@ type App struct {
 	// OpenUI connects and runs the terminal interface. It is a field so the
 	// dispatch logic can be tested without starting a terminal.
 	OpenUI func(ctx context.Context, ds *config.DataSource, password string, cfg *config.Config) error
+
+	// Query connects and runs one admitted statement, writing its result to
+	// w. It is a field so the command can be tested without a database.
+	Query func(ctx context.Context, ds *config.DataSource, password string, stmt sqlparse.Statement, lim headless.Limits, w io.Writer) error
 
 	// Launch shows the datasource list without a session and opens the
 	// interface on whichever entry the user connects to. It is how a machine
@@ -84,6 +94,8 @@ func (a *App) Run(args []string) int {
 		return a.auth(args[1:])
 	case "check":
 		return a.check(args[1:])
+	case "query":
+		return a.query(args[1:])
 	case "version", "--version", "-v":
 		// Reached when -c came first: HandleVersion saw the flag, not the
 		// word, and flag.Parse has since taken the flag away.
@@ -109,6 +121,7 @@ usage:
   dv auth <name>        store a datasource password in the keychain
   dv auth -rm <name>    remove a stored password
   dv check <name>       verify that the datasource is reachable
+  dv query <name>       run one read statement from stdin, JSON lines out (read_only only)
   dv version            print the version
   dv help               show this message
 `)

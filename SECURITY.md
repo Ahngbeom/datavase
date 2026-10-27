@@ -37,6 +37,11 @@ Three claims in particular are narrower than they may read:
   statement that scans the whole table still scans it.
 - **Cancelling sends `KILL QUERY` on a second connection.** It is a request
   to the server, and the server decides.
+- **`dv query`'s refusals are a guard too.** It recognises a plain read by
+  its tokens and refuses the rest before sending anything, on a datasource
+  that must be `read_only`. A program that runs it on someone's behalf still
+  needs its own rules about who may ask and what they may see, and a
+  database account that grants no more than that.
 
 ## What reaches the network
 
@@ -68,6 +73,9 @@ keychain through `dv auth`, or come from `DATAVASE_PASSWORD_<NAME>` in the
 environment, which takes precedence when it is set. The environment is the
 route for a machine with no keychain, and an environment variable is
 readable by anything else running as you.
+
+`dv query` writes neither database. Its results go to stdout and nowhere
+else.
 
 **History can be turned off.** `history: false` under `defaults` stops
 statements being written at all; the file is not created. This is the setting
